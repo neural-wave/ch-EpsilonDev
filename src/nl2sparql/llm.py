@@ -18,18 +18,19 @@ class LLMReply:
 
 class LLMClient:
     def __init__(self, base_url: str, api_key: str = "not-needed", timeout: float = 30.0,
-                 transport: httpx.AsyncBaseTransport | None = None):
+                 transport: httpx.AsyncBaseTransport | None = None, verify_tls: bool = True):
         self.base_url = base_url.rstrip("/")
         self.headers = {"Authorization": f"Bearer {api_key}"}
         self.timeout = timeout
         self.transport = transport
+        self.verify_tls = verify_tls  # False for servers with a self-signed certificate (Vast.ai templates)
 
     async def chat(self, model: str, messages: list[dict], max_tokens: int = 800, json_mode: bool = False) -> LLMReply:
         body = {"model": model, "messages": messages, "temperature": 0, "max_tokens": max_tokens}
         if json_mode:
             body["response_format"] = {"type": "json_object"}
         try:
-            async with httpx.AsyncClient(timeout=self.timeout, transport=self.transport) as client:
+            async with httpx.AsyncClient(timeout=self.timeout, transport=self.transport, verify=self.verify_tls) as client:
                 response = await client.post(f"{self.base_url}/chat/completions", json=body, headers=self.headers)
             response.raise_for_status()
             payload = response.json()

@@ -21,6 +21,7 @@ class Settings:
     llm_query_model: str = ""
     llm_intent_model: str = ""
     llm_timeout_seconds: float = 30.0
+    llm_verify_tls: bool = True  # set LLM_VERIFY_TLS=false for self-signed certificates (Vast.ai)
     virtuoso_endpoint: str = "http://localhost:8890/sparql"
     max_input_chars: int = 2000
     max_retries: int = 1
@@ -42,6 +43,7 @@ class Settings:
             llm_query_model=query_model,
             llm_intent_model=env.get("LLM_INTENT_MODEL", "") or query_model,
             llm_timeout_seconds=float(env.get("LLM_TIMEOUT_SECONDS", cls.llm_timeout_seconds)),
+            llm_verify_tls=env.get("LLM_VERIFY_TLS", "true").strip().lower() not in ("0", "false", "no"),
             virtuoso_endpoint=env.get("VIRTUOSO_ENDPOINT", cls.virtuoso_endpoint),
             max_input_chars=int(env.get("MAX_INPUT_CHARS", cls.max_input_chars)),
             max_retries=int(env.get("MAX_RETRIES", cls.max_retries)),

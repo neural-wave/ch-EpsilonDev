@@ -21,7 +21,8 @@ def build_pipeline(settings: Settings, exclude_exact_examples: bool = False) -> 
     if settings.backend == "llm":
         if not settings.llm_query_model:
             raise ValueError("NL2SPARQL_BACKEND=llm needs LLM_QUERY_MODEL (and optionally LLM_INTENT_MODEL).")
-        client = LLMClient(settings.llm_base_url, settings.llm_api_key, settings.llm_timeout_seconds)
+        client = LLMClient(settings.llm_base_url, settings.llm_api_key, settings.llm_timeout_seconds,
+                           verify_tls=settings.llm_verify_tls)
         intent_agent = LLMIntentAgent(client, settings.llm_intent_model or settings.llm_query_model)
         query_agent = LLMQueryAgent(client, settings.llm_query_model)
     elif settings.backend == "stub":
