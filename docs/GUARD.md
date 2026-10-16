@@ -67,7 +67,7 @@ Propagation:
 | Rule | Check in `rules.py` | Fails on |
 |---|---|---|
 | R4 | Query form must be `SelectQuery`, with no federated `SERVICE` clause | CONSTRUCT, ASK, DESCRIBE, any update, or SERVICE access to another endpoint |
-| R1 | No patient graph IRI (`http://example.org/graph/…`) or record IRI (`…/sphn-resource/…-sphn-…`) anywhere; no identifier literal in a pattern; no filter comparing an identifier with a constant | `GRAPH <…/mock_data-1_0042>`, `?s sphn:hasIdentifier "ID-1…"`, `FILTER(STR(?g) = "…")` |
+| R1 | No patient graph IRI (`http://example.org/graph/…`) or record IRI (`…/sphn-resource/…-sphn-…`) anywhere, including `FROM` and `FROM NAMED`; no identifier literal in a pattern; no filter comparing an identifier with a constant | `GRAPH <…/mock_data-1_0042>`, `FROM NAMED <…/mock_data-1_0042>`, `?s sphn:hasIdentifier "ID-1…"`, `FILTER(STR(?g) = "…")` |
 | R3 | At least one patient pattern with a concrete property, or `rdf:type` with a concrete class | `?s ?p ?o` alone, `?s a ?class` alone |
 | R2 | The outermost SELECT is aggregated. No `SELECT *`. Every projected value is an aggregate or a `GROUP BY` key that is not instance-level or an exact timestamp | rows of values, `GROUP BY ?date`, `GROUP_CONCAT` of values, `SAMPLE` of a timestamp |
 | R5 | No projected value is an identifier or a record IRI, even through `GROUP_CONCAT`, `SAMPLE`, `MIN`, `MAX` or `STR` | `GROUP_CONCAT(?pseudo_id)`, `MAX(?id)`, `GROUP BY ?g` with `?g` returned |
@@ -135,8 +135,7 @@ The parser library has quirks we hit and handled:
 3. **Catch Virtuoso-only errors statically.** Two LLM queries passed our parser but failed in Virtuoso, for example with `NULL` or a `GRAPH` nested inside `GRAPH`. We may not ask the database at runtime.
 4. **More trap tests:**
    - identifiers smuggled through `CONCAT`, `SUBSTR` or `STR(?record)`;
-   - a subquery that projects `?g`, wrapped in an outer aggregate;
-   - `FROM NAMED` with a patient graph;
+   - a subquery that projects `?g`, wrapped in an outer aggregate (safe when only a count is returned; unsafe when concatenated or sampled);
    - `SERVICE` (federated) clauses: rejected as R4;
    - `HAVING (COUNT(DISTINCT ?g) = 1)`.
 5. **Encode the gray zones** once the organizers answer: minimum group size, `MIN`/`MAX`.
