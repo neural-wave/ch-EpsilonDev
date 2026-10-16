@@ -43,24 +43,41 @@ class Pipeline:
         retries_left = [self.max_retries]
 
         intent_task = asyncio.create_task(self._classify(text, timings))
-        context = self._timed(timings, "context", lambda: self.context_builder.build(text))
+        stage = "Context building"
         try:
-            sparql, tokens = await self._generate(text, context, None, retries_left, timings)
-        except Exception as error:
+            context = self._timed(timings, "context", lambda: self.context_builder.build(text))
+            stage = "Query generation"
+            sparql, tokens = await self._generate(text, context, None, retries_left, timings, intent_task)
+            flags, intent_tokens = await intent_task
+        except BaseException as error:
+            # Do not leave the concurrent intent call running after a failed or cancelled request.
             intent_task.cancel()
-            raise PipelineError(f"Query generation failed: {error}") from error
-        flags, intent_tokens = await intent_task
+            await asyncio.gather(intent_task, return_exceptions=True)
+            if not isinstance(error, Exception):
+                raise
+            if isinstance(error, PipelineError):
+                raise
+            raise PipelineError(f"{stage} failed: {error}") from error
         tokens += intent_tokens
 
-        decision = self._timed(timings, "guard", lambda: self.guard.decide(sparql, flags))
+        try:
+            decision = self._timed(timings, "guard", lambda: self.guard.decide(sparql, flags))
+        except Exception as error:
+            raise PipelineError("Compliance check failed.") from error
         if decision.retry_hint and retries_left[0] > 0:
             retries_left[0] -= 1
             try:
-                sparql, extra = await self._generate(text, context, decision.retry_hint, [0], timings)
+                candidate_sparql, extra = await self._generate(
+                    text, context, decision.retry_hint, [0], timings, intent_task
+                )
                 tokens += extra
-                decision = self._timed(timings, "guard_retry", lambda: self.guard.decide(sparql, flags))
+                candidate_decision = self._timed(
+                    timings, "guard_retry", lambda: self.guard.decide(candidate_sparql, flags)
+                )
             except Exception as error:  # keep the first answer if the retry fails
                 logger.warning("retry after guard failed: %s", error)
+            else:
+                sparql, decision = candidate_sparql, candidate_decision
 
         timings["total"] = round((time.perf_counter() - started) * 1000, 1)
         result = PipelineResult(
@@ -81,22 +98,25 @@ class Pipeline:
         started = time.perf_counter()
         try:
             return await self.intent_agent.classify(text)
-        except Exception as error:  # the guard still checks the query, so degrade instead of failing
-            logger.warning("intent agent failed, continuing without flags: %s", error)
-            return IntentFlags(), 0
+        except Exception as error:
+            raise PipelineError("Intent classification failed.") from error
         finally:
             timings["intent"] = round((time.perf_counter() - started) * 1000, 1)
 
     async def _generate(self, text: str, context: Context, feedback: str | None, retries_left: list[int],
-                        timings: dict) -> tuple[str, int]:
+                        timings: dict, intent_task: asyncio.Task[tuple[IntentFlags, int]]
+                        ) -> tuple[str, int]:
         started = time.perf_counter()
         sparql, tokens = await self.query_agent.generate(text, context, feedback)
         verdict = self.judge.check(sparql)
         if verdict.errors and retries_left[0] > 0:
-            retries_left[0] -= 1
-            sparql, extra = await self.query_agent.generate(text, context, " ".join(verdict.errors))
-            tokens += extra
-            verdict = self.judge.check(sparql)
+            # The first generation runs alongside intent, but a forbidden request must never be retried.
+            flags = (await intent_task)[0]
+            if not flags.flagged:
+                retries_left[0] -= 1
+                sparql, extra = await self.query_agent.generate(text, context, " ".join(verdict.errors))
+                tokens += extra
+                verdict = self.judge.check(sparql)
         key = "generate" if feedback is None else "generate_retry"
         timings[key] = round((time.perf_counter() - started) * 1000, 1)
         return verdict.sparql, tokens
