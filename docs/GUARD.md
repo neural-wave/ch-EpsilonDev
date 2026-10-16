@@ -2,6 +2,19 @@
 
 For whoever works on module D (guard and judge). Read [DATA.md](DATA.md) first: the guard's decisions only make sense once you know what a patient graph looks like. Nothing in this guide needs a database or a GPU.
 
+## Start here
+
+| What | What it gives you |
+|---|---|
+| [DATA.md](DATA.md) | How the data looks without having the database: patient graphs, an annotated real patient, what each property holds, codes, query shapes, quirks |
+| This guide | The guard inside: sensitivity levels, the five rules with examples, tools, how to change a rule, current assumptions, rdflib quirks, backlog |
+| `data/guard_corpus.jsonl` | 37 queries the LLM really wrote, with labels and the guard's verdict. Three possible false alarms already show up: #01, #07, #08 |
+| `data/examples.jsonl` | The 16 official examples, labeled |
+| `scripts/check_query.py` | Give it a query: verdict, broken rules and what each variable can hold |
+| `tests/test_guard.py` | The existing test cases; add yours there |
+
+First task: backlog item 1 in [section 8](#8-backlog-for-module-d-most-useful-first).
+
 ## 1. What the guard decides
 
 The guard receives the final SPARQL query and the intent agent's flags, and returns the verdict. It is code: about 15 ms per query, no tokens.
