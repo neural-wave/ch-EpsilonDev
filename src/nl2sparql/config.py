@@ -35,6 +35,7 @@ class Settings:
     llm_query_model: str = ""
     llm_intent_model: str = ""
     llm_timeout_seconds: float = 30.0
+    request_timeout_seconds: float = 75.0
     llm_verify_tls: bool = True  # set LLM_VERIFY_TLS=false for self-signed certificates (Vast.ai)
     llm_extra_body: dict = field(default_factory=dict)  # LLM_EXTRA_BODY, JSON merged into every request
     virtuoso_endpoint: str = "http://localhost:8890/sparql"
@@ -58,6 +59,7 @@ class Settings:
             llm_query_model=query_model,
             llm_intent_model=env.get("LLM_INTENT_MODEL", "") or query_model,
             llm_timeout_seconds=float(env.get("LLM_TIMEOUT_SECONDS", cls.llm_timeout_seconds)),
+            request_timeout_seconds=float(env.get("REQUEST_TIMEOUT_SECONDS", cls.request_timeout_seconds)),
             llm_verify_tls=env.get("LLM_VERIFY_TLS", "true").strip().lower() not in ("0", "false", "no"),
             llm_extra_body=_json_object("LLM_EXTRA_BODY"),
             virtuoso_endpoint=env.get("VIRTUOSO_ENDPOINT", cls.virtuoso_endpoint),

@@ -7,11 +7,12 @@ Status checked against `README.md`, the repository map, the base pipeline plan, 
 - [x] End-to-end pipeline components are built and wired together.
 - [x] FastAPI endpoint and fixed response contract are implemented.
 - [x] Input validation and normalization are implemented.
+- [x] Module A has a configurable whole-request timeout and an HTTP concurrency test command.
 - [x] Intent and query agents, prompts, and OpenAI-compatible LLM client are present.
 - [x] Context retrieval, schema cards, example bank, and terminology-index lookup code are present.
 - [x] SPARQL parser, judge, compliance rules, and shared retry flow are implemented.
 - [x] Demo, evaluation runner, Virtuoso helper, and database setup scripts are present.
-- [x] Unit test suite and CI are reported in README (90 tests; not rerun for this checklist).
+- [x] Unit test suite and pull-request CI are present; run the current suite before each merge.
 - [x] Baseline evaluation is recorded in README: stub 87% verdict accuracy; Qwen3.5-9B 90%, zero forbidden requests marked compliant, 2.8 s median latency.
 - [x] Jury confirmed the system must be database-agnostic at request time; compliant-query execution is optional; the hackathon API returns the query for forbidden requests.
 
@@ -20,9 +21,10 @@ Status checked against `README.md`, the repository map, the base pipeline plan, 
 ### Integration
 
 - [ ] Decide where the API will run during judging and how GPU access will be provided.
-- [ ] Load test against vLLM's eight concurrent sequences.
-- [ ] Verify clean-environment installation and startup.
-- [ ] Finish the README for the jury.
+- [ ] Run `python -m nl2sparql.load_test --url http://localhost:8080 --questions eval/questions.jsonl --requests 32 --concurrency 8 --require-llm` on the run machine; record errors, latency, throughput, and tokens. The command is ready, but the real LLM load run is pending.
+- [ ] Verify clean-environment installation and startup of the final A revision. A clean checkout of the earlier revision passed on 17 October; repeat the check after the new A changes are included.
+- [ ] Run the existing LLM evaluation on the final A branch and compare it with the README baseline before merging; leave evaluation code to module E.
+- [ ] Finish the README for the jury after the deployment answer and teammates' full names and roles are confirmed.
 
 ### Agents and prompts
 

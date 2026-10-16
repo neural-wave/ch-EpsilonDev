@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import math
 import time
 from dataclasses import asdict
 from pathlib import Path
@@ -26,7 +27,9 @@ class PipelineError(RuntimeError):
 class Pipeline:
     def __init__(self, intent_agent: IntentAgent, query_agent: QueryAgent, context_builder: ContextBuilder,
                  judge: Judge, guard: ComplianceGuard, max_input_chars: int = 2000, max_retries: int = 1,
-                 log_path: Path | None = None):
+                 log_path: Path | None = None, request_timeout_seconds: float = 75.0):
+        if not math.isfinite(request_timeout_seconds) or request_timeout_seconds <= 0:
+            raise ValueError("REQUEST_TIMEOUT_SECONDS must be a positive finite number.")
         self.intent_agent = intent_agent
         self.query_agent = query_agent
         self.context_builder = context_builder
@@ -35,8 +38,21 @@ class Pipeline:
         self.max_input_chars = max_input_chars
         self.max_retries = max_retries
         self.log_path = log_path
+        self.request_timeout_seconds = request_timeout_seconds
 
     async def run(self, raw_text: str) -> PipelineResult:
+        deadline = asyncio.get_running_loop().time() + self.request_timeout_seconds
+        try:
+            async with asyncio.timeout_at(deadline):
+                result = await self._run(raw_text)
+                # Check any synchronous work between the final await and the response.
+                if asyncio.get_running_loop().time() >= deadline:
+                    raise TimeoutError
+                return result
+        except TimeoutError as error:
+            raise PipelineError(f"Request timed out after {self.request_timeout_seconds:g} seconds.") from error
+
+    async def _run(self, raw_text: str) -> PipelineResult:
         started = time.perf_counter()
         timings: dict[str, float] = {}
         text = normalize_text(raw_text, self.max_input_chars)
@@ -45,7 +61,9 @@ class Pipeline:
         intent_task = asyncio.create_task(self._classify(text, timings))
         stage = "Context building"
         try:
-            context = self._timed(timings, "context", lambda: self.context_builder.build(text))
+            context = await asyncio.to_thread(
+                self._timed, timings, "context", lambda: self.context_builder.build(text)
+            )
             stage = "Query generation"
             sparql, tokens = await self._generate(text, context, None, retries_left, timings, intent_task)
             flags, intent_tokens = await intent_task
@@ -61,7 +79,9 @@ class Pipeline:
         tokens += intent_tokens
 
         try:
-            decision = self._timed(timings, "guard", lambda: self.guard.decide(sparql, flags))
+            decision = await asyncio.to_thread(
+                self._timed, timings, "guard", lambda: self.guard.decide(sparql, flags)
+            )
         except Exception as error:
             raise PipelineError("Compliance check failed.") from error
         if decision.retry_hint and retries_left[0] > 0:
@@ -71,8 +91,8 @@ class Pipeline:
                     text, context, decision.retry_hint, [0], timings, intent_task
                 )
                 tokens += extra
-                candidate_decision = self._timed(
-                    timings, "guard_retry", lambda: self.guard.decide(candidate_sparql, flags)
+                candidate_decision = await asyncio.to_thread(
+                    self._timed, timings, "guard_retry", lambda: self.guard.decide(candidate_sparql, flags)
                 )
             except Exception as error:  # keep the first answer if the retry fails
                 logger.warning("retry after guard failed: %s", error)
@@ -91,7 +111,8 @@ class Pipeline:
             retries=self.max_retries - retries_left[0],
             timings_ms=timings,
         )
-        self._log(text, result)
+        if self.log_path is not None:
+            await asyncio.to_thread(self._log, text, result)
         return result
 
     async def _classify(self, text: str, timings: dict) -> tuple[IntentFlags, int]:
@@ -108,7 +129,7 @@ class Pipeline:
                         ) -> tuple[str, int]:
         started = time.perf_counter()
         sparql, tokens = await self.query_agent.generate(text, context, feedback)
-        verdict = self.judge.check(sparql)
+        verdict = await asyncio.to_thread(self.judge.check, sparql)
         if verdict.errors and retries_left[0] > 0:
             # The first generation runs alongside intent, but a forbidden request must never be retried.
             flags = (await intent_task)[0]
@@ -116,7 +137,7 @@ class Pipeline:
                 retries_left[0] -= 1
                 sparql, extra = await self.query_agent.generate(text, context, " ".join(verdict.errors))
                 tokens += extra
-                verdict = self.judge.check(sparql)
+                verdict = await asyncio.to_thread(self.judge.check, sparql)
         key = "generate" if feedback is None else "generate_retry"
         timings[key] = round((time.perf_counter() - started) * 1000, 1)
         return verdict.sparql, tokens
