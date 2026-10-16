@@ -45,6 +45,13 @@ def check_rules(parsed: ParsedQuery, kinds: PropertyKinds, settings: RuleSetting
         return [Violation("R4", f"The query is a {form} query. Only SELECT queries are allowed.")]
     facts = analyse(parsed.algebra, kinds, settings.ontology_graphs)
     violations: list[Violation] = []
+    if facts.services:
+        violations.append(
+            Violation(
+                "R4",
+                "The query uses SERVICE to access another endpoint. Only local SELECT queries are allowed.",
+            )
+        )
     violations += _single_patient(facts, settings)
     violations += _whole_graph(facts)
     if facts.touches_patient_data:

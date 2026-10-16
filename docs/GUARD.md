@@ -66,7 +66,7 @@ Propagation:
 
 | Rule | Check in `rules.py` | Fails on |
 |---|---|---|
-| R4 | Query form must be `SelectQuery` | CONSTRUCT, ASK, DESCRIBE, any update |
+| R4 | Query form must be `SelectQuery`, with no federated `SERVICE` clause | CONSTRUCT, ASK, DESCRIBE, any update, or SERVICE access to another endpoint |
 | R1 | No patient graph IRI (`http://example.org/graph/…`) or record IRI (`…/sphn-resource/…-sphn-…`) anywhere; no identifier literal in a pattern; no filter comparing an identifier with a constant | `GRAPH <…/mock_data-1_0042>`, `?s sphn:hasIdentifier "ID-1…"`, `FILTER(STR(?g) = "…")` |
 | R3 | At least one patient pattern with a concrete property, or `rdf:type` with a concrete class | `?s ?p ?o` alone, `?s a ?class` alone |
 | R2 | The outermost SELECT is aggregated. No `SELECT *`. Every projected value is an aggregate or a `GROUP BY` key that is not instance-level or an exact timestamp | rows of values, `GROUP BY ?date`, `GROUP_CONCAT` of values, `SAMPLE` of a timestamp |
@@ -137,7 +137,7 @@ The parser library has quirks we hit and handled:
    - identifiers smuggled through `CONCAT`, `SUBSTR` or `STR(?record)`;
    - a subquery that projects `?g`, wrapped in an outer aggregate;
    - `FROM NAMED` with a patient graph;
-   - `SERVICE` (federated) clauses: they should probably be forbidden;
+   - `SERVICE` (federated) clauses: rejected as R4;
    - `HAVING (COUNT(DISTINCT ?g) = 1)`.
 5. **Encode the gray zones** once the organizers answer: minimum group size, `MIN`/`MAX`.
 6. **Later, with module B:** performance rewrites for the slow shapes (README, section 11).
