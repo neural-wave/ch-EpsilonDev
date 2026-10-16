@@ -480,7 +480,10 @@ By **Sunday 18 October, 11:00**:
 
 | Full name | Role | Modules |
 |---|---|---|
-| Santiago Figueroa | | B, run machine |
-| | | |
-| | | |
-| | | |
+| Santiago Figueroa Luchetti | Architecture and backend | Architecture, B (agents and models), run machine |
+| Adrika | Backend | |
+| Gayathri | Backend | |
+| David | Backend | |
+| Odinaka | Frontend | |
+
+Pick your module in [section 5](#5-repository-map-and-module-owners) and write it here and in the owner column there.
