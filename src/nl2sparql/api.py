@@ -10,6 +10,7 @@ from importlib import resources
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
+from nl2sparql.agents.console import build_console_router
 from nl2sparql.config import Settings
 from nl2sparql.factory import build_pipeline
 from nl2sparql.input_check import InputError
@@ -21,6 +22,7 @@ def create_app(pipeline: Pipeline | None = None, settings: Settings | None = Non
     settings = settings or Settings.from_env()
     pipeline = pipeline or build_pipeline(settings)
     app = FastAPI(title="Natural Language to SPARQL API", version="1.0.0")
+    app.include_router(build_console_router(settings, pipeline))  # /agents: local agents console
 
     async def run(request: Request):
         try:
@@ -72,6 +74,8 @@ def create_app(pipeline: Pipeline | None = None, settings: Settings | None = Non
             "compliance_reason": result.compliance_reason,
             "suggested_rephrase": result.suggested_rephrase,
             "timings_ms": result.timings_ms,
+            "tokens_by_step": result.tokens_by_step,
+            "diagnostics": result.diagnostics,
             "executed": False,
         }
         # Optional dev check, outside the system: run a compliant query on the local Virtuoso to see

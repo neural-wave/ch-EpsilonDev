@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agents Console</title>
+<style>
+  :root {
+    --bg: #f3f5f7; --card: #ffffff; --ink: #18222b; --muted: #5d6b75; --line: #d6dde2;
+    --llm: #e6eefb; --llm-line: #8eaad6; --stub: #f5efe3; --stub-line: #cfb57a; --accent: #1c5cc0;
+    --ok: #1f7a45; --no: #b93d0f; --code: #f1f4f6;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1418; --card: #161e24; --ink: #e2e9ed; --muted: #97a7b0; --line: #2a363d;
+      --llm: #17263a; --llm-line: #4a6c9c; --stub: #2a2416; --stub-line: #8a7440; --accent: #7cb0ff;
+      --ok: #5fd08f; --no: #ff8c55; --code: #10171b;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 system-ui, -apple-system, sans-serif; }
+  main { max-width: 1280px; margin: 0 auto; padding: 28px 16px 56px; display: grid; gap: 22px; }
+  header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px 18px; }
+  h1 { margin: 0; font-size: 26px; }
+  h2 { margin: 0; font-size: 18px; }
+  h3 { margin: 0; font-size: 15px; }
+  a { color: var(--accent); }
+  .badge { font: 600 12px/1 var(--mono); padding: 5px 9px; border-radius: 999px; border: 1.5px solid currentColor; }
+  .muted { color: var(--muted); font-size: 13px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: grid; gap: 12px; min-width: 0; }
+  .agents { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+  @media (max-width: 860px) { .agents { grid-template-columns: minmax(0, 1fr); } }
+  .agent.llm { border-top: 4px solid var(--llm-line); }
+  .agent.stub { border-top: 4px solid var(--stub-line); }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  td { padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  td:first-child { color: var(--muted); width: 38%; }
+  td code, .chips code { font-family: var(--mono); font-size: 12.5px; background: var(--code); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+  pre { margin: 0; background: var(--code); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px;
+        font: 12.5px/1.5 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 420px; overflow: auto; }
+  details summary { cursor: pointer; color: var(--accent); font-size: 14px; }
+  .note { background: var(--stub); border: 1px solid var(--stub-line); border-radius: 6px; padding: 8px 10px; font-size: 13px; }
+  .strip { display: flex; flex-wrap: wrap; gap: 8px 22px; font-size: 14px; }
+  .strip b { font-family: var(--mono); font-weight: 600; }
+  form { display: flex; gap: 10px; flex-wrap: wrap; }
+  input[type=text] { flex: 1 1 420px; font: inherit; padding: 9px 11px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--ink); }
+  button { font: inherit; padding: 9px 16px; border-radius: 8px; border: 0; background: var(--ink); color: var(--card); cursor: pointer; }
+  button.secondary { background: transparent; color: var(--ink); border: 1px solid var(--line); }
+  .preview { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+  @media (max-width: 860px) { .preview { grid-template-columns: minmax(0, 1fr); } }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .reachable { color: var(--ok); font-weight: 600; } .unreachable { color: var(--no); font-weight: 600; }
+  ul.plain { margin: 0; padding-left: 1.1em; font-size: 13.5px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Agents console</h1>
+    <span id="backend" class="badge">…</span>
+    <span class="muted">Configuration of both agents as the running API sees it. <a href="/">Demo</a> · <a href="/agents/config">raw JSON</a></span>
+  </header>
+
+  <section class="card">
+    <h2>Pipeline</h2>
+    <div id="pipeline" class="strip"></div>
+  </section>
+
+  <section class="agents">
+    <article id="agent-intent" class="card agent"></article>
+    <article id="agent-query" class="card agent"></article>
+  </section>
+
+  <section class="card">
+    <h2>Context the query agent receives</h2>
+    <div id="context" class="strip"></div>
+  </section>
+
+  <section class="card">
+    <h2>Preview: what each model receives for a question</h2>
+    <p class="muted">Builds the real prompts with the current configuration. It does not call any model.</p>
+    <form id="preview-form">
+      <input id="question" type="text" value="How many patients have a billed diagnosis of cholera, by sex?" aria-label="Question">
+      <button type="submit">Preview prompts</button>
+    </form>
+    <div id="preview"></div>
+  </section>
+
+  <section class="card">
+    <h2>Model servers</h2>
+    <p class="muted">Sends one small request (<code>GET /models</code>) to each configured server. It runs only when you press the button.</p>
+    <div><button id="check" class="secondary">Check servers</button></div>
+    <div id="servers"></div>
+  </section>
+
+  <section class="card">
+    <h2>Measurements</h2>
+    <p class="muted">Coming next: tokens and time per agent from the latest eval reports (<code>eval/run_eval.py</code>, <code>eval/run_intent_eval.py</code>).</p>
+  </section>
+</main>
+<script>
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
+const code = v => `<code>${esc(typeof v === "string" ? v : JSON.stringify(v))}</code>`;
+const row = (label, value) => `<tr><td>${esc(label)}</td><td>${value}</td></tr>`;
+
+function renderAgent(name, a) {
+  const el = document.getElementById(`agent-${name}`);
+  el.classList.add(a.uses_llm ? "llm" : "stub");
+  const title = name === "intent" ? "Intent agent" : "Query agent";
+  el.innerHTML = `
+    <h2>${title} <span class="muted">· ${esc(a.implementation)}</span></h2>
+    <p class="muted">${esc(a.role)}</p>
+    ${a.stand_in ? `<div class="note">Running the stand-in: ${esc(a.stand_in)} The LLM settings below apply when <code>NL2SPARQL_BACKEND=llm</code>.</div>` : ""}
+    <table>
+      ${row("Model", a.model ? code(a.model) : "<span class='muted'>not set</span>")}
+      ${row("Server", code(a.server))}
+      ${row("API key", esc(a.api_key))}
+      ${row("Extra request fields", code(a.extra_body))}
+      ${row("Max answer tokens", code(a.max_answer_tokens))}
+      ${row("Temperature", code(a.temperature))}
+      ${row("JSON mode", code(a.json_mode))}
+      ${row("Timeout (s)", code(a.timeout_seconds))}
+      ${row("Verify TLS", code(a.verify_tls))}
+      ${row("Prompt version", `${code(a.prompt_version)} <span class="muted">available: ${esc(a.prompt_versions_available.join(", "))}</span>`)}
+      ${row("Set in .env", `<div class="chips">${a.env_vars.map(v => code(v)).join(" ")}</div>`)}
+    </table>
+    <details><summary>System prompt (${esc(a.prompt_version)})</summary><pre>${esc(a.system_prompt)}</pre></details>`;
+}
+
+async function loadConfig() {
+  const c = await (await fetch("/agents/config")).json();
+  const backend = document.getElementById("backend");
+  backend.textContent = `backend: ${c.backend}`;
+  backend.style.color = c.backend === "llm" ? "var(--accent)" : "var(--muted)";
+  const p = c.pipeline;
+  document.getElementById("pipeline").innerHTML = `
+    <span>Retries per request <b>${p.max_retries}</b></span>
+    <span>Max input <b>${p.max_input_chars}</b> chars</span>
+    <span>Return query of forbidden requests <b>${p.return_noncompliant_query}</b></span>
+    <span>Schema classes loaded <b>${p.schema_classes_loaded}</b></span>
+    <span>Property kinds loaded <b>${p.property_kinds_loaded}</b></span>`;
+  renderAgent("intent", c.agents.intent);
+  renderAgent("query", c.agents.query);
+  const x = c.context;
+  document.getElementById("context").innerHTML = `
+    <span>Examples per request <b>${x.examples_per_request}</b> of <b>${x.examples_in_bank}</b> in the bank</span>
+    <span>Schema cards per request <b>${x.schema_cards_per_request}</b></span>
+    <span>Code candidates per request <b>${x.code_candidates_per_request}</b> (index entries: <b>${x.terminology_entries}</b>)</span>
+    <span>Hide the question's own example <b>${x.hide_exact_example}</b></span>`;
+}
+
+function renderMessages(title, part) {
+  return `<div class="card"><h3>${title}</h3>
+    <p class="muted">≈ ${part.estimated_prompt_tokens} prompt tokens · answer capped at ${part.max_answer_tokens} tokens</p>
+    ${part.messages.map(m => `<details ${m.role === "user" ? "open" : ""}><summary>${esc(m.role)} message</summary><pre>${esc(m.content)}</pre></details>`).join("")}
+  </div>`;
+}
+
+document.getElementById("preview-form").addEventListener("submit", async e => {
+  e.preventDefault();
+  const out = document.getElementById("preview");
+  out.innerHTML = "<p class='muted'>Building prompts…</p>";
+  const response = await fetch("/agents/preview", {method: "POST", headers: {"Content-Type": "application/json"},
+                                                   body: JSON.stringify({text: document.getElementById("question").value})});
+  const d = await response.json();
+  if (!response.ok) { out.innerHTML = `<p class="unreachable">${esc(d.error)}</p>`; return; }
+  const ctx = d.context;
+  out.innerHTML = `
+    <div class="preview">${renderMessages("Intent agent", d.intent)}${renderMessages("Query agent", d.query)}</div>
+    <div class="card"><h3>Context picked for this question</h3>
+      <ul class="plain">${ctx.examples.map(x => `<li>${code(x.id)} ${esc(x.question)}</li>`).join("")}</ul>
+      <p class="muted">${ctx.schema_cards.length} schema cards · ${ctx.code_candidates.length} code candidates
+      ${ctx.code_candidates.map(c => code(`${c.system} ${c.code}`)).join(" ")}</p>
+    </div>`;
+});
+
+document.getElementById("check").addEventListener("click", async () => {
+  const out = document.getElementById("servers");
+  out.innerHTML = "<p class='muted'>Asking the servers…</p>";
+  const d = await (await fetch("/agents/check", {method: "POST"})).json();
+  out.innerHTML = Object.entries(d).map(([name, r]) => `<p><b>${esc(name)}</b>:
+    <span class="${r.status === "reachable" ? "reachable" : "unreachable"}">${esc(r.status)}</span>
+    ${r.models ? ` · serves ${r.models.map(code).join(" ")} · configured model served: <b>${r.serves_configured_model}</b>` : ""}
+    ${r.error ? ` · ${esc(r.error)}` : ""}</p>`).join("");
+});
+
+loadConfig();
+</script>
+</body>
+</html>

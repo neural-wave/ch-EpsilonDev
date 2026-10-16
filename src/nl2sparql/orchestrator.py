@@ -23,6 +23,26 @@ class PipelineError(RuntimeError):
     """The pipeline could not produce a query (e.g. the model server is down). The API answers 503."""
 
 
+class _Run:
+    """Bookkeeping of one request: time and tokens per step, why a retry happened."""
+
+    def __init__(self, max_retries: int):
+        self.retries_left = max_retries
+        self.timings: dict[str, float] = {}
+        self.tokens: dict[str, int] = {}
+        self.diagnostics: dict = {}
+
+    def take_retry(self, reason: str) -> bool:
+        if self.retries_left <= 0:
+            return False
+        self.retries_left -= 1
+        self.diagnostics["retry_reason"] = reason
+        return True
+
+    def add_tokens(self, step: str, used: int) -> None:
+        self.tokens[step] = self.tokens.get(step, 0) + used
+
+
 class Pipeline:
     def __init__(self, intent_agent: IntentAgent, query_agent: QueryAgent, context_builder: ContextBuilder,
                  judge: Judge, guard: ComplianceGuard, max_input_chars: int = 2000, max_retries: int = 1,
@@ -38,76 +58,81 @@ class Pipeline:
 
     async def run(self, raw_text: str) -> PipelineResult:
         started = time.perf_counter()
-        timings: dict[str, float] = {}
         text = normalize_text(raw_text, self.max_input_chars)
-        retries_left = [self.max_retries]
+        run = _Run(self.max_retries)
 
-        intent_task = asyncio.create_task(self._classify(text, timings))
-        context = self._timed(timings, "context", lambda: self.context_builder.build(text))
+        intent_task = asyncio.create_task(self._classify(text, run))
+        context = self._timed(run, "context", lambda: self.context_builder.build(text))
         try:
-            sparql, tokens = await self._generate(text, context, None, retries_left, timings)
+            sparql = await self._generate(text, context, None, run)
         except Exception as error:
             intent_task.cancel()
             raise PipelineError(f"Query generation failed: {error}") from error
-        flags, intent_tokens = await intent_task
-        tokens += intent_tokens
+        flags = await intent_task
 
-        decision = self._timed(timings, "guard", lambda: self.guard.decide(sparql, flags))
-        if decision.retry_hint and retries_left[0] > 0:
-            retries_left[0] -= 1
+        decision = self._timed(run, "guard", lambda: self.guard.decide(sparql, flags))
+        if decision.retry_hint and run.take_retry("guard"):
+            run.diagnostics["guard_violations_first_try"] = [f"{v.rule}: {v.message}" for v in decision.violations]
             try:
-                sparql, extra = await self._generate(text, context, decision.retry_hint, [0], timings)
-                tokens += extra
-                decision = self._timed(timings, "guard_retry", lambda: self.guard.decide(sparql, flags))
+                sparql = await self._generate(text, context, decision.retry_hint, run)
+                decision = self._timed(run, "guard_retry", lambda: self.guard.decide(sparql, flags))
             except Exception as error:  # keep the first answer if the retry fails
                 logger.warning("retry after guard failed: %s", error)
 
-        timings["total"] = round((time.perf_counter() - started) * 1000, 1)
+        run.timings["total"] = round((time.perf_counter() - started) * 1000, 1)
         result = PipelineResult(
             sparql_query=sparql,
-            tokens_consumed=tokens,
+            tokens_consumed=sum(run.tokens.values()),
             is_compliant=decision.compliant,
             compliance_reason=decision.reason,
             suggested_rephrase=decision.suggested_rephrase,
             intent=flags,
             violations=[f"{v.rule}: {v.message}" for v in decision.violations],
-            retries=self.max_retries - retries_left[0],
-            timings_ms=timings,
+            retries=self.max_retries - run.retries_left,
+            timings_ms=run.timings,
+            tokens_by_step=run.tokens,
+            diagnostics=run.diagnostics,
         )
         self._log(text, result)
         return result
 
-    async def _classify(self, text: str, timings: dict) -> tuple[IntentFlags, int]:
+    async def _classify(self, text: str, run: _Run) -> IntentFlags:
         started = time.perf_counter()
         try:
-            return await self.intent_agent.classify(text)
+            flags, used = await self.intent_agent.classify(text)
+            run.add_tokens("intent", used)
+            return flags
         except Exception as error:  # the guard still checks the query, so degrade instead of failing
             logger.warning("intent agent failed, continuing without flags: %s", error)
-            return IntentFlags(), 0
+            run.diagnostics["intent_error"] = str(error)[:300]
+            return IntentFlags()
         finally:
-            timings["intent"] = round((time.perf_counter() - started) * 1000, 1)
+            run.timings["intent"] = round((time.perf_counter() - started) * 1000, 1)
 
-    async def _generate(self, text: str, context: Context, feedback: str | None, retries_left: list[int],
-                        timings: dict) -> tuple[str, int]:
+    async def _generate(self, text: str, context: Context, feedback: str | None, run: _Run) -> str:
+        """Query agent + judge. The first call counts as "query", any later one as "query_retry"."""
         started = time.perf_counter()
-        sparql, tokens = await self.query_agent.generate(text, context, feedback)
+        step = "query" if feedback is None else "query_retry"
+        sparql, used = await self.query_agent.generate(text, context, feedback)
+        run.add_tokens(step, used)
         verdict = self.judge.check(sparql)
-        if verdict.errors and retries_left[0] > 0:
-            retries_left[0] -= 1
-            sparql, extra = await self.query_agent.generate(text, context, " ".join(verdict.errors))
-            tokens += extra
+        if verdict.errors and run.take_retry("judge"):
+            run.diagnostics["judge_errors_first_try"] = verdict.errors
+            sparql, used = await self.query_agent.generate(text, context, " ".join(verdict.errors))
+            run.add_tokens("query_retry", used)
             verdict = self.judge.check(sparql)
-        key = "generate" if feedback is None else "generate_retry"
-        timings[key] = round((time.perf_counter() - started) * 1000, 1)
-        return verdict.sparql, tokens
+        if verdict.errors:
+            run.diagnostics["judge_errors_final"] = verdict.errors
+        run.timings["generate" if feedback is None else "generate_retry"] = round((time.perf_counter() - started) * 1000, 1)
+        return verdict.sparql
 
     @staticmethod
-    def _timed(timings: dict, key: str, function):
+    def _timed(run: _Run, key: str, function):
         started = time.perf_counter()
         try:
             return function()
         finally:
-            timings[key] = round((time.perf_counter() - started) * 1000, 1)
+            run.timings[key] = round((time.perf_counter() - started) * 1000, 1)
 
     def _log(self, text: str, result: PipelineResult) -> None:
         if self.log_path is None:

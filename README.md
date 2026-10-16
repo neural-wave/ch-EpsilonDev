@@ -234,6 +234,8 @@ curl -s localhost:8080/nl-to-sparql -H 'Content-Type: application/json' \
 
 **Without a model** (`NL2SPARQL_BACKEND=stub`), the intent agent uses keyword rules and the query agent copies the SPARQL of the most similar example. It is not a translator; it only lets the pipeline run end to end. **To use the real LLM**, see [section 8](#8-the-llm-on-the-gpu).
 
+**Agents console:** <http://localhost:8080/agents> shows the full configuration of both agents and their prompts. It also previews exactly what each model would receive for a question, without calling any model.
+
 ## 7. Configuration reference
 
 All settings come from environment variables; `.env.example` lists them. Load them with `set -a && source .env && set +a`.
@@ -244,7 +246,11 @@ All settings come from environment variables; `.env.example` lists them. Load th
 | `LLM_BASE_URL` | `http://localhost:8000/v1` | OpenAI-compatible server. Through the SSH tunnel: `http://localhost:18000/v1` |
 | `LLM_API_KEY` | `not-needed` | Bearer token; needed for the public Vast endpoint, not for the tunnel |
 | `LLM_QUERY_MODEL` | — | Model name served by vLLM, e.g. `Qwen/Qwen3.5-9B` |
-| `LLM_INTENT_MODEL` | query model | A separate model for the intent agent. Both agents share `LLM_BASE_URL` today |
+| `LLM_INTENT_MODEL` | query model | A separate model for the intent agent |
+| `LLM_INTENT_BASE_URL`, `LLM_INTENT_API_KEY` | shared values | Give the intent agent its own model server |
+| `LLM_INTENT_EXTRA_BODY` | inherits `LLM_EXTRA_BODY` | Request fields for the intent model only; `'{}'` sends none |
+| `LLM_INTENT_MAX_TOKENS`, `LLM_QUERY_MAX_TOKENS` | `200`, `900` | Answer length cap per agent |
+| `INTENT_PROMPT_VERSION`, `QUERY_PROMPT_VERSION` | `v1` | Which prompt version each agent uses (see `src/nl2sparql/agents/prompts.py`) |
 | `LLM_TIMEOUT_SECONDS` | `30` | Per LLM call |
 | `LLM_VERIFY_TLS` | `true` | `false` for servers with a self-signed certificate |
 | `LLM_EXTRA_BODY` | empty | JSON merged into every LLM request. For Qwen3.x: `'{"chat_template_kwargs": {"enable_thinking": false}}'` (keep the single quotes) |
@@ -343,7 +349,10 @@ The full guide to the data, with examples, is [docs/DATA.md](docs/DATA.md).
 python eval/run_eval.py                    # in-process, backend from the environment
 python eval/run_eval.py --execute          # also runs compliant queries on VIRTUOSO_ENDPOINT
 python eval/run_eval.py --url http://localhost:8080
+python eval/run_intent_eval.py             # the intent agent alone: detection rate, false alarms, tokens
 ```
+
+In-process pipeline runs also report tokens and time **per agent** and why retries happened (`per_agent` in the summary). The intent eval is the cheap way to compare intent models and prompts.
 
 - **Questions:** the 16 official examples (from `data/examples.jsonl`) plus team questions in [eval/questions.jsonl](eval/questions.jsonl). Each team question has `{id, question, expected_compliant, category}`.
 - **Fair test:** by default an official question cannot see its own example in the context.

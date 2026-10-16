@@ -71,3 +71,6 @@ class PipelineResult:
     violations: list[str]
     retries: int
     timings_ms: dict[str, float]
+    # Added 2026-10-17 (defaults keep older callers working):
+    tokens_by_step: dict[str, int] = field(default_factory=dict)  # "intent", "query", "query_retry"
+    diagnostics: dict = field(default_factory=dict)  # retry reason, first-try judge errors or violations

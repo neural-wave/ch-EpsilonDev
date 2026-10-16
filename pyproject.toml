@@ -22,7 +22,7 @@ dev = ["pytest==8.3.4"]
 where = ["src"]
 
 [tool.setuptools.package-data]
-nl2sparql = ["demo/*.html"]
+nl2sparql = ["demo/*.html", "agents/*.html"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

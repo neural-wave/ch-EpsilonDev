@@ -48,6 +48,7 @@ def test_compliant_request_end_to_end():
     result = asyncio.run(pipeline_with(ScriptedQueryAgent(EXAMPLES["official-03"])).run("Cholera by sex?"))
     assert result.is_compliant and result.retries == 0 and result.tokens_consumed == 60
     assert {"intent", "context", "generate", "guard", "total"} <= set(result.timings_ms)
+    assert result.tokens_by_step == {"intent": 10, "query": 50} and result.diagnostics == {}
 
 
 def test_allowed_request_with_leaking_query_is_retried_once():
@@ -55,6 +56,8 @@ def test_allowed_request_with_leaking_query_is_retried_once():
     result = asyncio.run(pipeline_with(agent).run("Cholera cases by sex?"))
     assert result.is_compliant and result.retries == 1 and result.tokens_consumed == 110
     assert agent.feedback[1].startswith("The previous query breaks the privacy rules")
+    assert result.tokens_by_step == {"intent": 10, "query": 50, "query_retry": 50}
+    assert result.diagnostics["retry_reason"] == "guard" and result.diagnostics["guard_violations_first_try"]
 
 
 def test_forbidden_request_is_never_retried():
@@ -69,6 +72,9 @@ def test_judge_error_uses_the_retry():
     agent = ScriptedQueryAgent("SELECT ?x WHERE {", EXAMPLES["official-03"])
     result = asyncio.run(pipeline_with(agent).run("Cholera by sex?"))
     assert result.is_compliant and result.retries == 1 and agent.feedback[1].startswith("Syntax error")
+    assert result.diagnostics["retry_reason"] == "judge"
+    assert result.diagnostics["judge_errors_first_try"][0].startswith("Syntax error")
+    assert result.tokens_consumed == sum(result.tokens_by_step.values())
 
 
 @pytest.fixture()
