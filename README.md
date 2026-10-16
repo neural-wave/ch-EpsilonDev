@@ -91,6 +91,12 @@ Each module has one owner and a fixed interface (see [docs/plans/2026-10-16-base
 4. **Shared interfaces:** change `src/nl2sparql/models.py` and `src/nl2sparql/agents/base.py` only after agreeing with the team.
 5. **LLM access:** ask Santiago for the GPU endpoint and token, or for SSH access to open a tunnel. The token goes in your `.env`, never in a commit.
 6. **Virtuoso is optional.** You need it only for `--execute` in the eval, the profiling scripts and the demo's dev check. See [infra/virtuoso](infra/virtuoso/README.md).
+7. **Heavy runs happen on the run machine** (Santiago's laptop, with Virtuoso and the GPU tunnel). Push your branch, then on that machine:
+   ```bash
+   scripts/runbox.sh up                                  # Virtuoso dev, GPU tunnel, API/demo on :8080
+   scripts/runbox.sh eval --execute --branch guard/my-fix   # your branch, in its own worktree
+   scripts/runbox.sh status
+   ```
 
 **Baseline to beat** (31 questions, 2026-10-17):
 
