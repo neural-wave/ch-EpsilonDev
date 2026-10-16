@@ -184,7 +184,8 @@ nl2sparql/
 │   ├── models.py                 shared types                                         (shared)
 │   ├── agents/                   intent + query agents, LLM and stand-in versions        (B)
 │   │   ├── base.py               agent interfaces                                     (shared)
-│   │   └── prompts.py            first-draft prompts                                      (B)
+│   │   ├── prompts.py            prompts by version (v1, v2, ...)                         (B)
+│   │   └── console.py, .html     /agents: agents console and measurements                 (B)
 │   ├── llm.py                    OpenAI-compatible client                                 (B)
 │   ├── context/                  examples (BM25), schema cards, terminology index        (C)
 │   ├── guard/                    the five rules + verdict logic                           (D)
@@ -213,6 +214,7 @@ nl2sparql/
 **Guides per topic:**
 - [docs/DATA.md](docs/DATA.md): how the patient graphs look, with examples. For everyone.
 - [docs/GUARD.md](docs/GUARD.md): how the compliance guard works, its tools and its backlog. For module D.
+- [docs/LLM_AGENTS.md](docs/LLM_AGENTS.md): the two LLM agents, their configuration, how to measure them, how to change a prompt or a model, and their backlog. For module B.
 
 ## 6. Getting started on your computer
 
@@ -223,7 +225,7 @@ git clone <repo-url> nl2sparql && cd nl2sparql
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env
-python -m pytest -q                 # 90 tests, all should pass
+python -m pytest -q                 # all tests should pass
 python -m nl2sparql --port 8080     # API + demo with the stand-in agents (no model)
 ```
 
@@ -234,7 +236,12 @@ curl -s localhost:8080/nl-to-sparql -H 'Content-Type: application/json' \
 
 **Without a model** (`NL2SPARQL_BACKEND=stub`), the intent agent uses keyword rules and the query agent copies the SPARQL of the most similar example. It is not a translator; it only lets the pipeline run end to end. **To use the real LLM**, see [section 8](#8-the-llm-on-the-gpu).
 
-**Agents console:** <http://localhost:8080/agents> shows the full configuration of both agents and their prompts. It also previews exactly what each model would receive for a question, without calling any model.
+**Agents console:** <http://localhost:8080/agents> shows the full configuration of both agents and their prompts. It can:
+- preview exactly what each model would receive for a question, without calling any model;
+- run one question and show what each agent did (with the LLM backend, this calls the model);
+- list every saved eval report.
+
+See [docs/LLM_AGENTS.md](docs/LLM_AGENTS.md).
 
 ## 7. Configuration reference
 
@@ -260,7 +267,7 @@ All settings come from environment variables; `.env.example` lists them. Load th
 | `RETURN_NONCOMPLIANT_QUERY` | `true` | Hackathon behavior. `false` = a forbidden request returns an empty `sparql_query` |
 | `GPU_SSH_HOST`, `GPU_SSH_PORT` | — | Run machine only, for the tunnel (ask Santiago) |
 | `API_PORT` | `8080` | Port used by `scripts/runbox.sh` |
-| `NL2SPARQL_DATA_DIR`, `NL2SPARQL_ASSETS_DIR`, `NL2SPARQL_LOG_PATH` | `data/`, `assets/`, `logs/requests.jsonl` | Where data, built assets and the request log live |
+| `NL2SPARQL_DATA_DIR`, `NL2SPARQL_ASSETS_DIR`, `NL2SPARQL_LOG_PATH`, `NL2SPARQL_REPORTS_DIR` | `data/`, `assets/`, `logs/requests.jsonl`, `eval/reports/` | Where data, built assets, the request log and the eval reports live |
 
 ## 8. The LLM on the GPU
 
@@ -352,7 +359,12 @@ python eval/run_eval.py --url http://localhost:8080
 python eval/run_intent_eval.py             # the intent agent alone: detection rate, false alarms, tokens
 ```
 
-In-process pipeline runs also report tokens and time **per agent** and why retries happened (`per_agent` in the summary). The intent eval is the cheap way to compare intent models and prompts.
+In-process pipeline runs also report, **per agent**:
+- tokens and time;
+- why retries happened, and the query each retry replaced;
+- answers cut off at the token cap.
+
+These appear in `per_agent` in the summary and in `diagnostics` in each row. The intent eval is the cheap way to compare intent models and prompts. The agents console (`/agents`, **Measurements**) shows every saved report side by side. [docs/LLM_AGENTS.md](docs/LLM_AGENTS.md) explains every field.
 
 - **Questions:** the 16 official examples (from `data/examples.jsonl`) plus team questions in [eval/questions.jsonl](eval/questions.jsonl). Each team question has `{id, question, expected_compliant, category}`.
 - **Fair test:** by default an official question cannot see its own example in the context.
@@ -412,8 +424,8 @@ Query performance is a major lever: even the organizers' own queries can take mi
 - Install from scratch in a clean environment before submitting.
 - Finish the README for the jury.
 
-**B · Agents and prompts** (Santiago)
-- Model choice on the GPU.
+**B · Agents and prompts** (Santiago). Full backlog in [docs/LLM_AGENTS.md](docs/LLM_AGENTS.md#9-backlog-for-module-b-most-useful-first).
+- Per-agent baseline on the GPU, then the Apertus comparison for the intent agent.
 - Prompts in the house style, so complex questions (#01, #08) produce valid SPARQL and fewer queries return 0 rows.
 - Cut tokens: about 3,000 per request today.
 - Measure the intent agent's false alarms and its resistance to prompt injection.

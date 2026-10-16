@@ -2,7 +2,7 @@
 
 Read [README.md](README.md) first. It is the team's master document: the challenge, the jury's feedback, the architecture and its reasons, setup, configuration, the GPU, the run machine, baseline numbers, known pitfalls and the backlog per module. This file only repeats what you must never get wrong.
 
-Before touching queries, data or prompts, read [docs/DATA.md](docs/DATA.md), which explains how the patient graphs look. For the compliance guard or the judge (module D), also read [docs/GUARD.md](docs/GUARD.md).
+Before touching queries, data or prompts, read [docs/DATA.md](docs/DATA.md), which explains how the patient graphs look. For the compliance guard or the judge (module D), also read [docs/GUARD.md](docs/GUARD.md). For the LLM agents, their prompts or their models (module B), read [docs/LLM_AGENTS.md](docs/LLM_AGENTS.md).
 
 ## Rules you must follow
 
