@@ -1,0 +1,841 @@
+{
+ "http://purl.org/dc/terms/conformsTo": {
+  "kind": "mixed",
+  "count": 2000
+ },
+ "http://www.w3.org/1999/02/22-rdf-syntax-ns#type": {
+  "kind": "mixed",
+  "count": 3399314
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasAcquistionCode": {
+  "kind": "resource",
+  "count": 2000
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasActiveIngredient": {
+  "kind": "resource",
+  "count": 28775
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasAdministrationRouteCode": {
+  "kind": "resource",
+  "count": 19118
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasAdministrativeCase": {
+  "kind": "resource",
+  "count": 180178
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasAdmissionDateTime": {
+  "kind": "literal",
+  "count": 2000,
+  "datatype": "http://www.w3.org/2001/XMLSchema#dateTime"
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasAffectedGenomicFeature": {
+  "kind": "resource",
+  "count": 415
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasAgentCode": {
+  "kind": "resource",
+  "count": 4585
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasAlgorithm": {
+  "kind": "individual",
+  "count": 4000
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasAlleleOriginCode": {
+  "kind": "resource",
+  "count": 1058
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasAllergen": {
+  "kind": "resource",
+  "count": 5584
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasAlternateAllele": {
+  "kind": "literal",
+  "count": 106,
+  "datatype": "http://www.w3.org/2001/XMLSchema#string"
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasArticle": {
+  "kind": "resource",
+  "count": 19414
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasAssessment": {
+  "kind": "resource",
+  "count": 3047
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasAssociatedCountry": {
+  "kind": "resource",
+  "count": 2000
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasAverageInsertSize": {
+  "kind": "resource",
+  "count": 894
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasAverageReadLength": {
+  "kind": "resource",
+  "count": 894
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasBiobankName": {
+  "kind": "literal",
+  "count": 831,
+  "datatype": "http://www.w3.org/2001/XMLSchema#string"
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasBodySite": {
+  "kind": "resource",
+  "count": 64538
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasCalculationMethod": {
+  "kind": "individual",
+  "count": 1255
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasCareHandling": {
+  "kind": "resource",
+  "count": 2000
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasCategory": {
+  "kind": "individual",
+  "count": 4000
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasCellCountEstimateCode": {
+  "kind": "resource",
+  "count": 982
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasCellMorphology": {
+  "kind": "individual",
+  "count": 982
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasCellOrganization": {
+  "kind": "individual",
+  "count": 982
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasCertaintyCode": {
+  "kind": "resource",
+  "count": 3634
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasChemicalAgent": {
+  "kind": "resource",
+  "count": 588
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasChromosomalLocation": {
+  "kind": "resource",
+  "count": 1058
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasChromosome": {
+  "kind": "resource",
+  "count": 1058
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasCircumstanceCode": {
+  "kind": "resource",
+  "count": 788
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasCode": {
+  "kind": "resource",
+  "count": 925833
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasCodingSystemAndVersion": {
+  "kind": "literal",
+  "count": 240154,
+  "datatype": "http://www.w3.org/2001/XMLSchema#string"
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasCollectionDateTime": {
+  "kind": "literal",
+  "count": 5855,
+  "datatype": "http://www.w3.org/2001/XMLSchema#dateTime"
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasComparator": {
+  "kind": "individual",
+  "count": 382659
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasComponent": {
+  "kind": "resource",
+  "count": 4567
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasConditionCode": {
+  "kind": "resource",
+  "count": 788
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasConsequences": {
+  "kind": "individual",
+  "count": 340
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasCoordinateConvention": {
+  "kind": "individual",
+  "count": 1058
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasCountry": {
+  "kind": "resource",
+  "count": 4000
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasCoverageType": {
+  "kind": "individual",
+  "count": 2000
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasCreationDateTime": {
+  "kind": "literal",
+  "count": 4000,
+  "datatype": "http://www.w3.org/2001/XMLSchema#dateTime"
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasCurrentLocation": {
+  "kind": "resource",
+  "count": 14401
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasDataDetermination": {
+  "kind": "resource",
+  "count": 18703
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasDataFile": {
+  "kind": "resource",
+  "count": 72206
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasDataProvider": {
+  "kind": "resource",
+  "count": 443254
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasDate": {
+  "kind": "resource",
+  "count": 2788
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasDateTime": {
+  "kind": "literal",
+  "count": 104676,
+  "datatype": "http://www.w3.org/2001/XMLSchema#dateTime"
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasDay": {
+  "kind": "literal",
+  "count": 2848,
+  "datatype": "http://www.w3.org/2001/XMLSchema#gDay"
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasDeath": {
+  "kind": "resource",
+  "count": 734
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasDegreeCode": {
+  "kind": "resource",
+  "count": 4585
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasDeliveryModeCode": {
+  "kind": "resource",
+  "count": 2000
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasDepartment": {
+  "kind": "resource",
+  "count": 2000
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasDescription": {
+  "kind": "literal",
+  "count": 173969,
+  "datatype": "http://www.w3.org/2001/XMLSchema#string"
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasDeterminationDateTime": {
+  "kind": "literal",
+  "count": 7708,
+  "datatype": "http://www.w3.org/2001/XMLSchema#dateTime"
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasDiastolicPressure": {
+  "kind": "resource",
+  "count": 20871
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasDischargeDateTime": {
+  "kind": "literal",
+  "count": 2000,
+  "datatype": "http://www.w3.org/2001/XMLSchema#dateTime"
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasDischargeLocation": {
+  "kind": "resource",
+  "count": 2000
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasDistance": {
+  "kind": "resource",
+  "count": 2978
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasDrug": {
+  "kind": "resource",
+  "count": 19118
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasDuration": {
+  "kind": "resource",
+  "count": 12056
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasEncoding": {
+  "kind": "individual",
+  "count": 4000
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasEnd": {
+  "kind": "literal",
+  "count": 1058,
+  "datatype": "http://www.w3.org/2001/XMLSchema#double"
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasEndCytobandCode": {
+  "kind": "resource",
+  "count": 1058
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasEndDateTime": {
+  "kind": "literal",
+  "count": 102275,
+  "datatype": "http://www.w3.org/2001/XMLSchema#dateTime"
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasEnergyQuantity": {
+  "kind": "resource",
+  "count": 1933
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasEntryCount": {
+  "kind": "resource",
+  "count": 2000
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasEventDateTime": {
+  "kind": "literal",
+  "count": 2000,
+  "datatype": "http://www.w3.org/2001/XMLSchema#dateTime"
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasExact": {
+  "kind": "literal",
+  "count": 47203,
+  "datatype": "http://www.w3.org/2001/XMLSchema#string"
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasExposure": {
+  "kind": "resource",
+  "count": 3634
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasExtractionDateTime": {
+  "kind": "literal",
+  "count": 2000,
+  "datatype": "http://www.w3.org/2001/XMLSchema#dateTime"
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasFirstAdministrationDateTime": {
+  "kind": "literal",
+  "count": 15281,
+  "datatype": "http://www.w3.org/2001/XMLSchema#dateTime"
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasFirstRecordDateTime": {
+  "kind": "literal",
+  "count": 1950,
+  "datatype": "http://www.w3.org/2001/XMLSchema#dateTime"
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasFixationType": {
+  "kind": "individual",
+  "count": 5855
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasFluidInputOutput": {
+  "kind": "resource",
+  "count": 3714
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasFocusGene": {
+  "kind": "resource",
+  "count": 2503
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasFormatCode": {
+  "kind": "resource",
+  "count": 4000
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasFractionsNumber": {
+  "kind": "resource",
+  "count": 1361
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasFrequency": {
+  "kind": "resource",
+  "count": 15281
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasGene": {
+  "kind": "resource",
+  "count": 1058
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasGenePanel": {
+  "kind": "resource",
+  "count": 1648
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasGenericName": {
+  "kind": "literal",
+  "count": 65442,
+  "datatype": "http://www.w3.org/2001/XMLSchema#string"
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasGeneticVariation": {
+  "kind": "resource",
+  "count": 1058
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasGenomicPosition": {
+  "kind": "resource",
+  "count": 1058
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasGenomicSequence": {
+  "kind": "literal",
+  "count": 457,
+  "datatype": "http://www.w3.org/2001/XMLSchema#string"
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasGestationalAge": {
+  "kind": "resource",
+  "count": 2000
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasGraftTypeCode": {
+  "kind": "resource",
+  "count": 125
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasHash": {
+  "kind": "resource",
+  "count": 4000
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasIdentifier": {
+  "kind": "literal",
+  "count": 266365,
+  "datatype": "http://www.w3.org/2001/XMLSchema#string"
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasInactiveIngredient": {
+  "kind": "resource",
+  "count": 29538
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasIncidenceDateTime": {
+  "kind": "literal",
+  "count": 213,
+  "datatype": "http://www.w3.org/2001/XMLSchema#dateTime"
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasIndicationToStart": {
+  "kind": "resource",
+  "count": 21455
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasInput": {
+  "kind": "resource",
+  "count": 10233
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasInsertionPoint": {
+  "kind": "resource",
+  "count": 405
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasInstitutionCode": {
+  "kind": "resource",
+  "count": 2000
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasInstrument": {
+  "kind": "resource",
+  "count": 25637
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasIntendedInsertSize": {
+  "kind": "resource",
+  "count": 1648
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasIntendedReadDepth": {
+  "kind": "resource",
+  "count": 597
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasIntendedReadLength": {
+  "kind": "resource",
+  "count": 597
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasIntent": {
+  "kind": "resource",
+  "count": 36012
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasIntervention": {
+  "kind": "literal",
+  "count": 340,
+  "datatype": "http://www.w3.org/2001/XMLSchema#string"
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasKitCode": {
+  "kind": "resource",
+  "count": 1648
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasLabTest": {
+  "kind": "resource",
+  "count": 25637
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasLastAdministrationDateTime": {
+  "kind": "literal",
+  "count": 15281,
+  "datatype": "http://www.w3.org/2001/XMLSchema#dateTime"
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasLastReactionDateTime": {
+  "kind": "literal",
+  "count": 1950,
+  "datatype": "http://www.w3.org/2001/XMLSchema#dateTime"
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasLaterality": {
+  "kind": "resource",
+  "count": 65348
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasLibraryPreparation": {
+  "kind": "resource",
+  "count": 597
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasLowerLimit": {
+  "kind": "resource",
+  "count": 16374
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasManifestationCode": {
+  "kind": "resource",
+  "count": 3634
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasManufacturedDoseForm": {
+  "kind": "resource",
+  "count": 19414
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasMaterialTypeCode": {
+  "kind": "resource",
+  "count": 8784
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasMeanPressure": {
+  "kind": "resource",
+  "count": 20871
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasMeanReadDepth": {
+  "kind": "resource",
+  "count": 894
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasMedicalDevice": {
+  "kind": "resource",
+  "count": 55014
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasMethodCode": {
+  "kind": "resource",
+  "count": 70503
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasModeCode": {
+  "kind": "resource",
+  "count": 1933
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasMonth": {
+  "kind": "literal",
+  "count": 2848,
+  "datatype": "http://www.w3.org/2001/XMLSchema#gMonth"
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasName": {
+  "kind": "literal",
+  "count": 450093,
+  "datatype": "http://www.w3.org/2001/XMLSchema#string"
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasNotation": {
+  "kind": "resource",
+  "count": 1058
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasNumberOfLeads": {
+  "kind": "resource",
+  "count": 1513
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasNumericalReference": {
+  "kind": "resource",
+  "count": 40686
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasOnsetDateTime": {
+  "kind": "literal",
+  "count": 1534,
+  "datatype": "http://www.w3.org/2001/XMLSchema#dateTime"
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasOrganism": {
+  "kind": "resource",
+  "count": 27180
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasOriginLocation": {
+  "kind": "resource",
+  "count": 16401
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasOutcome": {
+  "kind": "individual",
+  "count": 340
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasOutput": {
+  "kind": "resource",
+  "count": 10849
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasOxygenEquipment": {
+  "kind": "resource",
+  "count": 4099
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasOxygenFlowRate": {
+  "kind": "resource",
+  "count": 4099
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasPerformer": {
+  "kind": "resource",
+  "count": 54146
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasPredecessor": {
+  "kind": "resource",
+  "count": 7614
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasPrimaryContainer": {
+  "kind": "individual",
+  "count": 5855
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasPrimarySystem": {
+  "kind": "resource",
+  "count": 2000
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasProductCode": {
+  "kind": "resource",
+  "count": 110387
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasProtein": {
+  "kind": "resource",
+  "count": 12667
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasPurpose": {
+  "kind": "individual",
+  "count": 2000
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasQualityControlMetric": {
+  "kind": "resource",
+  "count": 8172
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasQuantity": {
+  "kind": "resource",
+  "count": 236410
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasRadiationQuantity": {
+  "kind": "resource",
+  "count": 1361
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasRank": {
+  "kind": "individual",
+  "count": 3676
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasReactionTypeCode": {
+  "kind": "resource",
+  "count": 1950
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasReadCount": {
+  "kind": "resource",
+  "count": 894
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasReasonToStopCode": {
+  "kind": "resource",
+  "count": 3837
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasRecordDateTime": {
+  "kind": "literal",
+  "count": 38297,
+  "datatype": "http://www.w3.org/2001/XMLSchema#dateTime"
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasReference": {
+  "kind": "resource",
+  "count": 1058
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasReferenceAllele": {
+  "kind": "literal",
+  "count": 106,
+  "datatype": "http://www.w3.org/2001/XMLSchema#string"
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasReferenceSequence": {
+  "kind": "resource",
+  "count": 682
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasRegularityCode": {
+  "kind": "resource",
+  "count": 11917
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasRelativeTemporalityCode": {
+  "kind": "resource",
+  "count": 1194
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasReportDateTime": {
+  "kind": "literal",
+  "count": 17527,
+  "datatype": "http://www.w3.org/2001/XMLSchema#dateTime"
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasRestingPoint": {
+  "kind": "resource",
+  "count": 405
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasResult": {
+  "kind": "resource",
+  "count": 120384
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasRouteCode": {
+  "kind": "resource",
+  "count": 6867
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasSample": {
+  "kind": "resource",
+  "count": 19053
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasSequenceLength": {
+  "kind": "resource",
+  "count": 457
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasSequencingInstrument": {
+  "kind": "resource",
+  "count": 597
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasSequencingRun": {
+  "kind": "resource",
+  "count": 900
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasSeverityCode": {
+  "kind": "resource",
+  "count": 5924
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasSharedIdentifier": {
+  "kind": "literal",
+  "count": 7855,
+  "datatype": "http://www.w3.org/2001/XMLSchema#anyURI"
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasSoftware": {
+  "kind": "resource",
+  "count": 168127
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasSourceSystem": {
+  "kind": "resource",
+  "count": 328496
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasSpecialtyName": {
+  "kind": "individual",
+  "count": 14401
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasStainingMethodCode": {
+  "kind": "resource",
+  "count": 656
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasStainingResultCode": {
+  "kind": "resource",
+  "count": 982
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasStandardGuideline": {
+  "kind": "literal",
+  "count": 3817,
+  "datatype": "http://www.w3.org/2001/XMLSchema#string"
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasStandardOperatingProcedure": {
+  "kind": "resource",
+  "count": 5875
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasStart": {
+  "kind": "literal",
+  "count": 1058,
+  "datatype": "http://www.w3.org/2001/XMLSchema#double"
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasStartCytobandCode": {
+  "kind": "resource",
+  "count": 1058
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasStartDateTime": {
+  "kind": "literal",
+  "count": 108150,
+  "datatype": "http://www.w3.org/2001/XMLSchema#dateTime"
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasStatusCode": {
+  "kind": "resource",
+  "count": 2000
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasStringValue": {
+  "kind": "literal",
+  "count": 53864,
+  "datatype": "http://www.w3.org/2001/XMLSchema#string"
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasSubjectAge": {
+  "kind": "resource",
+  "count": 11494
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasSubjectPhysiologicState": {
+  "kind": "resource",
+  "count": 10498
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasSubjectPseudoIdentifier": {
+  "kind": "resource",
+  "count": 205492
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasSubstance": {
+  "kind": "resource",
+  "count": 6837
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasSwissSocioEconomicPosition": {
+  "kind": "resource",
+  "count": 2978
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasSystolicPressure": {
+  "kind": "resource",
+  "count": 20871
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasTargetEnrichmentKitCode": {
+  "kind": "resource",
+  "count": 1648
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasTargetLocation": {
+  "kind": "resource",
+  "count": 14401
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasTargetMolecule": {
+  "kind": "resource",
+  "count": 596
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasTemplateIdentifier": {
+  "kind": "literal",
+  "count": 2000,
+  "datatype": "http://www.w3.org/2001/XMLSchema#string"
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasTestKit": {
+  "kind": "resource",
+  "count": 25637
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasTherapeuticArea": {
+  "kind": "resource",
+  "count": 14401
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasTime": {
+  "kind": "literal",
+  "count": 2848,
+  "datatype": "http://www.w3.org/2001/XMLSchema#time"
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasTimePattern": {
+  "kind": "resource",
+  "count": 19118
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasTimeToPositivity": {
+  "kind": "resource",
+  "count": 1428
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasTotalCopyNumber": {
+  "kind": "resource",
+  "count": 232
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasTranscript": {
+  "kind": "resource",
+  "count": 6513
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasTransplant": {
+  "kind": "resource",
+  "count": 125
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasTumorPurity": {
+  "kind": "resource",
+  "count": 1876
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasTypeCode": {
+  "kind": "resource",
+  "count": 183356
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasUniformResourceIdentifier": {
+  "kind": "literal",
+  "count": 4000,
+  "datatype": "http://www.w3.org/2001/XMLSchema#string"
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasUniformResourceLocator": {
+  "kind": "literal",
+  "count": 168113,
+  "datatype": "http://www.w3.org/2001/XMLSchema#string"
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasUnit": {
+  "kind": "resource",
+  "count": 380659
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasUpperLimit": {
+  "kind": "resource",
+  "count": 16374
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasValue": {
+  "kind": "literal",
+  "count": 384695,
+  "datatype": "http://www.w3.org/2001/XMLSchema#double"
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasVerificationStatusCode": {
+  "kind": "resource",
+  "count": 1950
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasVersion": {
+  "kind": "literal",
+  "count": 176947,
+  "datatype": "http://www.w3.org/2001/XMLSchema#string"
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasYear": {
+  "kind": "literal",
+  "count": 2848,
+  "datatype": "http://www.w3.org/2001/XMLSchema#gYear"
+ },
+ "https://biomedit.ch/rdf/sphn-schema/sphn#hasZygosityCode": {
+  "kind": "resource",
+  "count": 1058
+ }
+}

@@ -1,0 +1,6197 @@
+{
+ "classes": {
+  "AccessDevice": {
+   "instances": 2841,
+   "patients": 427,
+   "properties": {
+    "hasProductCode": {
+     "kind": "resource",
+     "count": 2841,
+     "target": "Code"
+    },
+    "hasSoftware": {
+     "kind": "resource",
+     "count": 4809,
+     "target": "Software"
+    },
+    "hasTypeCode": {
+     "kind": "resource",
+     "count": 2841
+    }
+   }
+  },
+  "AccessDevicePresence": {
+   "instances": 405,
+   "patients": 296,
+   "properties": {
+    "hasAdministrativeCase": {
+     "kind": "resource",
+     "count": 405,
+     "target": "AdministrativeCase"
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 405,
+     "target": "DataProvider"
+    },
+    "hasEndDateTime": {
+     "kind": "literal",
+     "count": 405,
+     "datatype": "dateTime"
+    },
+    "hasInsertionPoint": {
+     "kind": "resource",
+     "count": 405,
+     "target": "BodySite"
+    },
+    "hasMedicalDevice": {
+     "kind": "resource",
+     "count": 405,
+     "target": "AccessDevice"
+    },
+    "hasRestingPoint": {
+     "kind": "resource",
+     "count": 405,
+     "target": "BodySite"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 405,
+     "target": "SourceSystem"
+    },
+    "hasStartDateTime": {
+     "kind": "literal",
+     "count": 405,
+     "datatype": "dateTime"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 405,
+     "target": "SubjectPseudoIdentifier"
+    }
+   }
+  },
+  "AdministrativeCase": {
+   "instances": 2000,
+   "patients": 2000,
+   "properties": {
+    "hasAdmissionDateTime": {
+     "kind": "literal",
+     "count": 2000,
+     "datatype": "dateTime"
+    },
+    "hasCareHandling": {
+     "kind": "resource",
+     "count": 2000,
+     "target": "CareHandling"
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 2000,
+     "target": "DataProvider"
+    },
+    "hasDischargeDateTime": {
+     "kind": "literal",
+     "count": 2000,
+     "datatype": "dateTime"
+    },
+    "hasDischargeLocation": {
+     "kind": "resource",
+     "count": 2000,
+     "target": "Location"
+    },
+    "hasIdentifier": {
+     "kind": "literal",
+     "count": 2000,
+     "datatype": "string"
+    },
+    "hasOriginLocation": {
+     "kind": "resource",
+     "count": 2000,
+     "target": "Location"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 1673,
+     "target": "SourceSystem"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 2000,
+     "target": "SubjectPseudoIdentifier"
+    }
+   }
+  },
+  "AdministrativeSex": {
+   "instances": 2000,
+   "patients": 2000,
+   "properties": {
+    "hasCode": {
+     "kind": "resource",
+     "count": 2000
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 2000,
+     "target": "DataProvider"
+    },
+    "hasRecordDateTime": {
+     "kind": "literal",
+     "count": 2000,
+     "datatype": "dateTime"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 2000,
+     "target": "SourceSystem"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 2000,
+     "target": "SubjectPseudoIdentifier"
+    }
+   }
+  },
+  "AdverseEvent": {
+   "instances": 340,
+   "patients": 288,
+   "properties": {
+    "hasAdministrativeCase": {
+     "kind": "resource",
+     "count": 340,
+     "target": "AdministrativeCase"
+    },
+    "hasCode": {
+     "kind": "resource",
+     "count": 340,
+     "target": "Code"
+    },
+    "hasConsequences": {
+     "kind": "individual",
+     "count": 340
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 340,
+     "target": "DataProvider"
+    },
+    "hasIntervention": {
+     "kind": "literal",
+     "count": 340,
+     "datatype": "string"
+    },
+    "hasOnsetDateTime": {
+     "kind": "literal",
+     "count": 340,
+     "datatype": "dateTime"
+    },
+    "hasOutcome": {
+     "kind": "individual",
+     "count": 340
+    },
+    "hasSeverityCode": {
+     "kind": "resource",
+     "count": 340,
+     "target": "Code"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 340,
+     "target": "SourceSystem"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 340,
+     "target": "SubjectPseudoIdentifier"
+    }
+   }
+  },
+  "Age": {
+   "instances": 2000,
+   "patients": 2000,
+   "properties": {
+    "hasDeterminationDateTime": {
+     "kind": "literal",
+     "count": 2000,
+     "datatype": "dateTime"
+    },
+    "hasQuantity": {
+     "kind": "resource",
+     "count": 2000,
+     "target": "Quantity"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 2000,
+     "target": "SourceSystem"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 2000,
+     "target": "SubjectPseudoIdentifier"
+    }
+   }
+  },
+  "Allergen": {
+   "instances": 5584,
+   "patients": 897,
+   "properties": {
+    "hasCode": {
+     "kind": "resource",
+     "count": 8861
+    }
+   }
+  },
+  "Allergy": {
+   "instances": 1950,
+   "patients": 614,
+   "properties": {
+    "hasAllergen": {
+     "kind": "resource",
+     "count": 1950,
+     "target": "Allergen"
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 1950,
+     "target": "DataProvider"
+    },
+    "hasFirstRecordDateTime": {
+     "kind": "literal",
+     "count": 1950,
+     "datatype": "dateTime"
+    },
+    "hasLastReactionDateTime": {
+     "kind": "literal",
+     "count": 1950,
+     "datatype": "dateTime"
+    },
+    "hasReactionTypeCode": {
+     "kind": "resource",
+     "count": 1950
+    },
+    "hasSeverityCode": {
+     "kind": "resource",
+     "count": 1950
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 1950,
+     "target": "SourceSystem"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 1950,
+     "target": "SubjectPseudoIdentifier"
+    },
+    "hasVerificationStatusCode": {
+     "kind": "resource",
+     "count": 1950
+    }
+   }
+  },
+  "AllergyEpisode": {
+   "instances": 3634,
+   "patients": 525,
+   "properties": {
+    "hasAdministrativeCase": {
+     "kind": "resource",
+     "count": 3634,
+     "target": "AdministrativeCase"
+    },
+    "hasAllergen": {
+     "kind": "resource",
+     "count": 3634,
+     "target": "Allergen"
+    },
+    "hasBodySite": {
+     "kind": "resource",
+     "count": 3634,
+     "target": "BodySite"
+    },
+    "hasCertaintyCode": {
+     "kind": "resource",
+     "count": 3634
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 3634,
+     "target": "DataProvider"
+    },
+    "hasDateTime": {
+     "kind": "literal",
+     "count": 3634,
+     "datatype": "dateTime"
+    },
+    "hasDuration": {
+     "kind": "resource",
+     "count": 3634,
+     "target": "Quantity"
+    },
+    "hasExposure": {
+     "kind": "resource",
+     "count": 3634,
+     "target": "Exposure"
+    },
+    "hasManifestationCode": {
+     "kind": "resource",
+     "count": 3634
+    },
+    "hasSeverityCode": {
+     "kind": "resource",
+     "count": 3634
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 3634,
+     "target": "SourceSystem"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 3634,
+     "target": "SubjectPseudoIdentifier"
+    }
+   }
+  },
+  "AntimicrobialSusceptibilityLabTest": {
+   "instances": 588,
+   "patients": 285,
+   "properties": {
+    "hasChemicalAgent": {
+     "kind": "resource",
+     "count": 588,
+     "target": "Substance"
+    },
+    "hasCode": {
+     "kind": "resource",
+     "count": 588
+    },
+    "hasInstrument": {
+     "kind": "resource",
+     "count": 588,
+     "target": "LabAnalyzer"
+    },
+    "hasResult": {
+     "kind": "resource",
+     "count": 860,
+     "target": "AntimicrobialSusceptibilityResult"
+    },
+    "hasTestKit": {
+     "kind": "resource",
+     "count": 588,
+     "target": "LabAnalyzer"
+    }
+   }
+  },
+  "AntimicrobialSusceptibilityLabTestEvent": {
+   "instances": 389,
+   "patients": 285,
+   "properties": {
+    "hasAdministrativeCase": {
+     "kind": "resource",
+     "count": 389,
+     "target": "AdministrativeCase"
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 389,
+     "target": "DataProvider"
+    },
+    "hasDateTime": {
+     "kind": "literal",
+     "count": 389,
+     "datatype": "dateTime"
+    },
+    "hasLabTest": {
+     "kind": "resource",
+     "count": 588,
+     "target": "AntimicrobialSusceptibilityLabTest"
+    },
+    "hasReportDateTime": {
+     "kind": "literal",
+     "count": 389,
+     "datatype": "dateTime"
+    },
+    "hasSample": {
+     "kind": "resource",
+     "count": 389,
+     "target": "Isolate"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 389,
+     "target": "SourceSystem"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 389,
+     "target": "SubjectPseudoIdentifier"
+    }
+   }
+  },
+  "AntimicrobialSusceptibilityResult": {
+   "instances": 860,
+   "patients": 285,
+   "properties": {
+    "hasCode": {
+     "kind": "resource",
+     "count": 860
+    },
+    "hasNumericalReference": {
+     "kind": "resource",
+     "count": 860,
+     "target": "ReferenceRange"
+    },
+    "hasQuantity": {
+     "kind": "resource",
+     "count": 860,
+     "target": "Quantity"
+    },
+    "hasStandardGuideline": {
+     "kind": "literal",
+     "count": 860,
+     "datatype": "string"
+    },
+    "hasStringValue": {
+     "kind": "literal",
+     "count": 860,
+     "datatype": "string"
+    }
+   }
+  },
+  "Assay": {
+   "instances": 691,
+   "patients": 622,
+   "properties": {
+    "hasAdministrativeCase": {
+     "kind": "resource",
+     "count": 541,
+     "target": "AdministrativeCase"
+    },
+    "hasCode": {
+     "kind": "resource",
+     "count": 691
+    },
+    "hasDataFile": {
+     "kind": "resource",
+     "count": 899,
+     "target": "TimeSeriesDataFile"
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 691,
+     "target": "DataProvider"
+    },
+    "hasIdentifier": {
+     "kind": "literal",
+     "count": 691,
+     "datatype": "string"
+    },
+    "hasPredecessor": {
+     "kind": "resource",
+     "count": 851,
+     "target": "LibraryPreparation"
+    },
+    "hasSample": {
+     "kind": "resource",
+     "count": 886,
+     "target": "TumorSpecimen"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 691,
+     "target": "SourceSystem"
+    },
+    "hasStandardOperatingProcedure": {
+     "kind": "resource",
+     "count": 691,
+     "target": "StandardOperatingProcedure"
+    },
+    "hasStartDateTime": {
+     "kind": "literal",
+     "count": 691,
+     "datatype": "dateTime"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 691,
+     "target": "SubjectPseudoIdentifier"
+    }
+   }
+  },
+  "Assessment": {
+   "instances": 854,
+   "patients": 175,
+   "properties": {
+    "hasCode": {
+     "kind": "resource",
+     "count": 854
+    },
+    "hasComponent": {
+     "kind": "resource",
+     "count": 1318,
+     "target": "AssessmentComponent"
+    },
+    "hasName": {
+     "kind": "literal",
+     "count": 854,
+     "datatype": "string"
+    },
+    "hasResult": {
+     "kind": "resource",
+     "count": 854,
+     "target": "AssessmentResult"
+    }
+   }
+  },
+  "AssessmentComponent": {
+   "instances": 4567,
+   "patients": 761,
+   "properties": {
+    "hasCode": {
+     "kind": "resource",
+     "count": 4567
+    },
+    "hasName": {
+     "kind": "literal",
+     "count": 4567,
+     "datatype": "string"
+    },
+    "hasResult": {
+     "kind": "resource",
+     "count": 4567,
+     "target": "AssessmentResult"
+    }
+   }
+  },
+  "AssessmentEvent": {
+   "instances": 2308,
+   "patients": 525,
+   "properties": {
+    "hasAdministrativeCase": {
+     "kind": "resource",
+     "count": 2308,
+     "target": "AdministrativeCase"
+    },
+    "hasAssessment": {
+     "kind": "resource",
+     "count": 2308,
+     "target": "TumorStageAssessment"
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 2308,
+     "target": "DataProvider"
+    },
+    "hasDateTime": {
+     "kind": "literal",
+     "count": 2308,
+     "datatype": "dateTime"
+    },
+    "hasPerformer": {
+     "kind": "resource",
+     "count": 2308,
+     "target": "Performer"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 2308,
+     "target": "SourceSystem"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 2308,
+     "target": "SubjectPseudoIdentifier"
+    }
+   }
+  },
+  "AssessmentResult": {
+   "instances": 5620,
+   "patients": 783,
+   "properties": {
+    "hasCode": {
+     "kind": "resource",
+     "count": 5620,
+     "target": "Code"
+    },
+    "hasQuantity": {
+     "kind": "resource",
+     "count": 5620,
+     "target": "Quantity"
+    },
+    "hasStringValue": {
+     "kind": "literal",
+     "count": 5620,
+     "datatype": "string"
+    }
+   }
+  },
+  "BilledDiagnosis": {
+   "instances": 2026,
+   "patients": 1008,
+   "properties": {
+    "hasAdministrativeCase": {
+     "kind": "resource",
+     "count": 2026,
+     "target": "AdministrativeCase"
+    },
+    "hasCode": {
+     "kind": "resource",
+     "count": 2026
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 2026,
+     "target": "DataProvider"
+    },
+    "hasRank": {
+     "kind": "individual",
+     "count": 2026
+    },
+    "hasRecordDateTime": {
+     "kind": "literal",
+     "count": 2026,
+     "datatype": "dateTime"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 2026,
+     "target": "SourceSystem"
+    },
+    "hasSubjectAge": {
+     "kind": "resource",
+     "count": 2026,
+     "target": "Age"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 2026,
+     "target": "SubjectPseudoIdentifier"
+    }
+   }
+  },
+  "BilledProcedure": {
+   "instances": 1650,
+   "patients": 629,
+   "properties": {
+    "hasAdministrativeCase": {
+     "kind": "resource",
+     "count": 1650,
+     "target": "AdministrativeCase"
+    },
+    "hasBodySite": {
+     "kind": "resource",
+     "count": 1650,
+     "target": "BodySite"
+    },
+    "hasCode": {
+     "kind": "resource",
+     "count": 1650
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 1650,
+     "target": "DataProvider"
+    },
+    "hasEndDateTime": {
+     "kind": "literal",
+     "count": 1650,
+     "datatype": "dateTime"
+    },
+    "hasIntent": {
+     "kind": "resource",
+     "count": 1650,
+     "target": "Intent"
+    },
+    "hasRank": {
+     "kind": "individual",
+     "count": 1650
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 1650,
+     "target": "SourceSystem"
+    },
+    "hasStartDateTime": {
+     "kind": "literal",
+     "count": 1650,
+     "datatype": "dateTime"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 1650,
+     "target": "SubjectPseudoIdentifier"
+    }
+   }
+  },
+  "Biobanksample": {
+   "instances": 831,
+   "patients": 396,
+   "properties": {
+    "hasAdministrativeCase": {
+     "kind": "resource",
+     "count": 831,
+     "target": "AdministrativeCase"
+    },
+    "hasBiobankName": {
+     "kind": "literal",
+     "count": 831,
+     "datatype": "string"
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 831,
+     "target": "DataProvider"
+    },
+    "hasIdentifier": {
+     "kind": "literal",
+     "count": 831,
+     "datatype": "string"
+    },
+    "hasSample": {
+     "kind": "resource",
+     "count": 831,
+     "target": "TumorSpecimen"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 831,
+     "target": "SourceSystem"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 831,
+     "target": "SubjectPseudoIdentifier"
+    }
+   }
+  },
+  "Birth": {
+   "instances": 2000,
+   "patients": 2000,
+   "properties": {
+    "hasAdministrativeCase": {
+     "kind": "resource",
+     "count": 2000,
+     "target": "AdministrativeCase"
+    },
+    "hasCountry": {
+     "kind": "resource",
+     "count": 2000,
+     "target": "Country"
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 2000,
+     "target": "DataProvider"
+    },
+    "hasDate": {
+     "kind": "resource",
+     "count": 2000,
+     "target": "BirthDate"
+    },
+    "hasDeliveryModeCode": {
+     "kind": "resource",
+     "count": 2000
+    },
+    "hasGestationalAge": {
+     "kind": "resource",
+     "count": 2000,
+     "target": "GestationalAgeAtBirth"
+    },
+    "hasMedicalDevice": {
+     "kind": "resource",
+     "count": 2948,
+     "target": "MedicalDevice"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 2000,
+     "target": "SourceSystem"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 2000,
+     "target": "SubjectPseudoIdentifier"
+    }
+   }
+  },
+  "BirthDate": {
+   "instances": 2000,
+   "patients": 2000,
+   "properties": {
+    "hasComparator": {
+     "kind": "individual",
+     "count": 2000
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 2000,
+     "target": "DataProvider"
+    },
+    "hasDay": {
+     "kind": "literal",
+     "count": 2000,
+     "datatype": "gDay"
+    },
+    "hasMonth": {
+     "kind": "literal",
+     "count": 2000,
+     "datatype": "gMonth"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 2000,
+     "target": "SourceSystem"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 2000,
+     "target": "SubjectPseudoIdentifier"
+    },
+    "hasTime": {
+     "kind": "literal",
+     "count": 2000,
+     "datatype": "time"
+    },
+    "hasYear": {
+     "kind": "literal",
+     "count": 2000,
+     "datatype": "gYear"
+    }
+   }
+  },
+  "BloodPressure": {
+   "instances": 20871,
+   "patients": 988,
+   "properties": {
+    "hasDataFile": {
+     "kind": "resource",
+     "count": 20871,
+     "target": "TimeSeriesDataFile"
+    },
+    "hasDateTime": {
+     "kind": "literal",
+     "count": 20871,
+     "datatype": "dateTime"
+    },
+    "hasDiastolicPressure": {
+     "kind": "resource",
+     "count": 20871,
+     "target": "Quantity"
+    },
+    "hasMeanPressure": {
+     "kind": "resource",
+     "count": 20871,
+     "target": "Quantity"
+    },
+    "hasSystolicPressure": {
+     "kind": "resource",
+     "count": 20871,
+     "target": "Quantity"
+    }
+   }
+  },
+  "BloodPressureMeasurement": {
+   "instances": 14211,
+   "patients": 951,
+   "properties": {
+    "hasAdministrativeCase": {
+     "kind": "resource",
+     "count": 14211,
+     "target": "AdministrativeCase"
+    },
+    "hasBodySite": {
+     "kind": "resource",
+     "count": 14211,
+     "target": "BodySite"
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 14211,
+     "target": "DataProvider"
+    },
+    "hasEndDateTime": {
+     "kind": "literal",
+     "count": 14211,
+     "datatype": "dateTime"
+    },
+    "hasMedicalDevice": {
+     "kind": "resource",
+     "count": 14211,
+     "target": "Implant"
+    },
+    "hasMethodCode": {
+     "kind": "resource",
+     "count": 14211
+    },
+    "hasPerformer": {
+     "kind": "resource",
+     "count": 14211,
+     "target": "Performer"
+    },
+    "hasResult": {
+     "kind": "resource",
+     "count": 20605,
+     "target": "BloodPressure"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 14211,
+     "target": "SourceSystem"
+    },
+    "hasStartDateTime": {
+     "kind": "literal",
+     "count": 14211,
+     "datatype": "dateTime"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 14211,
+     "target": "SubjectPseudoIdentifier"
+    }
+   }
+  },
+  "BodyHeight": {
+   "instances": 2498,
+   "patients": 772,
+   "properties": {
+    "hasDataDetermination": {
+     "kind": "resource",
+     "count": 2498,
+     "target": "DataDetermination"
+    },
+    "hasDateTime": {
+     "kind": "literal",
+     "count": 2498,
+     "datatype": "dateTime"
+    },
+    "hasQuantity": {
+     "kind": "resource",
+     "count": 2498,
+     "target": "Quantity"
+    }
+   }
+  },
+  "BodyHeightMeasurement": {
+   "instances": 2245,
+   "patients": 727,
+   "properties": {
+    "hasAdministrativeCase": {
+     "kind": "resource",
+     "count": 2245,
+     "target": "AdministrativeCase"
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 2245,
+     "target": "DataProvider"
+    },
+    "hasEndDateTime": {
+     "kind": "literal",
+     "count": 2245,
+     "datatype": "dateTime"
+    },
+    "hasMedicalDevice": {
+     "kind": "resource",
+     "count": 2245,
+     "target": "MedicalDevice"
+    },
+    "hasMethodCode": {
+     "kind": "resource",
+     "count": 2245
+    },
+    "hasPerformer": {
+     "kind": "resource",
+     "count": 2245,
+     "target": "Performer"
+    },
+    "hasResult": {
+     "kind": "resource",
+     "count": 2245,
+     "target": "BodyHeight"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 2245,
+     "target": "SourceSystem"
+    },
+    "hasStartDateTime": {
+     "kind": "literal",
+     "count": 2245,
+     "datatype": "dateTime"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 2245,
+     "target": "SubjectPseudoIdentifier"
+    }
+   }
+  },
+  "BodyMassIndex": {
+   "instances": 3752,
+   "patients": 766,
+   "properties": {
+    "hasAdministrativeCase": {
+     "kind": "resource",
+     "count": 3752,
+     "target": "AdministrativeCase"
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 3752,
+     "target": "DataProvider"
+    },
+    "hasDeterminationDateTime": {
+     "kind": "literal",
+     "count": 3752,
+     "datatype": "dateTime"
+    },
+    "hasQuantity": {
+     "kind": "resource",
+     "count": 3752,
+     "target": "Quantity"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 3752,
+     "target": "SourceSystem"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 3752,
+     "target": "SubjectPseudoIdentifier"
+    }
+   }
+  },
+  "BodyPosition": {
+   "instances": 1557,
+   "patients": 451,
+   "properties": {
+    "hasAdministrativeCase": {
+     "kind": "resource",
+     "count": 1557,
+     "target": "AdministrativeCase"
+    },
+    "hasCode": {
+     "kind": "resource",
+     "count": 1557
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 1557,
+     "target": "DataProvider"
+    },
+    "hasEndDateTime": {
+     "kind": "literal",
+     "count": 1557,
+     "datatype": "dateTime"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 1557,
+     "target": "SourceSystem"
+    },
+    "hasStartDateTime": {
+     "kind": "literal",
+     "count": 1557,
+     "datatype": "dateTime"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 1557,
+     "target": "SubjectPseudoIdentifier"
+    }
+   }
+  },
+  "BodySite": {
+   "instances": 65348,
+   "patients": 2000,
+   "properties": {
+    "hasCode": {
+     "kind": "resource",
+     "count": 65348
+    },
+    "hasLaterality": {
+     "kind": "resource",
+     "count": 65348,
+     "target": "Laterality"
+    }
+   }
+  },
+  "BodySurfaceArea": {
+   "instances": 1255,
+   "patients": 503,
+   "properties": {
+    "hasAdministrativeCase": {
+     "kind": "resource",
+     "count": 1255,
+     "target": "AdministrativeCase"
+    },
+    "hasCalculationMethod": {
+     "kind": "individual",
+     "count": 1255
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 1255,
+     "target": "DataProvider"
+    },
+    "hasDeterminationDateTime": {
+     "kind": "literal",
+     "count": 1255,
+     "datatype": "dateTime"
+    },
+    "hasQuantity": {
+     "kind": "resource",
+     "count": 1255,
+     "target": "Quantity"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 1255,
+     "target": "SourceSystem"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 1255,
+     "target": "SubjectPseudoIdentifier"
+    }
+   }
+  },
+  "BodyTemperature": {
+   "instances": 12188,
+   "patients": 693,
+   "properties": {
+    "hasDataFile": {
+     "kind": "resource",
+     "count": 12188,
+     "target": "TimeSeriesDataFile"
+    },
+    "hasDateTime": {
+     "kind": "literal",
+     "count": 12188,
+     "datatype": "dateTime"
+    },
+    "hasQuantity": {
+     "kind": "resource",
+     "count": 12188,
+     "target": "Quantity"
+    }
+   }
+  },
+  "BodyTemperatureMeasurement": {
+   "instances": 6539,
+   "patients": 659,
+   "properties": {
+    "hasAdministrativeCase": {
+     "kind": "resource",
+     "count": 6539,
+     "target": "AdministrativeCase"
+    },
+    "hasBodySite": {
+     "kind": "resource",
+     "count": 6539,
+     "target": "BodySite"
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 6539,
+     "target": "DataProvider"
+    },
+    "hasEndDateTime": {
+     "kind": "literal",
+     "count": 6539,
+     "datatype": "dateTime"
+    },
+    "hasMedicalDevice": {
+     "kind": "resource",
+     "count": 6539,
+     "target": "Implant"
+    },
+    "hasMethodCode": {
+     "kind": "resource",
+     "count": 6539
+    },
+    "hasPerformer": {
+     "kind": "resource",
+     "count": 6539,
+     "target": "Performer"
+    },
+    "hasResult": {
+     "kind": "resource",
+     "count": 12101,
+     "target": "BodyTemperature"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 6539,
+     "target": "SourceSystem"
+    },
+    "hasStartDateTime": {
+     "kind": "literal",
+     "count": 6539,
+     "datatype": "dateTime"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 6539,
+     "target": "SubjectPseudoIdentifier"
+    }
+   }
+  },
+  "BodyWeight": {
+   "instances": 5024,
+   "patients": 892,
+   "properties": {
+    "hasDataDetermination": {
+     "kind": "resource",
+     "count": 5024,
+     "target": "DataDetermination"
+    },
+    "hasDateTime": {
+     "kind": "literal",
+     "count": 5024,
+     "datatype": "dateTime"
+    },
+    "hasQuantity": {
+     "kind": "resource",
+     "count": 5024,
+     "target": "Quantity"
+    }
+   }
+  },
+  "BodyWeightMeasurement": {
+   "instances": 4766,
+   "patients": 854,
+   "properties": {
+    "hasAdministrativeCase": {
+     "kind": "resource",
+     "count": 4766,
+     "target": "AdministrativeCase"
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 4766,
+     "target": "DataProvider"
+    },
+    "hasEndDateTime": {
+     "kind": "literal",
+     "count": 4766,
+     "datatype": "dateTime"
+    },
+    "hasMedicalDevice": {
+     "kind": "resource",
+     "count": 4766,
+     "target": "MedicalDevice"
+    },
+    "hasMethodCode": {
+     "kind": "resource",
+     "count": 4766
+    },
+    "hasPerformer": {
+     "kind": "resource",
+     "count": 4766,
+     "target": "Performer"
+    },
+    "hasResult": {
+     "kind": "resource",
+     "count": 4766,
+     "target": "BodyWeight"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 4766,
+     "target": "SourceSystem"
+    },
+    "hasStartDateTime": {
+     "kind": "literal",
+     "count": 4766,
+     "datatype": "dateTime"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 4766,
+     "target": "SubjectPseudoIdentifier"
+    }
+   }
+  },
+  "CardiacIndex": {
+   "instances": 701,
+   "patients": 230,
+   "properties": {
+    "hasAdministrativeCase": {
+     "kind": "resource",
+     "count": 701,
+     "target": "AdministrativeCase"
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 701,
+     "target": "DataProvider"
+    },
+    "hasDeterminationDateTime": {
+     "kind": "literal",
+     "count": 701,
+     "datatype": "dateTime"
+    },
+    "hasMethodCode": {
+     "kind": "resource",
+     "count": 701
+    },
+    "hasQuantity": {
+     "kind": "resource",
+     "count": 701,
+     "target": "Quantity"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 701,
+     "target": "SourceSystem"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 701,
+     "target": "SubjectPseudoIdentifier"
+    }
+   }
+  },
+  "CardiacOutput": {
+   "instances": 1457,
+   "patients": 261,
+   "properties": {
+    "hasDataFile": {
+     "kind": "resource",
+     "count": 1457,
+     "target": "TimeSeriesDataFile"
+    },
+    "hasDateTime": {
+     "kind": "literal",
+     "count": 1457,
+     "datatype": "dateTime"
+    },
+    "hasQuantity": {
+     "kind": "resource",
+     "count": 1457,
+     "target": "Quantity"
+    }
+   }
+  },
+  "CardiacOutputMeasurement": {
+   "instances": 882,
+   "patients": 220,
+   "properties": {
+    "hasAdministrativeCase": {
+     "kind": "resource",
+     "count": 882,
+     "target": "AdministrativeCase"
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 882,
+     "target": "DataProvider"
+    },
+    "hasEndDateTime": {
+     "kind": "literal",
+     "count": 882,
+     "datatype": "dateTime"
+    },
+    "hasMedicalDevice": {
+     "kind": "resource",
+     "count": 882,
+     "target": "MedicalDevice"
+    },
+    "hasMethodCode": {
+     "kind": "resource",
+     "count": 882
+    },
+    "hasPerformer": {
+     "kind": "resource",
+     "count": 882,
+     "target": "Performer"
+    },
+    "hasResult": {
+     "kind": "resource",
+     "count": 1299,
+     "target": "CardiacOutput"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 882,
+     "target": "SourceSystem"
+    },
+    "hasStartDateTime": {
+     "kind": "literal",
+     "count": 882,
+     "datatype": "dateTime"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 882,
+     "target": "SubjectPseudoIdentifier"
+    }
+   }
+  },
+  "CareHandling": {
+   "instances": 2000,
+   "patients": 2000,
+   "properties": {
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 1703,
+     "target": "SourceSystem"
+    },
+    "hasTypeCode": {
+     "kind": "resource",
+     "count": 2000
+    }
+   }
+  },
+  "ChromosomalLocation": {
+   "instances": 1058,
+   "patients": 299,
+   "properties": {
+    "hasChromosome": {
+     "kind": "resource",
+     "count": 1058,
+     "target": "Chromosome"
+    },
+    "hasEndCytobandCode": {
+     "kind": "resource",
+     "count": 1058,
+     "target": "Code"
+    },
+    "hasStartCytobandCode": {
+     "kind": "resource",
+     "count": 1058,
+     "target": "Code"
+    }
+   }
+  },
+  "Chromosome": {
+   "instances": 1058,
+   "patients": 299,
+   "properties": {
+    "hasCode": {
+     "kind": "resource",
+     "count": 1058
+    }
+   }
+  },
+  "Circumference": {
+   "instances": 2299,
+   "patients": 521,
+   "properties": {
+    "hasDateTime": {
+     "kind": "literal",
+     "count": 2299,
+     "datatype": "dateTime"
+    },
+    "hasQuantity": {
+     "kind": "resource",
+     "count": 2299,
+     "target": "Quantity"
+    }
+   }
+  },
+  "CircumferenceMeasurement": {
+   "instances": 1988,
+   "patients": 495,
+   "properties": {
+    "hasAdministrativeCase": {
+     "kind": "resource",
+     "count": 1988,
+     "target": "AdministrativeCase"
+    },
+    "hasBodySite": {
+     "kind": "resource",
+     "count": 1988,
+     "target": "BodySite"
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 1988,
+     "target": "DataProvider"
+    },
+    "hasEndDateTime": {
+     "kind": "literal",
+     "count": 1988,
+     "datatype": "dateTime"
+    },
+    "hasMedicalDevice": {
+     "kind": "resource",
+     "count": 1988,
+     "target": "MedicalDevice"
+    },
+    "hasMethodCode": {
+     "kind": "resource",
+     "count": 1988
+    },
+    "hasPerformer": {
+     "kind": "resource",
+     "count": 1988,
+     "target": "Performer"
+    },
+    "hasResult": {
+     "kind": "resource",
+     "count": 1988,
+     "target": "Circumference"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 1988,
+     "target": "SourceSystem"
+    },
+    "hasStartDateTime": {
+     "kind": "literal",
+     "count": 1988,
+     "datatype": "dateTime"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 1988,
+     "target": "SubjectPseudoIdentifier"
+    }
+   }
+  },
+  "CivilStatus": {
+   "instances": 2000,
+   "patients": 2000,
+   "properties": {
+    "hasCode": {
+     "kind": "resource",
+     "count": 2000
+    },
+    "hasEventDateTime": {
+     "kind": "literal",
+     "count": 2000,
+     "datatype": "dateTime"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 2000,
+     "target": "SourceSystem"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 2000,
+     "target": "SubjectPseudoIdentifier"
+    }
+   }
+  },
+  "Code": {
+   "instances": 239107,
+   "patients": 2000,
+   "properties": {
+    "hasCodingSystemAndVersion": {
+     "kind": "literal",
+     "count": 239096,
+     "datatype": "string"
+    },
+    "hasIdentifier": {
+     "kind": "literal",
+     "count": 239096,
+     "datatype": "string"
+    },
+    "hasName": {
+     "kind": "literal",
+     "count": 239096,
+     "datatype": "string"
+    }
+   }
+  },
+  "Consent": {
+   "instances": 2000,
+   "patients": 2000,
+   "properties": {
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 2000,
+     "target": "DataProvider"
+    },
+    "hasDateTime": {
+     "kind": "literal",
+     "count": 2000,
+     "datatype": "dateTime"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 2000,
+     "target": "SourceSystem"
+    },
+    "hasStatusCode": {
+     "kind": "resource",
+     "count": 2000
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 2000,
+     "target": "SubjectPseudoIdentifier"
+    },
+    "hasTemplateIdentifier": {
+     "kind": "literal",
+     "count": 2000,
+     "datatype": "string"
+    },
+    "hasTypeCode": {
+     "kind": "resource",
+     "count": 2000
+    }
+   }
+  },
+  "CopyNumberVariation": {
+   "instances": 232,
+   "patients": 44,
+   "properties": {
+    "hasAffectedGenomicFeature": {
+     "kind": "resource",
+     "count": 415,
+     "target": "Gene"
+    },
+    "hasChromosomalLocation": {
+     "kind": "resource",
+     "count": 232,
+     "target": "ChromosomalLocation"
+    },
+    "hasGenomicPosition": {
+     "kind": "resource",
+     "count": 232,
+     "target": "GenomicPosition"
+    },
+    "hasTotalCopyNumber": {
+     "kind": "resource",
+     "count": 232,
+     "target": "Quantity"
+    },
+    "hasTypeCode": {
+     "kind": "resource",
+     "count": 232
+    }
+   }
+  },
+  "Country": {
+   "instances": 6000,
+   "patients": 2000,
+   "properties": {
+    "hasCode": {
+     "kind": "resource",
+     "count": 6000
+    }
+   }
+  },
+  "DataDetermination": {
+   "instances": 18703,
+   "patients": 1502,
+   "properties": {
+    "hasMethodCode": {
+     "kind": "resource",
+     "count": 18703
+    }
+   }
+  },
+  "DataFile": {
+   "instances": 2000,
+   "patients": 2000,
+   "properties": {
+    "hasCreationDateTime": {
+     "kind": "literal",
+     "count": 2000,
+     "datatype": "dateTime"
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 2000,
+     "target": "DataProvider"
+    },
+    "hasEncoding": {
+     "kind": "individual",
+     "count": 2000
+    },
+    "hasFormatCode": {
+     "kind": "resource",
+     "count": 2000
+    },
+    "hasHash": {
+     "kind": "resource",
+     "count": 2000,
+     "target": "Hash"
+    },
+    "hasName": {
+     "kind": "literal",
+     "count": 2000,
+     "datatype": "string"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 2000,
+     "target": "SourceSystem"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 2000,
+     "target": "SubjectPseudoIdentifier"
+    },
+    "hasUniformResourceIdentifier": {
+     "kind": "literal",
+     "count": 2000,
+     "datatype": "string"
+    }
+   }
+  },
+  "DataProcessing": {
+   "instances": 592,
+   "patients": 563,
+   "properties": {
+    "hasAdministrativeCase": {
+     "kind": "resource",
+     "count": 488,
+     "target": "AdministrativeCase"
+    },
+    "hasCode": {
+     "kind": "resource",
+     "count": 592
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 592,
+     "target": "DataProvider"
+    },
+    "hasInput": {
+     "kind": "resource",
+     "count": 756,
+     "target": "DataFile"
+    },
+    "hasOutput": {
+     "kind": "resource",
+     "count": 774,
+     "target": "DataFile"
+    },
+    "hasPredecessor": {
+     "kind": "resource",
+     "count": 886,
+     "target": "DataProcessing"
+    },
+    "hasQualityControlMetric": {
+     "kind": "resource",
+     "count": 861,
+     "target": "QualityControlMetric"
+    },
+    "hasSoftware": {
+     "kind": "resource",
+     "count": 592,
+     "target": "Software"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 592,
+     "target": "SourceSystem"
+    },
+    "hasStandardOperatingProcedure": {
+     "kind": "resource",
+     "count": 592,
+     "target": "StandardOperatingProcedure"
+    },
+    "hasStartDateTime": {
+     "kind": "literal",
+     "count": 592,
+     "datatype": "dateTime"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 592,
+     "target": "SubjectPseudoIdentifier"
+    }
+   }
+  },
+  "DataProvider": {
+   "instances": 2000,
+   "patients": 2000,
+   "properties": {
+    "hasCategory": {
+     "kind": "individual",
+     "count": 2000
+    },
+    "hasDepartment": {
+     "kind": "resource",
+     "count": 2000,
+     "target": "Department"
+    },
+    "hasInstitutionCode": {
+     "kind": "resource",
+     "count": 2000,
+     "target": "Code"
+    }
+   }
+  },
+  "DataRelease": {
+   "instances": 2000,
+   "patients": 2000,
+   "properties": {
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 2000,
+     "target": "DataProvider"
+    },
+    "hasExtractionDateTime": {
+     "kind": "literal",
+     "count": 2000,
+     "datatype": "dateTime"
+    },
+    "http://purl.org/dc/terms/conformsTo": {
+     "kind": "mixed",
+     "count": 2000
+    }
+   }
+  },
+  "Death": {
+   "instances": 788,
+   "patients": 572,
+   "properties": {
+    "hasAdministrativeCase": {
+     "kind": "resource",
+     "count": 788,
+     "target": "AdministrativeCase"
+    },
+    "hasCircumstanceCode": {
+     "kind": "resource",
+     "count": 788
+    },
+    "hasConditionCode": {
+     "kind": "resource",
+     "count": 788
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 788,
+     "target": "DataProvider"
+    },
+    "hasDate": {
+     "kind": "resource",
+     "count": 788,
+     "target": "DeathDate"
+    },
+    "hasReportDateTime": {
+     "kind": "literal",
+     "count": 788,
+     "datatype": "dateTime"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 788,
+     "target": "SourceSystem"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 788,
+     "target": "SubjectPseudoIdentifier"
+    }
+   }
+  },
+  "DeathDate": {
+   "instances": 848,
+   "patients": 643,
+   "properties": {
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 848,
+     "target": "DataProvider"
+    },
+    "hasDay": {
+     "kind": "literal",
+     "count": 848,
+     "datatype": "gDay"
+    },
+    "hasMonth": {
+     "kind": "literal",
+     "count": 848,
+     "datatype": "gMonth"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 848,
+     "target": "SourceSystem"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 848,
+     "target": "SubjectPseudoIdentifier"
+    },
+    "hasTime": {
+     "kind": "literal",
+     "count": 848,
+     "datatype": "time"
+    },
+    "hasYear": {
+     "kind": "literal",
+     "count": 848,
+     "datatype": "gYear"
+    }
+   }
+  },
+  "Department": {
+   "instances": 2000,
+   "patients": 2000,
+   "properties": {
+    "hasName": {
+     "kind": "literal",
+     "count": 2000,
+     "datatype": "string"
+    }
+   }
+  },
+  "Diagnosis": {
+   "instances": 8149,
+   "patients": 1175,
+   "properties": {
+    "hasAdministrativeCase": {
+     "kind": "resource",
+     "count": 8149,
+     "target": "AdministrativeCase"
+    },
+    "hasCode": {
+     "kind": "resource",
+     "count": 11712,
+     "target": "Code"
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 8149,
+     "target": "DataProvider"
+    },
+    "hasRecordDateTime": {
+     "kind": "literal",
+     "count": 8149,
+     "datatype": "dateTime"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 8149,
+     "target": "SourceSystem"
+    },
+    "hasSubjectAge": {
+     "kind": "resource",
+     "count": 8149,
+     "target": "Age"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 8149,
+     "target": "SubjectPseudoIdentifier"
+    }
+   }
+  },
+  "Drug": {
+   "instances": 19414,
+   "patients": 1373,
+   "properties": {
+    "hasActiveIngredient": {
+     "kind": "resource",
+     "count": 28775,
+     "target": "Substance"
+    },
+    "hasArticle": {
+     "kind": "resource",
+     "count": 19414,
+     "target": "DrugArticle"
+    },
+    "hasInactiveIngredient": {
+     "kind": "resource",
+     "count": 29538,
+     "target": "Substance"
+    },
+    "hasQuantity": {
+     "kind": "resource",
+     "count": 19414,
+     "target": "Quantity"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 19414,
+     "target": "SourceSystem"
+    }
+   }
+  },
+  "DrugAdministrationEvent": {
+   "instances": 3837,
+   "patients": 405,
+   "properties": {
+    "hasAdministrationRouteCode": {
+     "kind": "resource",
+     "count": 3837
+    },
+    "hasAdministrativeCase": {
+     "kind": "resource",
+     "count": 3837,
+     "target": "AdministrativeCase"
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 3837,
+     "target": "DataProvider"
+    },
+    "hasDrug": {
+     "kind": "resource",
+     "count": 3837,
+     "target": "Drug"
+    },
+    "hasDuration": {
+     "kind": "resource",
+     "count": 3837,
+     "target": "Quantity"
+    },
+    "hasEndDateTime": {
+     "kind": "literal",
+     "count": 3837,
+     "datatype": "dateTime"
+    },
+    "hasReasonToStopCode": {
+     "kind": "resource",
+     "count": 3837
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 3837,
+     "target": "SourceSystem"
+    },
+    "hasStartDateTime": {
+     "kind": "literal",
+     "count": 3837,
+     "datatype": "dateTime"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 3837,
+     "target": "SubjectPseudoIdentifier"
+    },
+    "hasTimePattern": {
+     "kind": "resource",
+     "count": 3837,
+     "target": "TimePattern"
+    }
+   }
+  },
+  "DrugArticle": {
+   "instances": 19414,
+   "patients": 1373,
+   "properties": {
+    "hasCode": {
+     "kind": "resource",
+     "count": 19414,
+     "target": "Code"
+    },
+    "hasManufacturedDoseForm": {
+     "kind": "resource",
+     "count": 19414,
+     "target": "PharmaceuticalDoseForm"
+    },
+    "hasName": {
+     "kind": "literal",
+     "count": 19414,
+     "datatype": "string"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 19414,
+     "target": "SourceSystem"
+    }
+   }
+  },
+  "DrugPrescription": {
+   "instances": 15281,
+   "patients": 1213,
+   "properties": {
+    "hasAdministrationRouteCode": {
+     "kind": "resource",
+     "count": 15281
+    },
+    "hasAdministrativeCase": {
+     "kind": "resource",
+     "count": 15281,
+     "target": "AdministrativeCase"
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 15281,
+     "target": "DataProvider"
+    },
+    "hasDrug": {
+     "kind": "resource",
+     "count": 15281,
+     "target": "Drug"
+    },
+    "hasFirstAdministrationDateTime": {
+     "kind": "literal",
+     "count": 15281,
+     "datatype": "dateTime"
+    },
+    "hasFrequency": {
+     "kind": "resource",
+     "count": 15281,
+     "target": "Quantity"
+    },
+    "hasIndicationToStart": {
+     "kind": "resource",
+     "count": 21455,
+     "target": "BilledDiagnosis"
+    },
+    "hasIntent": {
+     "kind": "resource",
+     "count": 23770,
+     "target": "Intent"
+    },
+    "hasLastAdministrationDateTime": {
+     "kind": "literal",
+     "count": 15281,
+     "datatype": "dateTime"
+    },
+    "hasRecordDateTime": {
+     "kind": "literal",
+     "count": 15281,
+     "datatype": "dateTime"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 15281,
+     "target": "SourceSystem"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 15281,
+     "target": "SubjectPseudoIdentifier"
+    },
+    "hasTimePattern": {
+     "kind": "resource",
+     "count": 15281,
+     "target": "TimePattern"
+    }
+   }
+  },
+  "Electrocardiogram": {
+   "instances": 1513,
+   "patients": 504,
+   "properties": {
+    "hasDataFile": {
+     "kind": "resource",
+     "count": 1513,
+     "target": "DataFile"
+    }
+   }
+  },
+  "ElectrocardiographicProcedure": {
+   "instances": 1513,
+   "patients": 504,
+   "properties": {
+    "hasAdministrativeCase": {
+     "kind": "resource",
+     "count": 1513,
+     "target": "AdministrativeCase"
+    },
+    "hasBodySite": {
+     "kind": "resource",
+     "count": 2117,
+     "target": "BodySite"
+    },
+    "hasCode": {
+     "kind": "resource",
+     "count": 2190
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 1513,
+     "target": "DataProvider"
+    },
+    "hasEndDateTime": {
+     "kind": "literal",
+     "count": 1513,
+     "datatype": "dateTime"
+    },
+    "hasIntent": {
+     "kind": "resource",
+     "count": 1513,
+     "target": "Intent"
+    },
+    "hasNumberOfLeads": {
+     "kind": "resource",
+     "count": 1513,
+     "target": "Quantity"
+    },
+    "hasOutput": {
+     "kind": "resource",
+     "count": 1513,
+     "target": "Electrocardiogram"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 1513,
+     "target": "SourceSystem"
+    },
+    "hasStartDateTime": {
+     "kind": "literal",
+     "count": 1513,
+     "datatype": "dateTime"
+    },
+    "hasSubjectPhysiologicState": {
+     "kind": "resource",
+     "count": 1513,
+     "target": "PhysiologicState"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 1513,
+     "target": "SubjectPseudoIdentifier"
+    }
+   }
+  },
+  "ExcludedDisorder": {
+   "instances": 744,
+   "patients": 443,
+   "properties": {
+    "hasAdministrativeCase": {
+     "kind": "resource",
+     "count": 744,
+     "target": "AdministrativeCase"
+    },
+    "hasCode": {
+     "kind": "resource",
+     "count": 1152,
+     "target": "Code"
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 744,
+     "target": "DataProvider"
+    },
+    "hasRecordDateTime": {
+     "kind": "literal",
+     "count": 744,
+     "datatype": "dateTime"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 744,
+     "target": "SourceSystem"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 744,
+     "target": "SubjectPseudoIdentifier"
+    }
+   }
+  },
+  "Exposure": {
+   "instances": 3227,
+   "patients": 611,
+   "properties": {
+    "hasAdministrativeCase": {
+     "kind": "resource",
+     "count": 3227,
+     "target": "AdministrativeCase"
+    },
+    "hasAgentCode": {
+     "kind": "resource",
+     "count": 3227
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 3227,
+     "target": "DataProvider"
+    },
+    "hasDegreeCode": {
+     "kind": "resource",
+     "count": 3227
+    },
+    "hasDuration": {
+     "kind": "resource",
+     "count": 3227,
+     "target": "Quantity"
+    },
+    "hasEndDateTime": {
+     "kind": "literal",
+     "count": 3227,
+     "datatype": "dateTime"
+    },
+    "hasQuantity": {
+     "kind": "resource",
+     "count": 3227,
+     "target": "Quantity"
+    },
+    "hasRecordDateTime": {
+     "kind": "literal",
+     "count": 3227,
+     "datatype": "dateTime"
+    },
+    "hasRouteCode": {
+     "kind": "resource",
+     "count": 4892
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 3227,
+     "target": "SourceSystem"
+    },
+    "hasStartDateTime": {
+     "kind": "literal",
+     "count": 3227,
+     "datatype": "dateTime"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 3227,
+     "target": "SubjectPseudoIdentifier"
+    }
+   }
+  },
+  "FluidBalance": {
+   "instances": 3714,
+   "patients": 291,
+   "properties": {
+    "hasAdministrativeCase": {
+     "kind": "resource",
+     "count": 3714,
+     "target": "AdministrativeCase"
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 3714,
+     "target": "DataProvider"
+    },
+    "hasEndDateTime": {
+     "kind": "literal",
+     "count": 3714,
+     "datatype": "dateTime"
+    },
+    "hasFluidInputOutput": {
+     "kind": "resource",
+     "count": 3714,
+     "target": "FluidInputOutput"
+    },
+    "hasQuantity": {
+     "kind": "resource",
+     "count": 3714,
+     "target": "Quantity"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 3714,
+     "target": "SourceSystem"
+    },
+    "hasStartDateTime": {
+     "kind": "literal",
+     "count": 3714,
+     "datatype": "dateTime"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 3714,
+     "target": "SubjectPseudoIdentifier"
+    }
+   }
+  },
+  "FluidInputOutput": {
+   "instances": 3815,
+   "patients": 398,
+   "properties": {
+    "hasAdministrativeCase": {
+     "kind": "resource",
+     "count": 3815,
+     "target": "AdministrativeCase"
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 3815,
+     "target": "DataProvider"
+    },
+    "hasEndDateTime": {
+     "kind": "literal",
+     "count": 3815,
+     "datatype": "dateTime"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 3815,
+     "target": "SourceSystem"
+    },
+    "hasStartDateTime": {
+     "kind": "literal",
+     "count": 3815,
+     "datatype": "dateTime"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 3815,
+     "target": "SubjectPseudoIdentifier"
+    },
+    "hasSubstance": {
+     "kind": "resource",
+     "count": 3815,
+     "target": "Substance"
+    }
+   }
+  },
+  "FollowUp": {
+   "instances": 686,
+   "patients": 444,
+   "properties": {
+    "hasCode": {
+     "kind": "resource",
+     "count": 686
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 686,
+     "target": "DataProvider"
+    },
+    "hasDateTime": {
+     "kind": "literal",
+     "count": 686,
+     "datatype": "dateTime"
+    },
+    "hasResult": {
+     "kind": "resource",
+     "count": 686,
+     "target": "VitalStatus"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 686,
+     "target": "SourceSystem"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 686,
+     "target": "SubjectPseudoIdentifier"
+    }
+   }
+  },
+  "Gene": {
+   "instances": 4254,
+   "patients": 1690,
+   "properties": {
+    "hasCode": {
+     "kind": "resource",
+     "count": 4254,
+     "target": "Code"
+    },
+    "hasOrganism": {
+     "kind": "resource",
+     "count": 4254,
+     "target": "Organism"
+    },
+    "hasProtein": {
+     "kind": "resource",
+     "count": 6154,
+     "target": "Protein"
+    },
+    "hasTranscript": {
+     "kind": "resource",
+     "count": 6513,
+     "target": "Transcript"
+    }
+   }
+  },
+  "GenePanel": {
+   "instances": 1648,
+   "patients": 1625,
+   "properties": {
+    "hasDataFile": {
+     "kind": "resource",
+     "count": 1648,
+     "target": "DataFile"
+    },
+    "hasFocusGene": {
+     "kind": "resource",
+     "count": 2503,
+     "target": "Gene"
+    }
+   }
+  },
+  "GeneticVariation": {
+   "instances": 263,
+   "patients": 58,
+   "properties": {
+    "hasChromosomalLocation": {
+     "kind": "resource",
+     "count": 263,
+     "target": "ChromosomalLocation"
+    },
+    "hasGenomicPosition": {
+     "kind": "resource",
+     "count": 263,
+     "target": "GenomicPosition"
+    }
+   }
+  },
+  "GenomicDeletion": {
+   "instances": 342,
+   "patients": 79,
+   "properties": {
+    "hasChromosomalLocation": {
+     "kind": "resource",
+     "count": 342,
+     "target": "ChromosomalLocation"
+    },
+    "hasGenomicPosition": {
+     "kind": "resource",
+     "count": 342,
+     "target": "GenomicPosition"
+    },
+    "hasGenomicSequence": {
+     "kind": "literal",
+     "count": 342,
+     "datatype": "string"
+    },
+    "hasSequenceLength": {
+     "kind": "resource",
+     "count": 342,
+     "target": "Quantity"
+    }
+   }
+  },
+  "GenomicInsertion": {
+   "instances": 115,
+   "patients": 70,
+   "properties": {
+    "hasChromosomalLocation": {
+     "kind": "resource",
+     "count": 115,
+     "target": "ChromosomalLocation"
+    },
+    "hasGenomicPosition": {
+     "kind": "resource",
+     "count": 115,
+     "target": "GenomicPosition"
+    },
+    "hasGenomicSequence": {
+     "kind": "literal",
+     "count": 115,
+     "datatype": "string"
+    },
+    "hasSequenceLength": {
+     "kind": "resource",
+     "count": 115,
+     "target": "Quantity"
+    }
+   }
+  },
+  "GenomicPosition": {
+   "instances": 1058,
+   "patients": 299,
+   "properties": {
+    "hasCoordinateConvention": {
+     "kind": "individual",
+     "count": 1058
+    },
+    "hasEnd": {
+     "kind": "literal",
+     "count": 1058,
+     "datatype": "double"
+    },
+    "hasReference": {
+     "kind": "resource",
+     "count": 1058,
+     "target": "ReferenceSequence"
+    },
+    "hasStart": {
+     "kind": "literal",
+     "count": 1058,
+     "datatype": "double"
+    }
+   }
+  },
+  "GestationalAgeAtBirth": {
+   "instances": 2000,
+   "patients": 2000,
+   "properties": {
+    "hasAdministrativeCase": {
+     "kind": "resource",
+     "count": 2000,
+     "target": "AdministrativeCase"
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 2000,
+     "target": "DataProvider"
+    },
+    "hasQuantity": {
+     "kind": "resource",
+     "count": 2000,
+     "target": "Quantity"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 2000,
+     "target": "SourceSystem"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 2000,
+     "target": "SubjectPseudoIdentifier"
+    }
+   }
+  },
+  "Hash": {
+   "instances": 4000,
+   "patients": 2000,
+   "properties": {
+    "hasAlgorithm": {
+     "kind": "individual",
+     "count": 4000
+    },
+    "hasStringValue": {
+     "kind": "literal",
+     "count": 4000,
+     "datatype": "string"
+    }
+   }
+  },
+  "HealthcareEncounter": {
+   "instances": 14401,
+   "patients": 1068,
+   "properties": {
+    "hasAdministrativeCase": {
+     "kind": "resource",
+     "count": 14401,
+     "target": "AdministrativeCase"
+    },
+    "hasCurrentLocation": {
+     "kind": "resource",
+     "count": 14401,
+     "target": "Location"
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 14401,
+     "target": "DataProvider"
+    },
+    "hasEndDateTime": {
+     "kind": "literal",
+     "count": 14401,
+     "datatype": "dateTime"
+    },
+    "hasIdentifier": {
+     "kind": "literal",
+     "count": 14401,
+     "datatype": "string"
+    },
+    "hasOriginLocation": {
+     "kind": "resource",
+     "count": 14401,
+     "target": "Location"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 14401,
+     "target": "SourceSystem"
+    },
+    "hasStartDateTime": {
+     "kind": "literal",
+     "count": 14401,
+     "datatype": "dateTime"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 14401,
+     "target": "SubjectPseudoIdentifier"
+    },
+    "hasTargetLocation": {
+     "kind": "resource",
+     "count": 14401,
+     "target": "Location"
+    },
+    "hasTherapeuticArea": {
+     "kind": "resource",
+     "count": 14401,
+     "target": "TherapeuticArea"
+    }
+   }
+  },
+  "HealthcarePrimaryInformationSystem": {
+   "instances": 2000,
+   "patients": 2000,
+   "properties": {
+    "hasCode": {
+     "kind": "resource",
+     "count": 2000
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 2000,
+     "target": "DataProvider"
+    },
+    "hasName": {
+     "kind": "literal",
+     "count": 2000,
+     "datatype": "string"
+    }
+   }
+  },
+  "HeartRate": {
+   "instances": 11917,
+   "patients": 908,
+   "properties": {
+    "hasDataFile": {
+     "kind": "resource",
+     "count": 11917,
+     "target": "TimeSeriesDataFile"
+    },
+    "hasDateTime": {
+     "kind": "literal",
+     "count": 11917,
+     "datatype": "dateTime"
+    },
+    "hasQuantity": {
+     "kind": "resource",
+     "count": 11917,
+     "target": "Quantity"
+    },
+    "hasRegularityCode": {
+     "kind": "resource",
+     "count": 11917
+    }
+   }
+  },
+  "HeartRateMeasurement": {
+   "instances": 8985,
+   "patients": 875,
+   "properties": {
+    "hasAdministrativeCase": {
+     "kind": "resource",
+     "count": 8985,
+     "target": "AdministrativeCase"
+    },
+    "hasBodySite": {
+     "kind": "resource",
+     "count": 8985,
+     "target": "BodySite"
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 8985,
+     "target": "DataProvider"
+    },
+    "hasEndDateTime": {
+     "kind": "literal",
+     "count": 8985,
+     "datatype": "dateTime"
+    },
+    "hasMedicalDevice": {
+     "kind": "resource",
+     "count": 8985,
+     "target": "Implant"
+    },
+    "hasMethodCode": {
+     "kind": "resource",
+     "count": 8985
+    },
+    "hasPerformer": {
+     "kind": "resource",
+     "count": 8985,
+     "target": "Performer"
+    },
+    "hasResult": {
+     "kind": "resource",
+     "count": 11728,
+     "target": "HeartRate"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 8985,
+     "target": "SourceSystem"
+    },
+    "hasStartDateTime": {
+     "kind": "literal",
+     "count": 8985,
+     "datatype": "dateTime"
+    },
+    "hasSubjectPhysiologicState": {
+     "kind": "resource",
+     "count": 8985,
+     "target": "PhysiologicState"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 8985,
+     "target": "SubjectPseudoIdentifier"
+    }
+   }
+  },
+  "HomeAddress": {
+   "instances": 2000,
+   "patients": 2000,
+   "properties": {
+    "hasCountry": {
+     "kind": "resource",
+     "count": 2000,
+     "target": "Country"
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 2000,
+     "target": "DataProvider"
+    },
+    "hasEndDateTime": {
+     "kind": "literal",
+     "count": 2000,
+     "datatype": "dateTime"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 2000,
+     "target": "SourceSystem"
+    },
+    "hasStartDateTime": {
+     "kind": "literal",
+     "count": 2000,
+     "datatype": "dateTime"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 2000,
+     "target": "SubjectPseudoIdentifier"
+    },
+    "hasSwissSocioEconomicPosition": {
+     "kind": "resource",
+     "count": 2978,
+     "target": "SwissSocioEconomicPosition"
+    }
+   }
+  },
+  "ImagingProcedure": {
+   "instances": 4437,
+   "patients": 682,
+   "properties": {
+    "hasAdministrativeCase": {
+     "kind": "resource",
+     "count": 4437,
+     "target": "AdministrativeCase"
+    },
+    "hasBodySite": {
+     "kind": "resource",
+     "count": 6925,
+     "target": "BodySite"
+    },
+    "hasCode": {
+     "kind": "resource",
+     "count": 6808
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 4437,
+     "target": "DataProvider"
+    },
+    "hasEndDateTime": {
+     "kind": "literal",
+     "count": 4437,
+     "datatype": "dateTime"
+    },
+    "hasIntent": {
+     "kind": "resource",
+     "count": 4437,
+     "target": "Intent"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 4437,
+     "target": "SourceSystem"
+    },
+    "hasStartDateTime": {
+     "kind": "literal",
+     "count": 4437,
+     "datatype": "dateTime"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 4437,
+     "target": "SubjectPseudoIdentifier"
+    }
+   }
+  },
+  "Implant": {
+   "instances": 17150,
+   "patients": 1286,
+   "properties": {
+    "hasProductCode": {
+     "kind": "resource",
+     "count": 17150,
+     "target": "Code"
+    },
+    "hasSoftware": {
+     "kind": "resource",
+     "count": 23795,
+     "target": "Software"
+    },
+    "hasTypeCode": {
+     "kind": "resource",
+     "count": 17150
+    }
+   }
+  },
+  "ImplantPresence": {
+   "instances": 562,
+   "patients": 305,
+   "properties": {
+    "hasAdministrativeCase": {
+     "kind": "resource",
+     "count": 562,
+     "target": "AdministrativeCase"
+    },
+    "hasBodySite": {
+     "kind": "resource",
+     "count": 562,
+     "target": "BodySite"
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 562,
+     "target": "DataProvider"
+    },
+    "hasEndDateTime": {
+     "kind": "literal",
+     "count": 562,
+     "datatype": "dateTime"
+    },
+    "hasMedicalDevice": {
+     "kind": "resource",
+     "count": 562,
+     "target": "Implant"
+    },
+    "hasRecordDateTime": {
+     "kind": "literal",
+     "count": 562,
+     "datatype": "dateTime"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 562,
+     "target": "SourceSystem"
+    },
+    "hasStartDateTime": {
+     "kind": "literal",
+     "count": 562,
+     "datatype": "dateTime"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 562,
+     "target": "SubjectPseudoIdentifier"
+    }
+   }
+  },
+  "InhaledOxygenConcentration": {
+   "instances": 4099,
+   "patients": 343,
+   "properties": {
+    "hasAdministrativeCase": {
+     "kind": "resource",
+     "count": 4099,
+     "target": "AdministrativeCase"
+    },
+    "hasDataDetermination": {
+     "kind": "resource",
+     "count": 4099,
+     "target": "DataDetermination"
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 4099,
+     "target": "DataProvider"
+    },
+    "hasDateTime": {
+     "kind": "literal",
+     "count": 4099,
+     "datatype": "dateTime"
+    },
+    "hasOxygenEquipment": {
+     "kind": "resource",
+     "count": 4099,
+     "target": "AccessDevice"
+    },
+    "hasOxygenFlowRate": {
+     "kind": "resource",
+     "count": 4099,
+     "target": "DrugAdministrationEvent"
+    },
+    "hasQuantity": {
+     "kind": "resource",
+     "count": 4099,
+     "target": "Quantity"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 4099,
+     "target": "SourceSystem"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 4099,
+     "target": "SubjectPseudoIdentifier"
+    }
+   }
+  },
+  "InsuranceStatus": {
+   "instances": 2000,
+   "patients": 2000,
+   "properties": {
+    "hasAdministrativeCase": {
+     "kind": "resource",
+     "count": 2000,
+     "target": "AdministrativeCase"
+    },
+    "hasCoverageType": {
+     "kind": "individual",
+     "count": 2000
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 2000,
+     "target": "DataProvider"
+    },
+    "hasEndDateTime": {
+     "kind": "literal",
+     "count": 2000,
+     "datatype": "dateTime"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 2000,
+     "target": "SourceSystem"
+    },
+    "hasStartDateTime": {
+     "kind": "literal",
+     "count": 2000,
+     "datatype": "dateTime"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 2000,
+     "target": "SubjectPseudoIdentifier"
+    }
+   }
+  },
+  "Intent": {
+   "instances": 36012,
+   "patients": 1717,
+   "properties": {
+    "hasCode": {
+     "kind": "resource",
+     "count": 36012
+    }
+   }
+  },
+  "Interpretation": {
+   "instances": 2957,
+   "patients": 2000,
+   "properties": {
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 2957,
+     "target": "DataProvider"
+    },
+    "hasDateTime": {
+     "kind": "literal",
+     "count": 2957,
+     "datatype": "dateTime"
+    },
+    "hasInput": {
+     "kind": "resource",
+     "count": 4359,
+     "target": "DeathDate"
+    },
+    "hasOutput": {
+     "kind": "resource",
+     "count": 4407,
+     "target": "OxygenSaturationMeasurement"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 2957,
+     "target": "SourceSystem"
+    },
+    "hasStandardGuideline": {
+     "kind": "literal",
+     "count": 2957,
+     "datatype": "string"
+    }
+   }
+  },
+  "Isolate": {
+   "instances": 2000,
+   "patients": 2000,
+   "properties": {
+    "hasAdministrativeCase": {
+     "kind": "resource",
+     "count": 2000,
+     "target": "AdministrativeCase"
+    },
+    "hasBodySite": {
+     "kind": "resource",
+     "count": 2000,
+     "target": "BodySite"
+    },
+    "hasCollectionDateTime": {
+     "kind": "literal",
+     "count": 2000,
+     "datatype": "dateTime"
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 2000,
+     "target": "DataProvider"
+    },
+    "hasFixationType": {
+     "kind": "individual",
+     "count": 2000
+    },
+    "hasIdentifier": {
+     "kind": "literal",
+     "count": 2000,
+     "datatype": "string"
+    },
+    "hasMaterialTypeCode": {
+     "kind": "resource",
+     "count": 3011
+    },
+    "hasOrganism": {
+     "kind": "resource",
+     "count": 2000,
+     "target": "Organism"
+    },
+    "hasPrimaryContainer": {
+     "kind": "individual",
+     "count": 2000
+    },
+    "hasSharedIdentifier": {
+     "kind": "literal",
+     "count": 2000,
+     "datatype": "anyURI"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 2000,
+     "target": "SourceSystem"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 2000,
+     "target": "SubjectPseudoIdentifier"
+    }
+   }
+  },
+  "LabAnalyzer": {
+   "instances": 51274,
+   "patients": 1428,
+   "properties": {
+    "hasProductCode": {
+     "kind": "resource",
+     "count": 51274,
+     "target": "Code"
+    },
+    "hasSoftware": {
+     "kind": "resource",
+     "count": 77779,
+     "target": "Software"
+    },
+    "hasTypeCode": {
+     "kind": "resource",
+     "count": 51274
+    }
+   }
+  },
+  "LabResult": {
+   "instances": 36488,
+   "patients": 1072,
+   "properties": {
+    "hasCode": {
+     "kind": "resource",
+     "count": 36488,
+     "target": "Code"
+    },
+    "hasNumericalReference": {
+     "kind": "resource",
+     "count": 36488,
+     "target": "ReferenceRange"
+    },
+    "hasQuantity": {
+     "kind": "resource",
+     "count": 36488,
+     "target": "Quantity"
+    },
+    "hasStringValue": {
+     "kind": "literal",
+     "count": 36488,
+     "datatype": "string"
+    }
+   }
+  },
+  "LabTest": {
+   "instances": 22904,
+   "patients": 1072,
+   "properties": {
+    "hasCode": {
+     "kind": "resource",
+     "count": 22904
+    },
+    "hasInstrument": {
+     "kind": "resource",
+     "count": 22904,
+     "target": "LabAnalyzer"
+    },
+    "hasResult": {
+     "kind": "resource",
+     "count": 36488,
+     "target": "LabResult"
+    },
+    "hasTestKit": {
+     "kind": "resource",
+     "count": 22904,
+     "target": "LabAnalyzer"
+    }
+   }
+  },
+  "LabTestEvent": {
+   "instances": 14953,
+   "patients": 1072,
+   "properties": {
+    "hasAdministrativeCase": {
+     "kind": "resource",
+     "count": 14953,
+     "target": "AdministrativeCase"
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 14953,
+     "target": "DataProvider"
+    },
+    "hasDateTime": {
+     "kind": "literal",
+     "count": 14953,
+     "datatype": "dateTime"
+    },
+    "hasLabTest": {
+     "kind": "resource",
+     "count": 22904,
+     "target": "LabTest"
+    },
+    "hasReportDateTime": {
+     "kind": "literal",
+     "count": 14953,
+     "datatype": "dateTime"
+    },
+    "hasSample": {
+     "kind": "resource",
+     "count": 14953,
+     "target": "Sample"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 14953,
+     "target": "SourceSystem"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 14953,
+     "target": "SubjectPseudoIdentifier"
+    }
+   }
+  },
+  "Laterality": {
+   "instances": 65348,
+   "patients": 2000,
+   "properties": {
+    "hasCode": {
+     "kind": "resource",
+     "count": 65348
+    }
+   }
+  },
+  "LibraryPreparation": {
+   "instances": 1648,
+   "patients": 1625,
+   "properties": {
+    "hasAdministrativeCase": {
+     "kind": "resource",
+     "count": 1357,
+     "target": "AdministrativeCase"
+    },
+    "hasCode": {
+     "kind": "resource",
+     "count": 1648,
+     "target": "Terminology"
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 1648,
+     "target": "DataProvider"
+    },
+    "hasGenePanel": {
+     "kind": "resource",
+     "count": 1648,
+     "target": "GenePanel"
+    },
+    "hasInput": {
+     "kind": "resource",
+     "count": 2181,
+     "target": "Sample"
+    },
+    "hasIntendedInsertSize": {
+     "kind": "resource",
+     "count": 1648,
+     "target": "Quantity"
+    },
+    "hasKitCode": {
+     "kind": "resource",
+     "count": 1648,
+     "target": "Code"
+    },
+    "hasOutput": {
+     "kind": "resource",
+     "count": 1648,
+     "target": "Isolate"
+    },
+    "hasPredecessor": {
+     "kind": "resource",
+     "count": 2092,
+     "target": "SampleProcessing"
+    },
+    "hasQualityControlMetric": {
+     "kind": "resource",
+     "count": 2522,
+     "target": "QualityControlMetric"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 1648,
+     "target": "SourceSystem"
+    },
+    "hasStandardOperatingProcedure": {
+     "kind": "resource",
+     "count": 1648,
+     "target": "StandardOperatingProcedure"
+    },
+    "hasStartDateTime": {
+     "kind": "literal",
+     "count": 1648,
+     "datatype": "dateTime"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 1648,
+     "target": "SubjectPseudoIdentifier"
+    },
+    "hasTargetEnrichmentKitCode": {
+     "kind": "resource",
+     "count": 1648,
+     "target": "Code"
+    }
+   }
+  },
+  "Location": {
+   "instances": 47203,
+   "patients": 2000,
+   "properties": {
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 47203,
+     "target": "DataProvider"
+    },
+    "hasExact": {
+     "kind": "literal",
+     "count": 47203,
+     "datatype": "string"
+    },
+    "hasTypeCode": {
+     "kind": "resource",
+     "count": 47203
+    }
+   }
+  },
+  "Measurement": {
+   "instances": 1881,
+   "patients": 527,
+   "properties": {
+    "hasAdministrativeCase": {
+     "kind": "resource",
+     "count": 1881,
+     "target": "AdministrativeCase"
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 1881,
+     "target": "DataProvider"
+    },
+    "hasEndDateTime": {
+     "kind": "literal",
+     "count": 1881,
+     "datatype": "dateTime"
+    },
+    "hasMedicalDevice": {
+     "kind": "resource",
+     "count": 1881,
+     "target": "Implant"
+    },
+    "hasMethodCode": {
+     "kind": "resource",
+     "count": 1881
+    },
+    "hasPerformer": {
+     "kind": "resource",
+     "count": 1881,
+     "target": "Performer"
+    },
+    "hasResult": {
+     "kind": "resource",
+     "count": 2682,
+     "target": "OxygenSaturation"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 1881,
+     "target": "SourceSystem"
+    },
+    "hasStartDateTime": {
+     "kind": "literal",
+     "count": 1881,
+     "datatype": "dateTime"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 1881,
+     "target": "SubjectPseudoIdentifier"
+    }
+   }
+  },
+  "MedicalDevice": {
+   "instances": 39122,
+   "patients": 2000,
+   "properties": {
+    "hasProductCode": {
+     "kind": "resource",
+     "count": 39122,
+     "target": "Code"
+    },
+    "hasSoftware": {
+     "kind": "resource",
+     "count": 60470,
+     "target": "Software"
+    },
+    "hasTypeCode": {
+     "kind": "resource",
+     "count": 39122
+    }
+   }
+  },
+  "MedicalProcedure": {
+   "instances": 1890,
+   "patients": 590,
+   "properties": {
+    "hasAdministrativeCase": {
+     "kind": "resource",
+     "count": 1890,
+     "target": "AdministrativeCase"
+    },
+    "hasBodySite": {
+     "kind": "resource",
+     "count": 2919,
+     "target": "BodySite"
+    },
+    "hasCode": {
+     "kind": "resource",
+     "count": 2698,
+     "target": "Code"
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 1890,
+     "target": "DataProvider"
+    },
+    "hasEndDateTime": {
+     "kind": "literal",
+     "count": 1890,
+     "datatype": "dateTime"
+    },
+    "hasIntent": {
+     "kind": "resource",
+     "count": 1890,
+     "target": "Intent"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 1890,
+     "target": "SourceSystem"
+    },
+    "hasStartDateTime": {
+     "kind": "literal",
+     "count": 1890,
+     "datatype": "dateTime"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 1890,
+     "target": "SubjectPseudoIdentifier"
+    }
+   }
+  },
+  "MicrobiologyBiomoleculePresenceLabTest": {
+   "instances": 596,
+   "patients": 286,
+   "properties": {
+    "hasCode": {
+     "kind": "resource",
+     "count": 596
+    },
+    "hasInstrument": {
+     "kind": "resource",
+     "count": 596,
+     "target": "LabAnalyzer"
+    },
+    "hasResult": {
+     "kind": "resource",
+     "count": 928,
+     "target": "MicrobiologyBiomoleculePresenceResult"
+    },
+    "hasTargetMolecule": {
+     "kind": "resource",
+     "count": 596,
+     "target": "Protein"
+    },
+    "hasTestKit": {
+     "kind": "resource",
+     "count": 596,
+     "target": "LabAnalyzer"
+    }
+   }
+  },
+  "MicrobiologyBiomoleculePresenceLabTestEvent": {
+   "instances": 407,
+   "patients": 286,
+   "properties": {
+    "hasAdministrativeCase": {
+     "kind": "resource",
+     "count": 407,
+     "target": "AdministrativeCase"
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 407,
+     "target": "DataProvider"
+    },
+    "hasDateTime": {
+     "kind": "literal",
+     "count": 407,
+     "datatype": "dateTime"
+    },
+    "hasLabTest": {
+     "kind": "resource",
+     "count": 596,
+     "target": "MicrobiologyBiomoleculePresenceLabTest"
+    },
+    "hasReportDateTime": {
+     "kind": "literal",
+     "count": 407,
+     "datatype": "dateTime"
+    },
+    "hasSample": {
+     "kind": "resource",
+     "count": 407,
+     "target": "Isolate"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 407,
+     "target": "SourceSystem"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 407,
+     "target": "SubjectPseudoIdentifier"
+    }
+   }
+  },
+  "MicrobiologyBiomoleculePresenceResult": {
+   "instances": 928,
+   "patients": 286,
+   "properties": {
+    "hasCode": {
+     "kind": "resource",
+     "count": 928
+    },
+    "hasNumericalReference": {
+     "kind": "resource",
+     "count": 928,
+     "target": "ReferenceRange"
+    },
+    "hasQuantity": {
+     "kind": "resource",
+     "count": 928,
+     "target": "Quantity"
+    },
+    "hasStringValue": {
+     "kind": "literal",
+     "count": 928,
+     "datatype": "string"
+    }
+   }
+  },
+  "MicrobiologyMicroscopyLabTest": {
+   "instances": 656,
+   "patients": 292,
+   "properties": {
+    "hasCode": {
+     "kind": "resource",
+     "count": 656
+    },
+    "hasInstrument": {
+     "kind": "resource",
+     "count": 656,
+     "target": "LabAnalyzer"
+    },
+    "hasResult": {
+     "kind": "resource",
+     "count": 982,
+     "target": "MicrobiologyMicroscopyResult"
+    },
+    "hasStainingMethodCode": {
+     "kind": "resource",
+     "count": 656
+    },
+    "hasTestKit": {
+     "kind": "resource",
+     "count": 656,
+     "target": "LabAnalyzer"
+    }
+   }
+  },
+  "MicrobiologyMicroscopyLabTestEvent": {
+   "instances": 430,
+   "patients": 292,
+   "properties": {
+    "hasAdministrativeCase": {
+     "kind": "resource",
+     "count": 430,
+     "target": "AdministrativeCase"
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 430,
+     "target": "DataProvider"
+    },
+    "hasDateTime": {
+     "kind": "literal",
+     "count": 430,
+     "datatype": "dateTime"
+    },
+    "hasLabTest": {
+     "kind": "resource",
+     "count": 656,
+     "target": "MicrobiologyMicroscopyLabTest"
+    },
+    "hasReportDateTime": {
+     "kind": "literal",
+     "count": 430,
+     "datatype": "dateTime"
+    },
+    "hasSample": {
+     "kind": "resource",
+     "count": 430,
+     "target": "Sample"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 430,
+     "target": "SourceSystem"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 430,
+     "target": "SubjectPseudoIdentifier"
+    }
+   }
+  },
+  "MicrobiologyMicroscopyResult": {
+   "instances": 982,
+   "patients": 292,
+   "properties": {
+    "hasCellCountEstimateCode": {
+     "kind": "resource",
+     "count": 982
+    },
+    "hasCellMorphology": {
+     "kind": "individual",
+     "count": 982
+    },
+    "hasCellOrganization": {
+     "kind": "individual",
+     "count": 982
+    },
+    "hasNumericalReference": {
+     "kind": "resource",
+     "count": 982,
+     "target": "ReferenceRange"
+    },
+    "hasQuantity": {
+     "kind": "resource",
+     "count": 982,
+     "target": "Quantity"
+    },
+    "hasStainingResultCode": {
+     "kind": "resource",
+     "count": 982
+    },
+    "hasStringValue": {
+     "kind": "literal",
+     "count": 982,
+     "datatype": "string"
+    }
+   }
+  },
+  "MicroorganismIdentificationLabTest": {
+   "instances": 893,
+   "patients": 356,
+   "properties": {
+    "hasCode": {
+     "kind": "resource",
+     "count": 893
+    },
+    "hasInstrument": {
+     "kind": "resource",
+     "count": 893,
+     "target": "LabAnalyzer"
+    },
+    "hasResult": {
+     "kind": "resource",
+     "count": 1428,
+     "target": "MicroorganismIdentificationResult"
+    },
+    "hasTestKit": {
+     "kind": "resource",
+     "count": 893,
+     "target": "LabAnalyzer"
+    }
+   }
+  },
+  "MicroorganismIdentificationLabTestEvent": {
+   "instances": 560,
+   "patients": 356,
+   "properties": {
+    "hasAdministrativeCase": {
+     "kind": "resource",
+     "count": 560,
+     "target": "AdministrativeCase"
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 560,
+     "target": "DataProvider"
+    },
+    "hasDateTime": {
+     "kind": "literal",
+     "count": 560,
+     "datatype": "dateTime"
+    },
+    "hasLabTest": {
+     "kind": "resource",
+     "count": 893,
+     "target": "MicroorganismIdentificationLabTest"
+    },
+    "hasReportDateTime": {
+     "kind": "literal",
+     "count": 560,
+     "datatype": "dateTime"
+    },
+    "hasSample": {
+     "kind": "resource",
+     "count": 560,
+     "target": "Sample"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 560,
+     "target": "SourceSystem"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 560,
+     "target": "SubjectPseudoIdentifier"
+    }
+   }
+  },
+  "MicroorganismIdentificationResult": {
+   "instances": 1428,
+   "patients": 356,
+   "properties": {
+    "hasCode": {
+     "kind": "resource",
+     "count": 1428
+    },
+    "hasNumericalReference": {
+     "kind": "resource",
+     "count": 1428,
+     "target": "ReferenceRange"
+    },
+    "hasOrganism": {
+     "kind": "resource",
+     "count": 1428,
+     "target": "Organism"
+    },
+    "hasStringValue": {
+     "kind": "literal",
+     "count": 1428,
+     "datatype": "string"
+    },
+    "hasTimeToPositivity": {
+     "kind": "resource",
+     "count": 1428,
+     "target": "Quantity"
+    }
+   }
+  },
+  "Nationality": {
+   "instances": 2000,
+   "patients": 2000,
+   "properties": {
+    "hasAcquistionCode": {
+     "kind": "resource",
+     "count": 2000
+    },
+    "hasAssociatedCountry": {
+     "kind": "resource",
+     "count": 2000,
+     "target": "Country"
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 2000,
+     "target": "DataProvider"
+    },
+    "hasRecordDateTime": {
+     "kind": "literal",
+     "count": 2000,
+     "datatype": "dateTime"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 2000,
+     "target": "SourceSystem"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 2000,
+     "target": "SubjectPseudoIdentifier"
+    }
+   }
+  },
+  "NursingDiagnosis": {
+   "instances": 1106,
+   "patients": 721,
+   "properties": {
+    "hasAdministrativeCase": {
+     "kind": "resource",
+     "count": 1106,
+     "target": "AdministrativeCase"
+    },
+    "hasCode": {
+     "kind": "resource",
+     "count": 1106,
+     "target": "Code"
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 1106,
+     "target": "DataProvider"
+    },
+    "hasRecordDateTime": {
+     "kind": "literal",
+     "count": 1106,
+     "datatype": "dateTime"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 1106,
+     "target": "SourceSystem"
+    },
+    "hasSubjectAge": {
+     "kind": "resource",
+     "count": 1106,
+     "target": "Age"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 1106,
+     "target": "SubjectPseudoIdentifier"
+    }
+   }
+  },
+  "NutritionIntake": {
+   "instances": 1933,
+   "patients": 375,
+   "properties": {
+    "hasAdministrativeCase": {
+     "kind": "resource",
+     "count": 1933,
+     "target": "AdministrativeCase"
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 1933,
+     "target": "DataProvider"
+    },
+    "hasEndDateTime": {
+     "kind": "literal",
+     "count": 1933,
+     "datatype": "dateTime"
+    },
+    "hasEnergyQuantity": {
+     "kind": "resource",
+     "count": 1933,
+     "target": "Quantity"
+    },
+    "hasModeCode": {
+     "kind": "resource",
+     "count": 1933
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 1933,
+     "target": "SourceSystem"
+    },
+    "hasStartDateTime": {
+     "kind": "literal",
+     "count": 1933,
+     "datatype": "dateTime"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 1933,
+     "target": "SubjectPseudoIdentifier"
+    },
+    "hasSubstance": {
+     "kind": "resource",
+     "count": 3022,
+     "target": "Substance"
+    }
+   }
+  },
+  "OncologyDiagnosis": {
+   "instances": 213,
+   "patients": 78,
+   "properties": {
+    "hasAdministrativeCase": {
+     "kind": "resource",
+     "count": 213,
+     "target": "AdministrativeCase"
+    },
+    "hasBodySite": {
+     "kind": "resource",
+     "count": 213,
+     "target": "BodySite"
+    },
+    "hasCode": {
+     "kind": "resource",
+     "count": 300
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 213,
+     "target": "DataProvider"
+    },
+    "hasIncidenceDateTime": {
+     "kind": "literal",
+     "count": 213,
+     "datatype": "dateTime"
+    },
+    "hasRecordDateTime": {
+     "kind": "literal",
+     "count": 213,
+     "datatype": "dateTime"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 213,
+     "target": "SourceSystem"
+    },
+    "hasSubjectAge": {
+     "kind": "resource",
+     "count": 213,
+     "target": "Age"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 213,
+     "target": "SubjectPseudoIdentifier"
+    }
+   }
+  },
+  "OncologySurgery": {
+   "instances": 279,
+   "patients": 186,
+   "properties": {
+    "hasAdministrativeCase": {
+     "kind": "resource",
+     "count": 279,
+     "target": "AdministrativeCase"
+    },
+    "hasBodySite": {
+     "kind": "resource",
+     "count": 423,
+     "target": "BodySite"
+    },
+    "hasCode": {
+     "kind": "resource",
+     "count": 436,
+     "target": "Code"
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 279,
+     "target": "DataProvider"
+    },
+    "hasEndDateTime": {
+     "kind": "literal",
+     "count": 279,
+     "datatype": "dateTime"
+    },
+    "hasIntent": {
+     "kind": "resource",
+     "count": 279,
+     "target": "Intent"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 279,
+     "target": "SourceSystem"
+    },
+    "hasStartDateTime": {
+     "kind": "literal",
+     "count": 279,
+     "datatype": "dateTime"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 279,
+     "target": "SubjectPseudoIdentifier"
+    }
+   }
+  },
+  "OrganSupport": {
+   "instances": 1112,
+   "patients": 214,
+   "properties": {
+    "hasAdministrativeCase": {
+     "kind": "resource",
+     "count": 1112,
+     "target": "AdministrativeCase"
+    },
+    "hasBodySite": {
+     "kind": "resource",
+     "count": 1928,
+     "target": "BodySite"
+    },
+    "hasCode": {
+     "kind": "resource",
+     "count": 1112
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 1112,
+     "target": "DataProvider"
+    },
+    "hasEndDateTime": {
+     "kind": "literal",
+     "count": 1112,
+     "datatype": "dateTime"
+    },
+    "hasIntent": {
+     "kind": "resource",
+     "count": 1112,
+     "target": "Intent"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 1112,
+     "target": "SourceSystem"
+    },
+    "hasStartDateTime": {
+     "kind": "literal",
+     "count": 1112,
+     "datatype": "dateTime"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 1112,
+     "target": "SubjectPseudoIdentifier"
+    }
+   }
+  },
+  "Organism": {
+   "instances": 27180,
+   "patients": 2000,
+   "properties": {
+    "hasCode": {
+     "kind": "resource",
+     "count": 27180,
+     "target": "Code"
+    }
+   }
+  },
+  "OxygenSaturation": {
+   "instances": 7284,
+   "patients": 687,
+   "properties": {
+    "hasDataFile": {
+     "kind": "resource",
+     "count": 7284,
+     "target": "TimeSeriesDataFile"
+    },
+    "hasDateTime": {
+     "kind": "literal",
+     "count": 7284,
+     "datatype": "dateTime"
+    },
+    "hasQuantity": {
+     "kind": "resource",
+     "count": 7284,
+     "target": "Quantity"
+    }
+   }
+  },
+  "OxygenSaturationMeasurement": {
+   "instances": 4654,
+   "patients": 653,
+   "properties": {
+    "hasAdministrativeCase": {
+     "kind": "resource",
+     "count": 4654,
+     "target": "AdministrativeCase"
+    },
+    "hasBodySite": {
+     "kind": "resource",
+     "count": 4654,
+     "target": "BodySite"
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 4654,
+     "target": "DataProvider"
+    },
+    "hasEndDateTime": {
+     "kind": "literal",
+     "count": 4654,
+     "datatype": "dateTime"
+    },
+    "hasMedicalDevice": {
+     "kind": "resource",
+     "count": 4654,
+     "target": "MedicalDevice"
+    },
+    "hasMethodCode": {
+     "kind": "resource",
+     "count": 4654
+    },
+    "hasPerformer": {
+     "kind": "resource",
+     "count": 4654,
+     "target": "Performer"
+    },
+    "hasResult": {
+     "kind": "resource",
+     "count": 7102,
+     "target": "OxygenSaturation"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 4654,
+     "target": "SourceSystem"
+    },
+    "hasStartDateTime": {
+     "kind": "literal",
+     "count": 4654,
+     "datatype": "dateTime"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 4654,
+     "target": "SubjectPseudoIdentifier"
+    }
+   }
+  },
+  "Performer": {
+   "instances": 54146,
+   "patients": 1900,
+   "properties": {
+    "hasCode": {
+     "kind": "resource",
+     "count": 54146
+    }
+   }
+  },
+  "PharmaceuticalDoseForm": {
+   "instances": 19414,
+   "patients": 1373,
+   "properties": {
+    "hasCode": {
+     "kind": "resource",
+     "count": 19414
+    }
+   }
+  },
+  "PhysiologicState": {
+   "instances": 10498,
+   "patients": 1109,
+   "properties": {
+    "hasCode": {
+     "kind": "resource",
+     "count": 10498
+    }
+   }
+  },
+  "ProblemCondition": {
+   "instances": 1194,
+   "patients": 564,
+   "properties": {
+    "hasAdministrativeCase": {
+     "kind": "resource",
+     "count": 1194,
+     "target": "AdministrativeCase"
+    },
+    "hasCode": {
+     "kind": "resource",
+     "count": 1194,
+     "target": "Code"
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 1194,
+     "target": "DataProvider"
+    },
+    "hasOnsetDateTime": {
+     "kind": "literal",
+     "count": 1194,
+     "datatype": "dateTime"
+    },
+    "hasRecordDateTime": {
+     "kind": "literal",
+     "count": 1194,
+     "datatype": "dateTime"
+    },
+    "hasRelativeTemporalityCode": {
+     "kind": "resource",
+     "count": 1194
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 1194,
+     "target": "SourceSystem"
+    },
+    "hasStringValue": {
+     "kind": "literal",
+     "count": 1194,
+     "datatype": "string"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 1194,
+     "target": "SubjectPseudoIdentifier"
+    }
+   }
+  },
+  "Protein": {
+   "instances": 12985,
+   "patients": 1716,
+   "properties": {
+    "hasCode": {
+     "kind": "resource",
+     "count": 12985,
+     "target": "Code"
+    },
+    "hasOrganism": {
+     "kind": "resource",
+     "count": 12985,
+     "target": "Organism"
+    }
+   }
+  },
+  "QualityControlMetric": {
+   "instances": 8145,
+   "patients": 1866,
+   "properties": {
+    "hasCode": {
+     "kind": "resource",
+     "count": 8145,
+     "target": "Code"
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 8145,
+     "target": "DataProvider"
+    },
+    "hasQuantity": {
+     "kind": "resource",
+     "count": 8145,
+     "target": "Quantity"
+    }
+   }
+  },
+  "Quantity": {
+   "instances": 380659,
+   "patients": 2000,
+   "properties": {
+    "hasComparator": {
+     "kind": "individual",
+     "count": 380659
+    },
+    "hasUnit": {
+     "kind": "resource",
+     "count": 380659,
+     "target": "Unit"
+    },
+    "hasValue": {
+     "kind": "literal",
+     "count": 380659,
+     "datatype": "double"
+    }
+   }
+  },
+  "RadiotherapyProcedure": {
+   "instances": 1361,
+   "patients": 186,
+   "properties": {
+    "hasAdministrativeCase": {
+     "kind": "resource",
+     "count": 1361,
+     "target": "AdministrativeCase"
+    },
+    "hasBodySite": {
+     "kind": "resource",
+     "count": 1810,
+     "target": "BodySite"
+    },
+    "hasCode": {
+     "kind": "resource",
+     "count": 2087
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 1361,
+     "target": "DataProvider"
+    },
+    "hasEndDateTime": {
+     "kind": "literal",
+     "count": 1361,
+     "datatype": "dateTime"
+    },
+    "hasFractionsNumber": {
+     "kind": "resource",
+     "count": 1361,
+     "target": "Quantity"
+    },
+    "hasIntent": {
+     "kind": "resource",
+     "count": 1361,
+     "target": "Intent"
+    },
+    "hasRadiationQuantity": {
+     "kind": "resource",
+     "count": 1361,
+     "target": "Quantity"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 1361,
+     "target": "SourceSystem"
+    },
+    "hasStartDateTime": {
+     "kind": "literal",
+     "count": 1361,
+     "datatype": "dateTime"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 1361,
+     "target": "SubjectPseudoIdentifier"
+    }
+   }
+  },
+  "ReferenceInterpretationResult": {
+   "instances": 138,
+   "patients": 46,
+   "properties": {
+    "hasCode": {
+     "kind": "resource",
+     "count": 138
+    }
+   }
+  },
+  "ReferenceRange": {
+   "instances": 16374,
+   "patients": 1199,
+   "properties": {
+    "hasLowerLimit": {
+     "kind": "resource",
+     "count": 16374,
+     "target": "Quantity"
+    },
+    "hasUpperLimit": {
+     "kind": "resource",
+     "count": 16374,
+     "target": "Quantity"
+    }
+   }
+  },
+  "ReferenceSequence": {
+   "instances": 1727,
+   "patients": 739,
+   "properties": {
+    "hasCode": {
+     "kind": "resource",
+     "count": 1727,
+     "target": "Code"
+    }
+   }
+  },
+  "ReferenceValue": {
+   "instances": 24312,
+   "patients": 1171,
+   "properties": {
+    "hasQuantity": {
+     "kind": "resource",
+     "count": 24312,
+     "target": "Quantity"
+    }
+   }
+  },
+  "RespiratoryRate": {
+   "instances": 7082,
+   "patients": 657,
+   "properties": {
+    "hasDataDetermination": {
+     "kind": "resource",
+     "count": 7082,
+     "target": "DataDetermination"
+    },
+    "hasDataFile": {
+     "kind": "resource",
+     "count": 7082,
+     "target": "TimeSeriesDataFile"
+    },
+    "hasDateTime": {
+     "kind": "literal",
+     "count": 7082,
+     "datatype": "dateTime"
+    },
+    "hasQuantity": {
+     "kind": "resource",
+     "count": 7082,
+     "target": "Quantity"
+    }
+   }
+  },
+  "RespiratoryRateMeasurement": {
+   "instances": 4948,
+   "patients": 627,
+   "properties": {
+    "hasAdministrativeCase": {
+     "kind": "resource",
+     "count": 4948,
+     "target": "AdministrativeCase"
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 4948,
+     "target": "DataProvider"
+    },
+    "hasEndDateTime": {
+     "kind": "literal",
+     "count": 4948,
+     "datatype": "dateTime"
+    },
+    "hasMedicalDevice": {
+     "kind": "resource",
+     "count": 4948,
+     "target": "MedicalDevice"
+    },
+    "hasMethodCode": {
+     "kind": "resource",
+     "count": 4948
+    },
+    "hasPerformer": {
+     "kind": "resource",
+     "count": 4948,
+     "target": "Performer"
+    },
+    "hasResult": {
+     "kind": "resource",
+     "count": 6882,
+     "target": "RespiratoryRate"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 4948,
+     "target": "SourceSystem"
+    },
+    "hasStartDateTime": {
+     "kind": "literal",
+     "count": 4948,
+     "datatype": "dateTime"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 4948,
+     "target": "SubjectPseudoIdentifier"
+    }
+   }
+  },
+  "Result": {
+   "instances": 270,
+   "patients": 61,
+   "properties": {}
+  },
+  "ResuscitationDirective": {
+   "instances": 312,
+   "patients": 289,
+   "properties": {
+    "hasAdministrativeCase": {
+     "kind": "resource",
+     "count": 312,
+     "target": "AdministrativeCase"
+    },
+    "hasCode": {
+     "kind": "resource",
+     "count": 312
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 312,
+     "target": "DataProvider"
+    },
+    "hasRecordDateTime": {
+     "kind": "literal",
+     "count": 312,
+     "datatype": "dateTime"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 312,
+     "target": "SourceSystem"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 312,
+     "target": "SubjectPseudoIdentifier"
+    }
+   }
+  },
+  "Sample": {
+   "instances": 1979,
+   "patients": 1978,
+   "properties": {
+    "hasAdministrativeCase": {
+     "kind": "resource",
+     "count": 1979,
+     "target": "AdministrativeCase"
+    },
+    "hasBodySite": {
+     "kind": "resource",
+     "count": 1979,
+     "target": "BodySite"
+    },
+    "hasCollectionDateTime": {
+     "kind": "literal",
+     "count": 1979,
+     "datatype": "dateTime"
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 1979,
+     "target": "DataProvider"
+    },
+    "hasFixationType": {
+     "kind": "individual",
+     "count": 1979
+    },
+    "hasIdentifier": {
+     "kind": "literal",
+     "count": 1979,
+     "datatype": "string"
+    },
+    "hasMaterialTypeCode": {
+     "kind": "resource",
+     "count": 2951
+    },
+    "hasPrimaryContainer": {
+     "kind": "individual",
+     "count": 1979
+    },
+    "hasSharedIdentifier": {
+     "kind": "literal",
+     "count": 1979,
+     "datatype": "anyURI"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 1979,
+     "target": "SourceSystem"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 1979,
+     "target": "SubjectPseudoIdentifier"
+    }
+   }
+  },
+  "SampleProcessing": {
+   "instances": 1665,
+   "patients": 1621,
+   "properties": {
+    "hasAdministrativeCase": {
+     "kind": "resource",
+     "count": 1367,
+     "target": "AdministrativeCase"
+    },
+    "hasCode": {
+     "kind": "resource",
+     "count": 1665,
+     "target": "Code"
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 1665,
+     "target": "DataProvider"
+    },
+    "hasInput": {
+     "kind": "resource",
+     "count": 2255,
+     "target": "Isolate"
+    },
+    "hasOutput": {
+     "kind": "resource",
+     "count": 1665,
+     "target": "Sample"
+    },
+    "hasPredecessor": {
+     "kind": "resource",
+     "count": 2068,
+     "target": "SampleProcessing"
+    },
+    "hasQualityControlMetric": {
+     "kind": "resource",
+     "count": 2500,
+     "target": "QualityControlMetric"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 1665,
+     "target": "SourceSystem"
+    },
+    "hasStandardOperatingProcedure": {
+     "kind": "resource",
+     "count": 1665,
+     "target": "StandardOperatingProcedure"
+    },
+    "hasStartDateTime": {
+     "kind": "literal",
+     "count": 1665,
+     "datatype": "dateTime"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 1665,
+     "target": "SubjectPseudoIdentifier"
+    }
+   }
+  },
+  "SequencingAnalysis": {
+   "instances": 682,
+   "patients": 565,
+   "properties": {
+    "hasAdministrativeCase": {
+     "kind": "resource",
+     "count": 600,
+     "target": "AdministrativeCase"
+    },
+    "hasCode": {
+     "kind": "resource",
+     "count": 682
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 682,
+     "target": "DataProvider"
+    },
+    "hasInput": {
+     "kind": "resource",
+     "count": 682,
+     "target": "DataFile"
+    },
+    "hasOutput": {
+     "kind": "resource",
+     "count": 842,
+     "target": "DataFile"
+    },
+    "hasPredecessor": {
+     "kind": "resource",
+     "count": 945,
+     "target": "SequencingAssay"
+    },
+    "hasQualityControlMetric": {
+     "kind": "resource",
+     "count": 1012,
+     "target": "QualityControlMetric"
+    },
+    "hasReferenceSequence": {
+     "kind": "resource",
+     "count": 682,
+     "target": "ReferenceSequence"
+    },
+    "hasSoftware": {
+     "kind": "resource",
+     "count": 682,
+     "target": "Software"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 682,
+     "target": "SourceSystem"
+    },
+    "hasStandardOperatingProcedure": {
+     "kind": "resource",
+     "count": 682,
+     "target": "StandardOperatingProcedure"
+    },
+    "hasStartDateTime": {
+     "kind": "literal",
+     "count": 682,
+     "datatype": "dateTime"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 682,
+     "target": "SubjectPseudoIdentifier"
+    }
+   }
+  },
+  "SequencingAssay": {
+   "instances": 597,
+   "patients": 469,
+   "properties": {
+    "hasAdministrativeCase": {
+     "kind": "resource",
+     "count": 497,
+     "target": "AdministrativeCase"
+    },
+    "hasCode": {
+     "kind": "resource",
+     "count": 597
+    },
+    "hasDataFile": {
+     "kind": "resource",
+     "count": 597,
+     "target": "DataFile"
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 597,
+     "target": "DataProvider"
+    },
+    "hasIdentifier": {
+     "kind": "literal",
+     "count": 597,
+     "datatype": "string"
+    },
+    "hasIntendedReadDepth": {
+     "kind": "resource",
+     "count": 597,
+     "target": "Quantity"
+    },
+    "hasIntendedReadLength": {
+     "kind": "resource",
+     "count": 597,
+     "target": "Quantity"
+    },
+    "hasLibraryPreparation": {
+     "kind": "resource",
+     "count": 597,
+     "target": "LibraryPreparation"
+    },
+    "hasPredecessor": {
+     "kind": "resource",
+     "count": 772,
+     "target": "LibraryPreparation"
+    },
+    "hasSample": {
+     "kind": "resource",
+     "count": 597,
+     "target": "Sample"
+    },
+    "hasSequencingInstrument": {
+     "kind": "resource",
+     "count": 597,
+     "target": "SequencingInstrument"
+    },
+    "hasSequencingRun": {
+     "kind": "resource",
+     "count": 900,
+     "target": "SequencingRun"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 597,
+     "target": "SourceSystem"
+    },
+    "hasStandardOperatingProcedure": {
+     "kind": "resource",
+     "count": 597,
+     "target": "StandardOperatingProcedure"
+    },
+    "hasStartDateTime": {
+     "kind": "literal",
+     "count": 597,
+     "datatype": "dateTime"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 597,
+     "target": "SubjectPseudoIdentifier"
+    }
+   }
+  },
+  "SequencingInstrument": {
+   "instances": 594,
+   "patients": 469,
+   "properties": {
+    "hasCode": {
+     "kind": "resource",
+     "count": 594
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 594,
+     "target": "DataProvider"
+    }
+   }
+  },
+  "SequencingRun": {
+   "instances": 894,
+   "patients": 469,
+   "properties": {
+    "hasAverageInsertSize": {
+     "kind": "resource",
+     "count": 894,
+     "target": "Quantity"
+    },
+    "hasAverageReadLength": {
+     "kind": "resource",
+     "count": 894,
+     "target": "Quantity"
+    },
+    "hasDataFile": {
+     "kind": "resource",
+     "count": 894,
+     "target": "DataFile"
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 894,
+     "target": "DataProvider"
+    },
+    "hasDateTime": {
+     "kind": "literal",
+     "count": 894,
+     "datatype": "dateTime"
+    },
+    "hasIdentifier": {
+     "kind": "literal",
+     "count": 894,
+     "datatype": "string"
+    },
+    "hasMeanReadDepth": {
+     "kind": "resource",
+     "count": 894,
+     "target": "Quantity"
+    },
+    "hasQualityControlMetric": {
+     "kind": "resource",
+     "count": 1277,
+     "target": "QualityControlMetric"
+    },
+    "hasReadCount": {
+     "kind": "resource",
+     "count": 894,
+     "target": "Quantity"
+    }
+   }
+  },
+  "SingleNucleotideVariation": {
+   "instances": 106,
+   "patients": 48,
+   "properties": {
+    "hasAlternateAllele": {
+     "kind": "literal",
+     "count": 106,
+     "datatype": "string"
+    },
+    "hasChromosomalLocation": {
+     "kind": "resource",
+     "count": 106,
+     "target": "ChromosomalLocation"
+    },
+    "hasGenomicPosition": {
+     "kind": "resource",
+     "count": 106,
+     "target": "GenomicPosition"
+    },
+    "hasReferenceAllele": {
+     "kind": "literal",
+     "count": 106,
+     "datatype": "string"
+    }
+   }
+  },
+  "Software": {
+   "instances": 168113,
+   "patients": 2000,
+   "properties": {
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 168113,
+     "target": "DataProvider"
+    },
+    "hasDescription": {
+     "kind": "literal",
+     "count": 168113,
+     "datatype": "string"
+    },
+    "hasName": {
+     "kind": "literal",
+     "count": 168113,
+     "datatype": "string"
+    },
+    "hasUniformResourceLocator": {
+     "kind": "literal",
+     "count": 168113,
+     "datatype": "string"
+    },
+    "hasVersion": {
+     "kind": "literal",
+     "count": 168113,
+     "datatype": "string"
+    }
+   }
+  },
+  "SourceSystem": {
+   "instances": 2000,
+   "patients": 2000,
+   "properties": {
+    "hasCategory": {
+     "kind": "individual",
+     "count": 2000
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 2000,
+     "target": "DataProvider"
+    },
+    "hasName": {
+     "kind": "literal",
+     "count": 2000,
+     "datatype": "string"
+    },
+    "hasPrimarySystem": {
+     "kind": "resource",
+     "count": 2000,
+     "target": "HealthcarePrimaryInformationSystem"
+    },
+    "hasPurpose": {
+     "kind": "individual",
+     "count": 2000
+    }
+   }
+  },
+  "StandardOperatingProcedure": {
+   "instances": 5856,
+   "patients": 1866,
+   "properties": {
+    "hasDataFile": {
+     "kind": "resource",
+     "count": 5856,
+     "target": "DataFile"
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 5856,
+     "target": "DataProvider"
+    },
+    "hasDescription": {
+     "kind": "literal",
+     "count": 5856,
+     "datatype": "string"
+    },
+    "hasName": {
+     "kind": "literal",
+     "count": 5856,
+     "datatype": "string"
+    },
+    "hasVersion": {
+     "kind": "literal",
+     "count": 5856,
+     "datatype": "string"
+    }
+   }
+  },
+  "SubjectPseudoIdentifier": {
+   "instances": 2000,
+   "patients": 2000,
+   "properties": {
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 2000,
+     "target": "DataProvider"
+    },
+    "hasIdentifier": {
+     "kind": "literal",
+     "count": 2000,
+     "datatype": "string"
+    },
+    "hasSharedIdentifier": {
+     "kind": "literal",
+     "count": 2000,
+     "datatype": "anyURI"
+    }
+   }
+  },
+  "Substance": {
+   "instances": 65442,
+   "patients": 1526,
+   "properties": {
+    "hasCode": {
+     "kind": "resource",
+     "count": 65442,
+     "target": "Code"
+    },
+    "hasGenericName": {
+     "kind": "literal",
+     "count": 65442,
+     "datatype": "string"
+    },
+    "hasQuantity": {
+     "kind": "resource",
+     "count": 65442,
+     "target": "Quantity"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 65442,
+     "target": "SourceSystem"
+    }
+   }
+  },
+  "SwissSocioEconomicPosition": {
+   "instances": 2978,
+   "patients": 2000,
+   "properties": {
+    "hasDistance": {
+     "kind": "resource",
+     "count": 2978,
+     "target": "Quantity"
+    },
+    "hasValue": {
+     "kind": "literal",
+     "count": 2978,
+     "datatype": "double"
+    },
+    "hasVersion": {
+     "kind": "literal",
+     "count": 2978,
+     "datatype": "string"
+    }
+   }
+  },
+  "Terminology": {
+   "instances": 21,
+   "patients": 21,
+   "properties": {}
+  },
+  "TherapeuticArea": {
+   "instances": 14401,
+   "patients": 1068,
+   "properties": {
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 14401,
+     "target": "SourceSystem"
+    },
+    "hasSpecialtyName": {
+     "kind": "individual",
+     "count": 14401
+    }
+   }
+  },
+  "TimePattern": {
+   "instances": 19118,
+   "patients": 1332,
+   "properties": {
+    "hasTypeCode": {
+     "kind": "resource",
+     "count": 19118
+    }
+   }
+  },
+  "TimeSeriesDataFile": {
+   "instances": 2000,
+   "patients": 2000,
+   "properties": {
+    "hasCreationDateTime": {
+     "kind": "literal",
+     "count": 2000,
+     "datatype": "dateTime"
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 2000,
+     "target": "DataProvider"
+    },
+    "hasEncoding": {
+     "kind": "individual",
+     "count": 2000
+    },
+    "hasEntryCount": {
+     "kind": "resource",
+     "count": 2000,
+     "target": "Quantity"
+    },
+    "hasFormatCode": {
+     "kind": "resource",
+     "count": 2000
+    },
+    "hasHash": {
+     "kind": "resource",
+     "count": 2000,
+     "target": "Hash"
+    },
+    "hasName": {
+     "kind": "literal",
+     "count": 2000,
+     "datatype": "string"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 2000,
+     "target": "SourceSystem"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 2000,
+     "target": "SubjectPseudoIdentifier"
+    },
+    "hasUniformResourceIdentifier": {
+     "kind": "literal",
+     "count": 2000,
+     "datatype": "string"
+    }
+   }
+  },
+  "TobaccoExposure": {
+   "instances": 1358,
+   "patients": 580,
+   "properties": {
+    "hasAdministrativeCase": {
+     "kind": "resource",
+     "count": 1358,
+     "target": "AdministrativeCase"
+    },
+    "hasAgentCode": {
+     "kind": "resource",
+     "count": 1358
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 1358,
+     "target": "DataProvider"
+    },
+    "hasDegreeCode": {
+     "kind": "resource",
+     "count": 1358
+    },
+    "hasDuration": {
+     "kind": "resource",
+     "count": 1358,
+     "target": "Quantity"
+    },
+    "hasEndDateTime": {
+     "kind": "literal",
+     "count": 1358,
+     "datatype": "dateTime"
+    },
+    "hasQuantity": {
+     "kind": "resource",
+     "count": 1358,
+     "target": "Quantity"
+    },
+    "hasRecordDateTime": {
+     "kind": "literal",
+     "count": 1358,
+     "datatype": "dateTime"
+    },
+    "hasRouteCode": {
+     "kind": "resource",
+     "count": 1975
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 1358,
+     "target": "SourceSystem"
+    },
+    "hasStartDateTime": {
+     "kind": "literal",
+     "count": 1358,
+     "datatype": "dateTime"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 1358,
+     "target": "SubjectPseudoIdentifier"
+    },
+    "hasTypeCode": {
+     "kind": "resource",
+     "count": 1358
+    }
+   }
+  },
+  "Transcript": {
+   "instances": 6513,
+   "patients": 1690,
+   "properties": {
+    "hasCode": {
+     "kind": "resource",
+     "count": 6513,
+     "target": "Code"
+    },
+    "hasOrganism": {
+     "kind": "resource",
+     "count": 6513,
+     "target": "Organism"
+    },
+    "hasProtein": {
+     "kind": "resource",
+     "count": 6513,
+     "target": "Protein"
+    }
+   }
+  },
+  "Transplant": {
+   "instances": 125,
+   "patients": 124,
+   "properties": {
+    "hasCode": {
+     "kind": "resource",
+     "count": 125
+    },
+    "hasGraftTypeCode": {
+     "kind": "resource",
+     "count": 125
+    }
+   }
+  },
+  "TransplantPresence": {
+   "instances": 125,
+   "patients": 124,
+   "properties": {
+    "hasAdministrativeCase": {
+     "kind": "resource",
+     "count": 125,
+     "target": "AdministrativeCase"
+    },
+    "hasBodySite": {
+     "kind": "resource",
+     "count": 125,
+     "target": "BodySite"
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 125,
+     "target": "DataProvider"
+    },
+    "hasEndDateTime": {
+     "kind": "literal",
+     "count": 125,
+     "datatype": "dateTime"
+    },
+    "hasRecordDateTime": {
+     "kind": "literal",
+     "count": 125,
+     "datatype": "dateTime"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 125,
+     "target": "SourceSystem"
+    },
+    "hasStartDateTime": {
+     "kind": "literal",
+     "count": 125,
+     "datatype": "dateTime"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 125,
+     "target": "SubjectPseudoIdentifier"
+    },
+    "hasTransplant": {
+     "kind": "resource",
+     "count": 125,
+     "target": "Transplant"
+    }
+   }
+  },
+  "TumorGradeAssessment": {
+   "instances": 1100,
+   "patients": 336,
+   "properties": {
+    "hasCode": {
+     "kind": "resource",
+     "count": 1100
+    },
+    "hasComponent": {
+     "kind": "resource",
+     "count": 1604,
+     "target": "AssessmentComponent"
+    },
+    "hasName": {
+     "kind": "literal",
+     "count": 1100,
+     "datatype": "string"
+    },
+    "hasResult": {
+     "kind": "resource",
+     "count": 1100,
+     "target": "TumorGradeAssessmentResult"
+    }
+   }
+  },
+  "TumorGradeAssessmentEvent": {
+   "instances": 398,
+   "patients": 207,
+   "properties": {
+    "hasAdministrativeCase": {
+     "kind": "resource",
+     "count": 398,
+     "target": "AdministrativeCase"
+    },
+    "hasAssessment": {
+     "kind": "resource",
+     "count": 398,
+     "target": "TumorGradeAssessment"
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 398,
+     "target": "DataProvider"
+    },
+    "hasDateTime": {
+     "kind": "literal",
+     "count": 398,
+     "datatype": "dateTime"
+    },
+    "hasPerformer": {
+     "kind": "resource",
+     "count": 398,
+     "target": "Performer"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 398,
+     "target": "SourceSystem"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 398,
+     "target": "SubjectPseudoIdentifier"
+    }
+   }
+  },
+  "TumorGradeAssessmentResult": {
+   "instances": 1200,
+   "patients": 374,
+   "properties": {
+    "hasCode": {
+     "kind": "resource",
+     "count": 1200
+    },
+    "hasQuantity": {
+     "kind": "resource",
+     "count": 1200,
+     "target": "Quantity"
+    },
+    "hasStringValue": {
+     "kind": "literal",
+     "count": 1200,
+     "datatype": "string"
+    }
+   }
+  },
+  "TumorSpecimen": {
+   "instances": 1876,
+   "patients": 1606,
+   "properties": {
+    "hasAdministrativeCase": {
+     "kind": "resource",
+     "count": 1876,
+     "target": "AdministrativeCase"
+    },
+    "hasBodySite": {
+     "kind": "resource",
+     "count": 1876,
+     "target": "BodySite"
+    },
+    "hasCollectionDateTime": {
+     "kind": "literal",
+     "count": 1876,
+     "datatype": "dateTime"
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 1876,
+     "target": "DataProvider"
+    },
+    "hasFixationType": {
+     "kind": "individual",
+     "count": 1876
+    },
+    "hasIdentifier": {
+     "kind": "literal",
+     "count": 1876,
+     "datatype": "string"
+    },
+    "hasMaterialTypeCode": {
+     "kind": "resource",
+     "count": 2822
+    },
+    "hasPrimaryContainer": {
+     "kind": "individual",
+     "count": 1876
+    },
+    "hasSharedIdentifier": {
+     "kind": "literal",
+     "count": 1876,
+     "datatype": "anyURI"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 1876,
+     "target": "SourceSystem"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 1876,
+     "target": "SubjectPseudoIdentifier"
+    },
+    "hasTumorPurity": {
+     "kind": "resource",
+     "count": 1876,
+     "target": "Quantity"
+    }
+   }
+  },
+  "TumorStageAssessment": {
+   "instances": 1093,
+   "patients": 360,
+   "properties": {
+    "hasCode": {
+     "kind": "resource",
+     "count": 1093
+    },
+    "hasComponent": {
+     "kind": "resource",
+     "count": 1645,
+     "target": "AssessmentComponent"
+    },
+    "hasName": {
+     "kind": "literal",
+     "count": 1093,
+     "datatype": "string"
+    },
+    "hasResult": {
+     "kind": "resource",
+     "count": 1093,
+     "target": "TumorStageAssessmentResult"
+    }
+   }
+  },
+  "TumorStageAssessmentEvent": {
+   "instances": 341,
+   "patients": 191,
+   "properties": {
+    "hasAdministrativeCase": {
+     "kind": "resource",
+     "count": 341,
+     "target": "AdministrativeCase"
+    },
+    "hasAssessment": {
+     "kind": "resource",
+     "count": 341,
+     "target": "TumorStageAssessment"
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 341,
+     "target": "DataProvider"
+    },
+    "hasDateTime": {
+     "kind": "literal",
+     "count": 341,
+     "datatype": "dateTime"
+    },
+    "hasPerformer": {
+     "kind": "resource",
+     "count": 341,
+     "target": "Performer"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 341,
+     "target": "SourceSystem"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 341,
+     "target": "SubjectPseudoIdentifier"
+    }
+   }
+  },
+  "TumorStageAssessmentResult": {
+   "instances": 1164,
+   "patients": 389,
+   "properties": {
+    "hasCode": {
+     "kind": "resource",
+     "count": 1164
+    },
+    "hasQuantity": {
+     "kind": "resource",
+     "count": 1164,
+     "target": "Quantity"
+    },
+    "hasStringValue": {
+     "kind": "literal",
+     "count": 1164,
+     "datatype": "string"
+    }
+   }
+  },
+  "Unit": {
+   "instances": 380659,
+   "patients": 2000,
+   "properties": {
+    "hasCode": {
+     "kind": "resource",
+     "count": 380659
+    }
+   }
+  },
+  "VariantDescriptor": {
+   "instances": 1058,
+   "patients": 299,
+   "properties": {
+    "hasAdministrativeCase": {
+     "kind": "resource",
+     "count": 987,
+     "target": "AdministrativeCase"
+    },
+    "hasAlleleOriginCode": {
+     "kind": "resource",
+     "count": 1058
+    },
+    "hasCode": {
+     "kind": "resource",
+     "count": 1058,
+     "target": "Code"
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 1058,
+     "target": "DataProvider"
+    },
+    "hasGene": {
+     "kind": "resource",
+     "count": 1058,
+     "target": "Gene"
+    },
+    "hasGeneticVariation": {
+     "kind": "resource",
+     "count": 1058,
+     "target": "SingleNucleotideVariation"
+    },
+    "hasNotation": {
+     "kind": "resource",
+     "count": 1058,
+     "target": "VariantNotation"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 1058,
+     "target": "SourceSystem"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 1058,
+     "target": "SubjectPseudoIdentifier"
+    },
+    "hasTypeCode": {
+     "kind": "resource",
+     "count": 1058
+    },
+    "hasZygosityCode": {
+     "kind": "resource",
+     "count": 1058
+    }
+   }
+  },
+  "VariantNotation": {
+   "instances": 1058,
+   "patients": 299,
+   "properties": {
+    "hasCodingSystemAndVersion": {
+     "kind": "literal",
+     "count": 1058,
+     "datatype": "string"
+    },
+    "hasValue": {
+     "kind": "literal",
+     "count": 1058,
+     "datatype": "double"
+    }
+   }
+  },
+  "VitalStatus": {
+   "instances": 734,
+   "patients": 506,
+   "properties": {
+    "hasCode": {
+     "kind": "resource",
+     "count": 734
+    },
+    "hasDataProvider": {
+     "kind": "resource",
+     "count": 734,
+     "target": "DataProvider"
+    },
+    "hasDeath": {
+     "kind": "resource",
+     "count": 734,
+     "target": "Death"
+    },
+    "hasSourceSystem": {
+     "kind": "resource",
+     "count": 734,
+     "target": "SourceSystem"
+    },
+    "hasSubjectPseudoIdentifier": {
+     "kind": "resource",
+     "count": 734,
+     "target": "SubjectPseudoIdentifier"
+    }
+   }
+  }
+ },
+ "schema_terms": [
+  "AccessDevice",
+  "AccessDevicePresence",
+  "AdministrativeCase",
+  "AdministrativeSex",
+  "Admission",
+  "AdverseEvent",
+  "AdverseEvent_consequences",
+  "AdverseEvent_outcome",
+  "Age",
+  "Algorithm",
+  "Allergen",
+  "Allergy",
+  "AllergyEpisode",
+  "AnatomicalProjection",
+  "AntimicrobialSusceptibilityLabTest",
+  "AntimicrobialSusceptibilityLabTestEvent",
+  "AntimicrobialSusceptibilityResult",
+  "Assay",
+  "Assessment",
+  "AssessmentComponent",
+  "AssessmentEvent",
+  "AssessmentResult",
+  "BilledDiagnosis",
+  "BilledProcedure",
+  "Biobanksample",
+  "Birth",
+  "BirthDate",
+  "BloodPressure",
+  "BloodPressureMeasurement",
+  "BodyHeight",
+  "BodyHeightMeasurement",
+  "BodyMassIndex",
+  "BodyPosition",
+  "BodySite",
+  "BodySurfaceArea",
+  "BodySurfaceArea_calculationMethod",
+  "BodyTemperature",
+  "BodyTemperatureMeasurement",
+  "BodyWeight",
+  "BodyWeightMeasurement",
+  "CardiacIndex",
+  "CardiacOutput",
+  "CardiacOutputMeasurement",
+  "CardiacSynchronization",
+  "CardiacSynchronization_method",
+  "CardiacSynchronization_signalSource",
+  "CareHandling",
+  "ChromosomalLocation",
+  "Chromosome",
+  "Circumference",
+  "CircumferenceMeasurement",
+  "CivilStatus",
+  "ClinicalTrialStudy",
+  "Code",
+  "Comparator",
+  "ComputedTomographyImagingFrame",
+  "ComputedTomographyImagingSeries",
+  "Consent",
+  "ContrastAgent",
+  "ContrastAgentActiveIngredient",
+  "ContrastAgentAdministrationEvent",
+  "ContrastAgentPhase",
+  "CopyNumberVariation",
+  "Country",
+  "DataCompressionAlgorithm",
+  "DataCompressionAlgorithm_method",
+  "DataCompressionAlgorithm_type",
+  "DataDetermination",
+  "DataFile",
+  "DataFile_encoding",
+  "DataProcessing",
+  "DataProvider",
+  "DataProvider_category",
+  "DataRelease",
+  "Death",
+  "DeathDate",
+  "Department",
+  "Deprecated",
+  "Diagnosis",
+  "Discharge",
+  "Drug",
+  "DrugAdministrationEvent",
+  "DrugArticle",
+  "DrugPrescription",
+  "DrugPrescriptionEvent",
+  "Electrocardiogram",
+  "ElectrocardiographicProcedure",
+  "ExcludedDisorder",
+  "Exposure",
+  "FlowProfileInterval",
+  "FluidBalance",
+  "FluidInputOutput",
+  "FollowUp",
+  "FractionOfInspiredOxygen",
+  "Gene",
+  "GeneFusion",
+  "GenePanel",
+  "GenomicDeletion",
+  "GenomicDelins",
+  "GenomicDuplication",
+  "GenomicInsertion",
+  "GenomicInversion",
+  "GenomicPosition",
+  "GenomicPosition_coordinateConvention",
+  "GenomicTranslocation",
+  "GenomicTransposition",
+  "GenomicVariation",
+  "GestationalAgeAtBirth",
+  "Hash",
+  "Hash_algorithm",
+  "HealthcareEncounter",
+  "HealthcarePrimaryInformationSystem",
+  "HeartRate",
+  "HeartRateMeasurement",
+  "HomeAddress",
+  "ImageDimensions",
+  "ImagingDevice",
+  "ImagingFrame",
+  "ImagingFrame_contentQualification",
+  "ImagingFrame_type",
+  "ImagingMetric",
+  "ImagingProcedure",
+  "ImagingSeries",
+  "Implant",
+  "ImplantPresence",
+  "InsuranceStatus",
+  "InsuranceStatus_coverageType",
+  "Intent",
+  "Interpretation",
+  "Isolate",
+  "LabAnalyzer",
+  "LabResult",
+  "LabTest",
+  "LabTestEvent",
+  "Laterality",
+  "LibraryPreparation",
+  "Location",
+  "MagneticResonanceImagingFrame",
+  "MagneticResonanceImagingSeries",
+  "Measurement",
+  "MedicalDevice",
+  "MedicalProcedure",
+  "MicrobiologyBiomoleculePresenceLabTest",
+  "MicrobiologyBiomoleculePresenceLabTestEvent",
+  "MicrobiologyBiomoleculePresenceResult",
+  "MicrobiologyMicroscopyLabTest",
+  "MicrobiologyMicroscopyLabTestEvent",
+  "MicrobiologyMicroscopyResult",
+  "MicrobiologyMicroscopyResult_cellOrganization",
+  "MicroorganismIdentificationLabTest",
+  "MicroorganismIdentificationLabTestEvent",
+  "MicroorganismIdentificationResult",
+  "Nationality",
+  "NucleotideSequence",
+  "NursingDiagnosis",
+  "NutritionIntakeEvent",
+  "NutritionalProduct",
+  "OncologyDiagnosis",
+  "OncologySurgery",
+  "OrganSupport",
+  "Organism",
+  "OxygenAdministrationEvent",
+  "OxygenSaturation",
+  "OxygenSaturationMeasurement",
+  "Performer",
+  "PharmaceuticalDoseForm",
+  "PhysiologicState",
+  "PixelDimensions",
+  "PositronEmissionTomographyImagingFrame",
+  "PositronEmissionTomographyImagingSeries",
+  "ProblemCondition",
+  "Protein",
+  "QualityControlMetric",
+  "Quantity",
+  "Radioactivity",
+  "Radionuclide",
+  "Radiopharmaceutical",
+  "RadiopharmaceuticalAdministrationEvent",
+  "RadiotherapyProcedure",
+  "Range",
+  "ReferenceInterpretation",
+  "ReferenceInterpretationResult",
+  "ReferenceRange",
+  "ReferenceSequence",
+  "ReferenceValue",
+  "RespiratoryRate",
+  "RespiratoryRateMeasurement",
+  "RespiratorySynchronization",
+  "RespiratorySynchronization_method",
+  "RespiratorySynchronization_signalSource",
+  "Result",
+  "ResuscitationDirective",
+  "SPHNAttributeDatatype",
+  "SPHNAttributeObject",
+  "SPHNConcept",
+  "Sample",
+  "SampleProcessing",
+  "Sample_fixationType",
+  "Sample_primaryContainer",
+  "SemanticMapping",
+  "SemanticMapping_purpose",
+  "SequencingAnalysis",
+  "SequencingAssay",
+  "SequencingInstrument",
+  "SequencingRun",
+  "SingleNucleotideVariation",
+  "Software",
+  "SourceData",
+  "SourceSystem",
+  "SourceSystem_category",
+  "SourceSystem_purpose",
+  "StandardOperatingProcedure",
+  "SubjectPseudoIdentifier",
+  "Substance",
+  "SwissSocioEconomicPosition",
+  "Synchronization",
+  "Synchronization_method",
+  "Synchronization_signalSource",
+  "Terminology",
+  "TherapeuticArea",
+  "TherapeuticArea_specialtyName",
+  "TimePattern",
+  "TimeSeriesDataFile",
+  "TobaccoExposure",
+  "Transcript",
+  "Transplant",
+  "TransplantPresence",
+  "TumorGradeAssessment",
+  "TumorGradeAssessmentEvent",
+  "TumorGradeAssessmentResult",
+  "TumorSpecimen",
+  "TumorStageAssessment",
+  "TumorStageAssessmentEvent",
+  "TumorStageAssessmentResult",
+  "Unit",
+  "ValueSet",
+  "VariantDescriptor",
+  "VariantNotation",
+  "VitalStatus",
+  "XRayImagingFrame",
+  "XRayImagingSeries",
+  "hasAcquisitionCode",
+  "hasActiveIngredient",
+  "hasAdministrationRouteCode",
+  "hasAdministrativeCase",
+  "hasAdmission",
+  "hasAgentCode",
+  "hasAlgorithm",
+  "hasAlleleOriginCode",
+  "hasAllergen",
+  "hasAlternateAllele",
+  "hasAnatomicalProjection",
+  "hasArticle",
+  "hasAssessment",
+  "hasAssociatedCountry",
+  "hasAssociatedEvent",
+  "hasAverageInsertSize",
+  "hasAverageReadLength",
+  "hasBiobankName",
+  "hasBodyPosition",
+  "hasBodySite",
+  "hasBreakpoint",
+  "hasCalculationMethod",
+  "hasCardiacProceduralStateCode",
+  "hasCareHandling",
+  "hasCategory",
+  "hasCellCountEstimateCode",
+  "hasCellMorphologyCode",
+  "hasCellOrganization",
+  "hasCertaintyCode",
+  "hasChemicalAgent",
+  "hasChromosome",
+  "hasCircumstanceCode",
+  "hasCode",
+  "hasCodingSystemAndVersion",
+  "hasCollectionDateTime",
+  "hasColumnSpacing",
+  "hasComparator",
+  "hasComponent",
+  "hasConcentration",
+  "hasConditionCode",
+  "hasConsequences",
+  "hasContentQualification",
+  "hasContrastAgentAdministrationEvent",
+  "hasContrastAgentPhase",
+  "hasCoordinateConvention",
+  "hasCountry",
+  "hasCoverageType",
+  "hasCreationDateTime",
+  "hasCurrentLocation",
+  "hasDataDetermination",
+  "hasDataFile",
+  "hasDataProvider",
+  "hasDate",
+  "hasDateTime",
+  "hasDay",
+  "hasDeath",
+  "hasDegreeCode",
+  "hasDeletedSequence",
+  "hasDeletionBreakpoint",
+  "hasDeliveryModeCode",
+  "hasDepartment",
+  "hasDerivedSequence",
+  "hasDescription",
+  "hasDeterminationDateTime",
+  "hasDiastolicPressure",
+  "hasDischarge",
+  "hasDistance",
+  "hasDrug",
+  "hasDrugPrescription",
+  "hasDuration",
+  "hasEncoding",
+  "hasEnd",
+  "hasEndCytobandCode",
+  "hasEndDateTime",
+  "hasEnergyQuantity",
+  "hasEntryCount",
+  "hasEventDateTime",
+  "hasExact",
+  "hasExposure",
+  "hasExtractionDateTime",
+  "hasFeatureLocation",
+  "hasFindingCode",
+  "hasFirstRecordDateTime",
+  "hasFixationType",
+  "hasFlowProfileInterval",
+  "hasFlowRate",
+  "hasFluidInputOutput",
+  "hasFocusGene",
+  "hasFormatCode",
+  "hasFractionOfInspiredOxygen",
+  "hasFractionsNumber",
+  "hasFrequency",
+  "hasGene",
+  "hasGenePanel",
+  "hasGenericName",
+  "hasGenomicPosition",
+  "hasGenomicVariation",
+  "hasGestationalAge",
+  "hasGraftTypeCode",
+  "hasGroupSize",
+  "hasHalfLife",
+  "hasHash",
+  "hasIdentifier",
+  "hasImageDimensions",
+  "hasImagingFrame",
+  "hasImagingMetric",
+  "hasImagingModalityCode",
+  "hasImagingProcedure",
+  "hasImagingSeries",
+  "hasInactiveIngredient",
+  "hasIncidenceDateTime",
+  "hasIndicationToStart",
+  "hasInput",
+  "hasInsertedSequence",
+  "hasInsertionBreakpoint",
+  "hasInsertionPoint",
+  "hasInstitutionCode",
+  "hasInstrument",
+  "hasIntendedInsertSize",
+  "hasIntendedReadDepth",
+  "hasIntendedReadLength",
+  "hasIntent",
+  "hasIntervention",
+  "hasKitCode",
+  "hasLabTest",
+  "hasLastReactionDateTime",
+  "hasLaterality",
+  "hasLibraryPreparation",
+  "hasLiteralSequence",
+  "hasLocalization",
+  "hasLocation",
+  "hasLowerLimit",
+  "hasManifestationCode",
+  "hasManufacturedDoseForm",
+  "hasManufacturerName",
+  "hasMaterialTypeCode",
+  "hasMeanPressure",
+  "hasMeanReadDepth",
+  "hasMedicalDevice",
+  "hasMethod",
+  "hasMethodCode",
+  "hasModeCode",
+  "hasModelName",
+  "hasModifierCode",
+  "hasMonth",
+  "hasName",
+  "hasNotation",
+  "hasNucleotideSequence",
+  "hasNumberOfColumns",
+  "hasNumberOfFrames",
+  "hasNumberOfLeads",
+  "hasNumberOfRows",
+  "hasNumberOfSlices",
+  "hasNumericalReference",
+  "hasOffset",
+  "hasOnsetDateTime",
+  "hasOrganism",
+  "hasOriginLocation",
+  "hasOutcome",
+  "hasOutput",
+  "hasOutputCode",
+  "hasPerformer",
+  "hasPixelDimensions",
+  "hasPositronFraction",
+  "hasPredecessor",
+  "hasPresenceCode",
+  "hasPrimaryContainer",
+  "hasPrimarySystem",
+  "hasProduct",
+  "hasProductCode",
+  "hasProtein",
+  "hasProtocolName",
+  "hasPurpose",
+  "hasQualityControlMetric",
+  "hasQuantity",
+  "hasQuantityEstimateCode",
+  "hasRadiationQuantity",
+  "hasRadioactivity",
+  "hasRadionuclide",
+  "hasRadiopharmaceuticalAdministrationEvent",
+  "hasRange",
+  "hasRankCode",
+  "hasRatio",
+  "hasReactionTypeCode",
+  "hasReadCount",
+  "hasReasonToStopCode",
+  "hasRecordDateTime",
+  "hasReferenceAllele",
+  "hasReferenceSequence",
+  "hasRegularityCode",
+  "hasRegulatoryFeatureCode",
+  "hasRelativeTemporalityCode",
+  "hasReportDateTime",
+  "hasRestingPoint",
+  "hasResult",
+  "hasRouteCode",
+  "hasRowSpacing",
+  "hasSample",
+  "hasSequenceLength",
+  "hasSequencingInstrument",
+  "hasSequencingRun",
+  "hasSeverityCode",
+  "hasSharedIdentifier",
+  "hasSignalSource",
+  "hasSliceSpacing",
+  "hasSliceThickness",
+  "hasSoftware",
+  "hasSourceData",
+  "hasSourceSystem",
+  "hasSpecialtyName",
+  "hasStainingMethodCode",
+  "hasStainingResultCode",
+  "hasStandardGuideline",
+  "hasStandardOperatingProcedure",
+  "hasStart",
+  "hasStartCytobandCode",
+  "hasStartDateTime",
+  "hasStatusCode",
+  "hasStringValue",
+  "hasSubjectAdministrativeSex",
+  "hasSubjectAge",
+  "hasSubjectBodyHeight",
+  "hasSubjectBodyMassIndex",
+  "hasSubjectBodyWeight",
+  "hasSubjectPhysiologicState",
+  "hasSubjectPregnancyStatusCode",
+  "hasSubjectPseudoIdentifier",
+  "hasSubstance",
+  "hasSwissSocioEconomicPosition",
+  "hasSynchronization",
+  "hasSystolicPressure",
+  "hasTargetEnrichmentKitCode",
+  "hasTargetLocation",
+  "hasTargetMolecule",
+  "hasTemplateIdentifier",
+  "hasTestKit",
+  "hasTherapeuticArea",
+  "hasTime",
+  "hasTimeOfDayCode",
+  "hasTimePattern",
+  "hasTimeToPositivity",
+  "hasTimingCode",
+  "hasTotalCopyNumber",
+  "hasTranscript",
+  "hasTransplant",
+  "hasTumorPurity",
+  "hasType",
+  "hasTypeCode",
+  "hasUniformResourceIdentifier",
+  "hasUniformResourceLocator",
+  "hasUnit",
+  "hasUpperLimit",
+  "hasValue",
+  "hasVerificationStatusCode",
+  "hasVersion",
+  "hasVolume",
+  "hasVolumePercentage",
+  "hasVolumetricFlowRate",
+  "hasYear",
+  "hasZygosityCode"
+ ]
+}
