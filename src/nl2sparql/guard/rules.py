@@ -121,12 +121,13 @@ def _projection(parsed: ParsedQuery, facts: QueryFacts) -> list[Violation]:
         names = ", ".join(f"?{v}" for v in projected)
         return [Violation("R2", f"The query returns individual rows ({names}) instead of aggregated results.")]
     group_vars = {expr for expr in group_exprs if isinstance(expr, Variable)}
+    exposed = _exposed_group_keys(projected, extends, facts, group_vars)
     found: list[Violation] = []
     for expr in group_exprs:
         level = expression_sensitivity(expr, facts)
         label = f"?{expr}" if isinstance(expr, Variable) else "an expression"
         if level >= Sensitivity.INSTANCE:
-            rule = "R5" if expr in projected else "R2"
+            rule = "R5" if expr in exposed else "R2"
             found.append(Violation(rule, f"Grouping by {label} returns one row per patient or record."))
         elif level is Sensitivity.TIMESTAMP:
             found.append(Violation("R2", f"Grouping by the exact timestamp {label} singles out individual records."))
@@ -138,6 +139,17 @@ def _projection(parsed: ParsedQuery, facts: QueryFacts) -> list[Violation]:
             continue
         found += _expression_violations(variable, expr, facts, group_vars)
     return found
+
+
+def _exposed_group_keys(projected, extends, facts: QueryFacts, group_vars: set) -> set:
+    """Group keys whose values reach the output, directly or wrapped (e.g. STR(?g))."""
+    exposed = {variable for variable in projected if variable in group_vars}
+    for variable in projected:
+        for used in _variables_in(extends.get(variable)):
+            aggregate = facts.aggregates.get(used)
+            if aggregate is not None and aggregate.name == "Aggregate_Sample" and aggregate.vars in group_vars:
+                exposed.add(aggregate.vars)
+    return exposed
 
 
 def _expression_violations(variable, expr, facts: QueryFacts, group_vars: set) -> list[Violation]:
