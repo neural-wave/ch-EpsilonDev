@@ -131,7 +131,7 @@ The parser library has quirks we hit and handled:
 ## 8. Backlog for module D (most useful first)
 
 1. **Look at the three possible false alarms in the corpus.** #07 especially; #01 and #08 point to judge rules that would have caught the invalid SPARQL.
-2. **Cut retries.** 32% of LLM requests use the retry. Add judge style rules: inference on code patterns, `COUNT(DISTINCT ?g)`, standard prefixes. Find which judge errors trigger most retries (`logs/requests.jsonl` on the run machine).
+2. **Cut retries.** 32% of LLM requests use the retry. The judge now flags missing inference on explicit ICD-10-GM/CHOP code patterns and non-distinct `COUNT(?g)` patient counts; missing standard prefixes are repaired automatically. Find which judge errors still trigger most retries (`logs/requests.jsonl` on the run machine).
 3. **Catch Virtuoso-only errors statically.** Two LLM queries passed our parser but failed in Virtuoso, for example with `NULL` or a `GRAPH` nested inside `GRAPH`. We may not ask the database at runtime.
 4. **More trap tests:**
    - identifiers smuggled through `CONCAT`, `SUBSTR` or `STR(?record)`;

@@ -72,3 +72,24 @@ def test_judge_fixes_prefixes_and_flags_terms_missing_from_the_data():
     wrong = judge.check("SELECT (COUNT(DISTINCT ?g) AS ?n) WHERE { GRAPH ?g { ?d sphn:hasRankCode ?r } }")
     assert wrong.errors == ["sphn:hasRankCode does not occur in the data. Did you mean sphn:hasRank?"]
     assert judge.check("SELECT ?x WHERE {").errors[0].startswith("Syntax error")
+
+
+def test_judge_flags_missing_terminology_inference():
+    judge = Judge(SchemaCards.load(DATA_DIR / "schema_cards.json"))
+    result = judge.check(
+        "SELECT (COUNT(DISTINCT ?g) AS ?n) WHERE { "
+        "GRAPH ?g { ?dx a sphn:BilledDiagnosis ; sphn:hasCode ?code . "
+        "?code a icd-10-gm:E11 } }"
+    )
+    assert result.errors == [
+        "Code type patterns using icd-10-gm or chop must include OPTION (inference "
+        '"https://biomedit.ch/rdf/sphn-resource/global").'
+    ]
+
+
+def test_judge_flags_non_distinct_patient_graph_count():
+    judge = Judge(SchemaCards.load(DATA_DIR / "schema_cards.json"))
+    result = judge.check(
+        "SELECT (COUNT(?g) AS ?patients) WHERE { GRAPH ?g { ?dx a sphn:BilledDiagnosis } }"
+    )
+    assert result.errors == ["COUNT(?g) counts graph bindings, not patients; use COUNT(DISTINCT ?g)."]
