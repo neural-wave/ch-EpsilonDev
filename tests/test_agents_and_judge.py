@@ -49,6 +49,14 @@ def test_llm_intent_agent_parses_json_and_counts_tokens():
     assert seen[0]["model"] == "small-model" and seen[0]["response_format"] == {"type": "json_object"}
 
 
+def test_llm_client_merges_extra_body():
+    seen = []
+    client = LLMClient("http://gpu/v1", transport=fake_server("{}", seen),
+                       extra_body={"chat_template_kwargs": {"enable_thinking": False}})
+    run(LLMIntentAgent(client, "m").classify("hi"))
+    assert seen[0]["chat_template_kwargs"] == {"enable_thinking": False} and seen[0]["model"] == "m"
+
+
 def test_llm_query_agent_extracts_sparql_from_a_fenced_answer():
     seen = []
     agent = LLMQueryAgent(LLMClient("http://gpu/v1", transport=fake_server("Here:\n```sparql\nSELECT ?x WHERE { ?x ?p ?o }\n```", seen)), "coder")

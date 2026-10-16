@@ -18,15 +18,19 @@ class LLMReply:
 
 class LLMClient:
     def __init__(self, base_url: str, api_key: str = "not-needed", timeout: float = 30.0,
-                 transport: httpx.AsyncBaseTransport | None = None, verify_tls: bool = True):
+                 transport: httpx.AsyncBaseTransport | None = None, verify_tls: bool = True,
+                 extra_body: dict | None = None):
         self.base_url = base_url.rstrip("/")
         self.headers = {"Authorization": f"Bearer {api_key}"}
         self.timeout = timeout
         self.transport = transport
         self.verify_tls = verify_tls  # False for servers with a self-signed certificate (Vast.ai templates)
+        # Extra request fields, e.g. {"chat_template_kwargs": {"enable_thinking": false}} for Qwen3.x:
+        # with thinking on, the model can spend its whole token budget reasoning and return nothing.
+        self.extra_body = extra_body or {}
 
     async def chat(self, model: str, messages: list[dict], max_tokens: int = 800, json_mode: bool = False) -> LLMReply:
-        body = {"model": model, "messages": messages, "temperature": 0, "max_tokens": max_tokens}
+        body = {**self.extra_body, "model": model, "messages": messages, "temperature": 0, "max_tokens": max_tokens}
         if json_mode:
             body["response_format"] = {"type": "json_object"}
         try:

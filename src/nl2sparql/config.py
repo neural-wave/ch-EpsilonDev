@@ -1,6 +1,7 @@
 """Settings read from environment variables (see .env.example)."""
 from __future__ import annotations
 
+import json
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -13,6 +14,19 @@ def _path(name: str, default: Path) -> Path:
     return Path(value) if value else default
 
 
+def _json_object(name: str) -> dict:
+    value = os.environ.get(name, "").strip()
+    if not value:
+        return {}
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError as error:
+        raise ValueError(f"{name} must be a JSON object, e.g. '{{\"chat_template_kwargs\": {{\"enable_thinking\": false}}}}'") from error
+    if not isinstance(parsed, dict):
+        raise ValueError(f"{name} must be a JSON object.")
+    return parsed
+
+
 @dataclass(frozen=True)
 class Settings:
     backend: str = "stub"  # "stub" or "llm"
@@ -22,6 +36,7 @@ class Settings:
     llm_intent_model: str = ""
     llm_timeout_seconds: float = 30.0
     llm_verify_tls: bool = True  # set LLM_VERIFY_TLS=false for self-signed certificates (Vast.ai)
+    llm_extra_body: dict = field(default_factory=dict)  # LLM_EXTRA_BODY, JSON merged into every request
     virtuoso_endpoint: str = "http://localhost:8890/sparql"
     max_input_chars: int = 2000
     max_retries: int = 1
@@ -44,6 +59,7 @@ class Settings:
             llm_intent_model=env.get("LLM_INTENT_MODEL", "") or query_model,
             llm_timeout_seconds=float(env.get("LLM_TIMEOUT_SECONDS", cls.llm_timeout_seconds)),
             llm_verify_tls=env.get("LLM_VERIFY_TLS", "true").strip().lower() not in ("0", "false", "no"),
+            llm_extra_body=_json_object("LLM_EXTRA_BODY"),
             virtuoso_endpoint=env.get("VIRTUOSO_ENDPOINT", cls.virtuoso_endpoint),
             max_input_chars=int(env.get("MAX_INPUT_CHARS", cls.max_input_chars)),
             max_retries=int(env.get("MAX_RETRIES", cls.max_retries)),
