@@ -7,7 +7,10 @@ from conftest import DATA_DIR, load_examples
 from nl2sparql.api import create_app
 from nl2sparql.config import Settings
 from nl2sparql.factory import build_pipeline
+from nl2sparql.agents.intent_llm import IntentReply
+from nl2sparql.agents.query_llm import QueryReply
 from nl2sparql.models import IntentFlags
+from nl2sparql.orchestrator import CUT_OFF_FEEDBACK
 
 EXAMPLES = {e["id"]: e["sparql"] for e in load_examples()}
 
@@ -35,6 +38,26 @@ class FixedIntentAgent:
     async def classify(self, text):
         await asyncio.sleep(0)
         return self.flags, 10
+
+
+class DetailedQueryAgent(ScriptedQueryAgent):
+    """Like an LLM query agent: also says whether each answer was cut off at max_tokens."""
+
+    def __init__(self, *replies):
+        super().__init__(*(sparql for sparql, _ in replies))
+        self.finish_reasons = [finish for _, finish in replies]
+
+    async def generate_detailed(self, text, context, feedback=None):
+        sparql, used = await self.generate(text, context, feedback)
+        return QueryReply(sparql, used, sparql, self.finish_reasons.pop(0))
+
+
+class BrokenJsonIntentAgent:
+    async def classify(self, text):
+        return (await self.classify_detailed(text)).flags, 10
+
+    async def classify_detailed(self, text):
+        return IntentReply(IntentFlags(), 10, '{"asks_for', False, "length")
 
 
 def pipeline_with(query_agent, intent_agent=None):
@@ -75,6 +98,27 @@ def test_judge_error_uses_the_retry():
     assert result.diagnostics["retry_reason"] == "judge"
     assert result.diagnostics["judge_errors_first_try"][0].startswith("Syntax error")
     assert result.tokens_consumed == sum(result.tokens_by_step.values())
+
+
+def test_cut_off_answer_is_recorded_and_the_retry_is_told_to_be_shorter():
+    agent = DetailedQueryAgent(("```sparql\nSELECT ?x WHERE {", "length"), (EXAMPLES["official-03"], "stop"))
+    result = asyncio.run(pipeline_with(agent).run("Cholera by sex?"))
+    assert result.is_compliant and result.retries == 1
+    assert agent.feedback[1].startswith(CUT_OFF_FEEDBACK) and "Syntax error" in agent.feedback[1]
+    assert result.diagnostics["cut_off"] == ["query"] and result.diagnostics["retry_reason"] == "judge"
+
+
+def test_retry_after_a_complete_answer_gets_no_cut_off_note():
+    agent = DetailedQueryAgent(("SELECT ?x WHERE {", "stop"), (EXAMPLES["official-03"], "stop"))
+    result = asyncio.run(pipeline_with(agent).run("Cholera by sex?"))
+    assert agent.feedback[1].startswith("Syntax error") and "cut_off" not in result.diagnostics
+
+
+def test_unusable_intent_answer_is_recorded():
+    agent = ScriptedQueryAgent(EXAMPLES["official-03"])
+    result = asyncio.run(pipeline_with(agent, BrokenJsonIntentAgent()).run("Cholera by sex?"))
+    assert result.diagnostics["intent_invalid_json"] is True and result.diagnostics["cut_off"] == ["intent"]
+    assert result.tokens_by_step["intent"] == 10
 
 
 @pytest.fixture()

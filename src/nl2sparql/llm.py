@@ -14,6 +14,7 @@ class LLMError(RuntimeError):
 class LLMReply:
     text: str
     tokens: int  # prompt + completion tokens reported by the server
+    finish_reason: str | None = None  # "length" means the answer hit max_tokens and was cut off
 
 
 class LLMClient:
@@ -38,9 +39,10 @@ class LLMClient:
                 response = await client.post(f"{self.base_url}/chat/completions", json=body, headers=self.headers)
             response.raise_for_status()
             payload = response.json()
-            text = payload["choices"][0]["message"]["content"] or ""
+            choice = payload["choices"][0]
+            text = choice["message"]["content"] or ""
         except (httpx.HTTPError, KeyError, IndexError, ValueError) as error:
             raise LLMError(f"LLM call failed: {error}") from error
         usage = payload.get("usage") or {}
         tokens = int(usage.get("prompt_tokens", 0)) + int(usage.get("completion_tokens", 0))
-        return LLMReply(text, tokens)
+        return LLMReply(text, tokens, choice.get("finish_reason"))

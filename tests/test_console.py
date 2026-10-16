@@ -1,3 +1,5 @@
+import json
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -45,3 +47,38 @@ def test_check_does_nothing_on_the_stub_backend(client):
     result = client.post("/agents/check").json()
     assert result == {"intent": {"status": "stub backend: no model server"},
                       "query": {"status": "stub backend: no model server"}}
+
+
+def test_run_shows_what_each_agent_did_on_the_stub_backend(client):
+    result = client.post("/agents/run", json={"text": "How many patients have cholera, and which ones are they?"}).json()
+    assert result["backend"] == "stub" and result["is_compliant"] is False
+    assert result["flags_raised"] == ["asks_for_identifiers"] and result["sparql_query"]
+    assert {"intent", "generate", "guard", "total"} <= set(result["timings_ms"])
+
+
+def test_run_rejects_empty_text(client):
+    assert client.post("/agents/run", json={"text": " "}).status_code == 400
+
+
+@pytest.fixture()
+def reports_client(tmp_path):
+    def save(name, content):
+        (tmp_path / name).write_text(content if isinstance(content, str) else json.dumps(content))
+    save("20261017-002316.json", {"summary": {"questions": 31, "verdict_accuracy": 0.903}, "rows": []})
+    save("intent-20261017-090000.json", {"summary": {"questions": 31, "detection_rate": 1.0}, "rows": [{"id": "x"}]})
+    save("pipeline-20261017-100000.json", "not json")
+    save("notes.json", {"summary": {}})
+    return TestClient(create_app(settings=Settings(data_dir=DATA_DIR, log_path=None, reports_dir=tmp_path)))
+
+
+def test_reports_lists_eval_reports_newest_first(reports_client):
+    listing = reports_client.get("/agents/reports").json()["reports"]
+    assert [(r["name"], r["kind"]) for r in listing] == [("intent-20261017-090000.json", "intent"),
+                                                          ("20261017-002316.json", "pipeline")]
+    assert listing[0]["created"] == "2026-10-17 09:00" and listing[1]["summary"]["verdict_accuracy"] == 0.903
+
+
+def test_report_detail_has_the_rows_and_refuses_other_files(reports_client):
+    assert reports_client.get("/agents/reports/intent-20261017-090000.json").json()["rows"] == [{"id": "x"}]
+    assert reports_client.get("/agents/reports/notes.json").status_code == 404
+    assert reports_client.get("/agents/reports/pipeline-20261017-100000.json").status_code == 404

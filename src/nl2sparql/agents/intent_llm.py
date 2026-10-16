@@ -20,6 +20,11 @@ class IntentReply:
     tokens: int
     raw: str
     valid_json: bool
+    finish_reason: str | None = None
+
+    @property
+    def truncated(self) -> bool:
+        return self.finish_reason == "length"
 
 
 def parse_flags_checked(text: str) -> tuple[IntentFlags, bool]:
@@ -56,7 +61,7 @@ class LLMIntentAgent:
     async def classify_detailed(self, text: str) -> IntentReply:
         reply = await self.client.chat(self.model, self.messages(text), max_tokens=self.max_tokens, json_mode=True)
         flags, valid = parse_flags_checked(reply.text)
-        return IntentReply(flags, reply.tokens, reply.text, valid)
+        return IntentReply(flags, reply.tokens, reply.text, valid, reply.finish_reason)
 
     async def classify(self, text: str) -> tuple[IntentFlags, int]:
         result = await self.classify_detailed(text)

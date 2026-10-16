@@ -55,6 +55,18 @@ def per_agent_summary(rows: list[dict]) -> dict:
         "retry_reasons": dict(Counter(r["diagnostics"].get("retry_reason", "none") for r in measured)),
         "first_try_judge_errors": dict(first_judge_errors.most_common(5)),
         "still_invalid_after_retry": [r["id"] for r in measured if r["diagnostics"].get("judge_errors_final")],
+        "cut_off": dict(Counter(step for r in measured for step in r["diagnostics"].get("cut_off", []))),
+        "intent_invalid_json": [r["id"] for r in measured if r["diagnostics"].get("intent_invalid_json")],
+    }
+
+
+def agent_setup(settings: Settings) -> dict:
+    agents = {name: settings.agent(name) for name in ("intent", "query")}
+    llm = settings.backend == "llm"
+    return {
+        "models": {name: agent.model if llm else "stub" for name, agent in agents.items()},
+        "prompt_versions": {name: agent.prompt_version for name, agent in agents.items()},
+        "max_tokens": {name: agent.max_tokens for name, agent in agents.items()},
     }
 
 
@@ -98,8 +110,8 @@ async def main_async(args) -> None:
         "latency_ms_p95": round(percentile(latencies, 0.95), 1) if latencies else None,
         "avg_tokens": round(statistics.mean(r.get("tokens_consumed", 0) for r in rows), 1) if rows else 0,
         "backend": "http" if args.url else settings.backend,
-        "models": {"intent": settings.agent("intent").model, "query": settings.agent("query").model},
-        "prompt_versions": {"intent": settings.intent_prompt_version, "query": settings.query_prompt_version},
+        # Over --url the remote server's configuration is unknown, so it is not reported.
+        **({} if args.url else agent_setup(settings)),
         "per_agent": per_agent_summary(rows),
     }
     if virtuoso:
@@ -111,7 +123,7 @@ async def main_async(args) -> None:
             "failed_in_virtuoso": [r["id"] for r in executed if r.get("execution_error")],
         }
     print("\n" + json.dumps(summary, indent=2))
-    print(f"report: {write_report('pipeline', summary, rows)}")
+    print(f"report: {write_report(settings, 'pipeline', summary, rows)}")
 
 
 def main() -> None:

@@ -31,10 +31,11 @@ def median(values: list[float]) -> float | None:
     return round(statistics.median(values), 1) if values else None
 
 
-def write_report(name: str, summary: dict, rows: list[dict]) -> Path:
+def write_report(settings: Settings, name: str, summary: dict, rows: list[dict]) -> Path:
+    """Saves eval/reports/<name>-<date>-<time>.json; the agents console (/agents) lists these files."""
     from datetime import datetime
 
-    out_dir = REPO_ROOT / "eval" / "reports"
+    out_dir = settings.reports_dir
     out_dir.mkdir(parents=True, exist_ok=True)
     out = out_dir / f"{name}-{datetime.now():%Y%m%d-%H%M%S}.json"
     out.write_text(json.dumps({"summary": summary, "rows": rows}, indent=1, ensure_ascii=False), encoding="utf-8")

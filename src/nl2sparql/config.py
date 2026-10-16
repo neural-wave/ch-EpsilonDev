@@ -77,6 +77,7 @@ class Settings:
     data_dir: Path = field(default=REPO_ROOT / "data")
     assets_dir: Path = field(default=REPO_ROOT / "assets")
     log_path: Path | None = field(default=REPO_ROOT / "logs" / "requests.jsonl")
+    reports_dir: Path = field(default=REPO_ROOT / "eval" / "reports")  # written by eval/, read by /agents
 
     def agent(self, name: str) -> AgentSettings:
         """Resolved settings of one agent: "intent" or "query"."""
@@ -132,4 +133,5 @@ class Settings:
             data_dir=_path("NL2SPARQL_DATA_DIR", REPO_ROOT / "data"),
             assets_dir=_path("NL2SPARQL_ASSETS_DIR", REPO_ROOT / "assets"),
             log_path=_path("NL2SPARQL_LOG_PATH", REPO_ROOT / "logs" / "requests.jsonl"),
+            reports_dir=_path("NL2SPARQL_REPORTS_DIR", REPO_ROOT / "eval" / "reports"),
         )

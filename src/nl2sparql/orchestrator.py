@@ -18,6 +18,9 @@ from nl2sparql.models import Context, IntentFlags, PipelineResult
 
 logger = logging.getLogger(__name__)
 
+# Added to the retry feedback when the query agent's answer hit its max_tokens limit mid-query.
+CUT_OFF_FEEDBACK = "Your previous answer was cut off at the length limit. Write a shorter query and no explanation."
+
 
 class PipelineError(RuntimeError):
     """The pipeline could not produce a query (e.g. the model server is down). The API answers 503."""
@@ -41,6 +44,9 @@ class _Run:
 
     def add_tokens(self, step: str, used: int) -> None:
         self.tokens[step] = self.tokens.get(step, 0) + used
+
+    def note_cut_off(self, step: str) -> None:
+        self.diagnostics.setdefault("cut_off", []).append(step)
 
 
 class Pipeline:
@@ -73,6 +79,7 @@ class Pipeline:
         decision = self._timed(run, "guard", lambda: self.guard.decide(sparql, flags))
         if decision.retry_hint and run.take_retry("guard"):
             run.diagnostics["guard_violations_first_try"] = [f"{v.rule}: {v.message}" for v in decision.violations]
+            run.diagnostics["first_try_sparql"] = sparql
             try:
                 sparql = await self._generate(text, context, decision.retry_hint, run)
                 decision = self._timed(run, "guard_retry", lambda: self.guard.decide(sparql, flags))
@@ -99,7 +106,16 @@ class Pipeline:
     async def _classify(self, text: str, run: _Run) -> IntentFlags:
         started = time.perf_counter()
         try:
-            flags, used = await self.intent_agent.classify(text)
+            detailed = getattr(self.intent_agent, "classify_detailed", None)  # LLM agents report more
+            if detailed is None:
+                flags, used = await self.intent_agent.classify(text)
+            else:
+                reply = await detailed(text)
+                flags, used = reply.flags, reply.tokens
+                if not reply.valid_json:
+                    run.diagnostics["intent_invalid_json"] = True
+                if reply.truncated:
+                    run.note_cut_off("intent")
             run.add_tokens("intent", used)
             return flags
         except Exception as error:  # the guard still checks the query, so degrade instead of failing
@@ -113,18 +129,32 @@ class Pipeline:
         """Query agent + judge. The first call counts as "query", any later one as "query_retry"."""
         started = time.perf_counter()
         step = "query" if feedback is None else "query_retry"
-        sparql, used = await self.query_agent.generate(text, context, feedback)
-        run.add_tokens(step, used)
+        sparql, cut_off = await self._ask_query_agent(text, context, feedback, step, run)
         verdict = self.judge.check(sparql)
         if verdict.errors and run.take_retry("judge"):
             run.diagnostics["judge_errors_first_try"] = verdict.errors
-            sparql, used = await self.query_agent.generate(text, context, " ".join(verdict.errors))
-            run.add_tokens("query_retry", used)
+            run.diagnostics["first_try_sparql"] = verdict.sparql
+            retry_feedback = " ".join(([CUT_OFF_FEEDBACK] if cut_off else []) + verdict.errors)
+            sparql, _ = await self._ask_query_agent(text, context, retry_feedback, "query_retry", run)
             verdict = self.judge.check(sparql)
         if verdict.errors:
             run.diagnostics["judge_errors_final"] = verdict.errors
         run.timings["generate" if feedback is None else "generate_retry"] = round((time.perf_counter() - started) * 1000, 1)
         return verdict.sparql
+
+    async def _ask_query_agent(self, text: str, context: Context, feedback: str | None, step: str,
+                               run: _Run) -> tuple[str, bool]:
+        """One query agent call. Returns (sparql, whether the answer was cut off at max_tokens)."""
+        detailed = getattr(self.query_agent, "generate_detailed", None)  # LLM agents report more
+        if detailed is None:
+            sparql, used = await self.query_agent.generate(text, context, feedback)
+            run.add_tokens(step, used)
+            return sparql, False
+        reply = await detailed(text, context, feedback)
+        run.add_tokens(step, reply.tokens)
+        if reply.truncated:
+            run.note_cut_off(step)
+        return reply.sparql, reply.truncated
 
     @staticmethod
     def _timed(run: _Run, key: str, function):

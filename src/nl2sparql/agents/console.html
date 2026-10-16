@@ -20,15 +20,17 @@
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 system-ui, -apple-system, sans-serif; }
-  main { max-width: 1280px; margin: 0 auto; padding: 28px 16px 56px; display: grid; gap: 22px; }
+  /* minmax(0, 1fr): a wide table scrolls inside its box instead of widening the page */
+  main { max-width: 1280px; margin: 0 auto; padding: 28px 16px 56px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 22px; }
   header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px 18px; }
   h1 { margin: 0; font-size: 26px; }
   h2 { margin: 0; font-size: 18px; }
   h3 { margin: 0; font-size: 15px; }
+  p { margin: 0; }
   a { color: var(--accent); }
   .badge { font: 600 12px/1 var(--mono); padding: 5px 9px; border-radius: 999px; border: 1.5px solid currentColor; }
   .muted { color: var(--muted); font-size: 13px; }
-  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: grid; gap: 12px; min-width: 0; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; min-width: 0; align-content: start; }
   .agents { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
   @media (max-width: 860px) { .agents { grid-template-columns: minmax(0, 1fr); } }
   .agent.llm { border-top: 4px solid var(--llm-line); }
@@ -36,22 +38,38 @@
   table { width: 100%; border-collapse: collapse; font-size: 14px; }
   td { padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
   td:first-child { color: var(--muted); width: 38%; }
-  td code, .chips code { font-family: var(--mono); font-size: 12.5px; background: var(--code); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+  td code, .chips code, p code { font-family: var(--mono); font-size: 12.5px; background: var(--code); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
   pre { margin: 0; background: var(--code); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px;
         font: 12.5px/1.5 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 420px; overflow: auto; }
   details summary { cursor: pointer; color: var(--accent); font-size: 14px; }
+  details > :not(summary) { margin-top: 8px; }
   .note { background: var(--stub); border: 1px solid var(--stub-line); border-radius: 6px; padding: 8px 10px; font-size: 13px; }
   .strip { display: flex; flex-wrap: wrap; gap: 8px 22px; font-size: 14px; }
   .strip b { font-family: var(--mono); font-weight: 600; }
   form { display: flex; gap: 10px; flex-wrap: wrap; }
-  input[type=text] { flex: 1 1 420px; font: inherit; padding: 9px 11px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--ink); }
+  input[type=text] { flex: 1 1 420px; min-width: 0; font: inherit; padding: 9px 11px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--ink); }
   button { font: inherit; padding: 9px 16px; border-radius: 8px; border: 0; background: var(--ink); color: var(--card); cursor: pointer; }
   button.secondary { background: transparent; color: var(--ink); border: 1px solid var(--line); }
-  .preview { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
-  @media (max-width: 860px) { .preview { grid-template-columns: minmax(0, 1fr); } }
+  button:disabled { opacity: .5; cursor: wait; }
+  .two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+  .three { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+  @media (max-width: 1000px) { .three { grid-template-columns: minmax(0, 1fr); } }
+  @media (max-width: 860px) { .two { grid-template-columns: minmax(0, 1fr); } }
   .chips { display: flex; flex-wrap: wrap; gap: 6px; }
-  .reachable { color: var(--ok); font-weight: 600; } .unreachable { color: var(--no); font-weight: 600; }
+  .good, .reachable { color: var(--ok); font-weight: 600; }
+  .bad, .unreachable { color: var(--no); font-weight: 600; }
+  .verdict { font-size: 18px; font-weight: 700; }
   ul.plain { margin: 0; padding-left: 1.1em; font-size: 13.5px; }
+  .head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .scroll { overflow-x: auto; }
+  table.grid { font-size: 13px; }
+  table.grid th { text-align: left; font-weight: 600; color: var(--muted); padding: 6px 8px; border-bottom: 1.5px solid var(--line); white-space: nowrap; }
+  table.grid td { white-space: nowrap; }
+  table.grid td:first-child { color: inherit; width: auto; }
+  table.grid td.wrap { white-space: normal; min-width: 260px; }
+  table.grid tr[data-name] { cursor: pointer; }
+  table.grid tr[data-name]:hover { background: var(--code); }
+  table.grid tr.selected { background: var(--llm); }
 </style>
 </head>
 <body>
@@ -78,13 +96,27 @@
   </section>
 
   <section class="card">
-    <h2>Preview: what each model receives for a question</h2>
-    <p class="muted">Builds the real prompts with the current configuration. It does not call any model.</p>
-    <form id="preview-form">
+    <h2>Try a question</h2>
+    <form id="ask-form">
       <input id="question" type="text" value="How many patients have a billed diagnosis of cholera, by sex?" aria-label="Question">
-      <button type="submit">Preview prompts</button>
+      <button type="submit" value="preview" class="secondary">Preview prompts</button>
+      <button type="submit" value="run">Run this question</button>
     </form>
-    <div id="preview"></div>
+    <p class="muted"><b>Preview prompts</b> builds what each model would receive and calls no model.
+      <b>Run this question</b> runs the whole pipeline and shows what each agent did: <span id="run-cost">…</span></p>
+    <div id="ask-output"></div>
+  </section>
+
+  <section class="card" id="measurements">
+    <div class="head"><h2>Measurements</h2><button id="reload-reports" class="secondary">Reload</button></div>
+    <p class="muted">Saved eval reports from <code id="reports-folder">eval/reports</code>, newest first. Click a row to see every question.
+      New reports come from the run machine: <code>python eval/run_intent_eval.py</code> (intent agent alone, cheap) and
+      <code>python eval/run_eval.py</code> (whole pipeline). Hover a header or a count for details.</p>
+    <h3>Intent agent alone</h3>
+    <div id="intent-reports"></div>
+    <h3>Whole pipeline</h3>
+    <div id="pipeline-reports"></div>
+    <div id="report-detail"></div>
   </section>
 
   <section class="card">
@@ -93,16 +125,24 @@
     <div><button id="check" class="secondary">Check servers</button></div>
     <div id="servers"></div>
   </section>
-
-  <section class="card">
-    <h2>Measurements</h2>
-    <p class="muted">Coming next: tokens and time per agent from the latest eval reports (<code>eval/run_eval.py</code>, <code>eval/run_intent_eval.py</code>).</p>
-  </section>
 </main>
 <script>
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
 const code = v => `<code>${esc(typeof v === "string" ? v : JSON.stringify(v))}</code>`;
 const row = (label, value) => `<tr><td>${esc(label)}</td><td>${value}</td></tr>`;
+const dash = "<span class='muted'>—</span>";
+const none = "<span class='good'>none</span>";
+const num = v => v === null || v === undefined || v === "" ? dash : esc(v);
+const pct = v => typeof v === "number" ? `${(v * 100).toFixed(1)}%` : dash;
+const msText = v => v >= 1000 ? `${(v / 1000).toFixed(1)} s` : `${Math.round(v)} ms`;
+const msec = v => typeof v === "number" ? msText(v) : dash;
+const sum = o => Object.values(o).reduce((a, b) => a + b, 0);
+// A list of question ids in a report: the count (red unless empty), the ids on hover.
+const ids = v => !Array.isArray(v) ? dash
+  : v.length ? `<span class="bad" title="${esc(v.join(", "))}">${v.length}</span>` : "<span class='good'>0</span>";
+const shortModel = m => String(m || "").split("/").pop();
+const lines = items => items.filter(Boolean).map(esc).join("<br>");
+let backendName = "stub";
 
 function renderAgent(name, a) {
   const el = document.getElementById(`agent-${name}`);
@@ -130,9 +170,13 @@ function renderAgent(name, a) {
 
 async function loadConfig() {
   const c = await (await fetch("/agents/config")).json();
+  backendName = c.backend;
   const backend = document.getElementById("backend");
   backend.textContent = `backend: ${c.backend}`;
   backend.style.color = c.backend === "llm" ? "var(--accent)" : "var(--muted)";
+  document.getElementById("run-cost").innerHTML = c.backend === "llm"
+    ? "<b>it calls the model server (GPU)</b>, two or three model calls per question."
+    : "the stub backend calls no model.";
   const p = c.pipeline;
   document.getElementById("pipeline").innerHTML = `
     <span>Retries per request <b>${p.max_retries}</b></span>
@@ -150,6 +194,8 @@ async function loadConfig() {
     <span>Hide the question's own example <b>${x.hide_exact_example}</b></span>`;
 }
 
+// ---- Try a question: preview (no model) or run (the whole pipeline) ----
+
 function renderMessages(title, part) {
   return `<div class="card"><h3>${title}</h3>
     <p class="muted">≈ ${part.estimated_prompt_tokens} prompt tokens · answer capped at ${part.max_answer_tokens} tokens</p>
@@ -157,23 +203,221 @@ function renderMessages(title, part) {
   </div>`;
 }
 
-document.getElementById("preview-form").addEventListener("submit", async e => {
-  e.preventDefault();
-  const out = document.getElementById("preview");
-  out.innerHTML = "<p class='muted'>Building prompts…</p>";
-  const response = await fetch("/agents/preview", {method: "POST", headers: {"Content-Type": "application/json"},
-                                                   body: JSON.stringify({text: document.getElementById("question").value})});
-  const d = await response.json();
-  if (!response.ok) { out.innerHTML = `<p class="unreachable">${esc(d.error)}</p>`; return; }
+function renderPreview(d) {
   const ctx = d.context;
-  out.innerHTML = `
-    <div class="preview">${renderMessages("Intent agent", d.intent)}${renderMessages("Query agent", d.query)}</div>
+  return `
+    <div class="two">${renderMessages("Intent agent", d.intent)}${renderMessages("Query agent", d.query)}</div>
     <div class="card"><h3>Context picked for this question</h3>
       <ul class="plain">${ctx.examples.map(x => `<li>${code(x.id)} ${esc(x.question)}</li>`).join("")}</ul>
       <p class="muted">${ctx.schema_cards.length} schema cards · ${ctx.code_candidates.length} code candidates
       ${ctx.code_candidates.map(c => code(`${c.system} ${c.code}`)).join(" ")}</p>
     </div>`;
+}
+
+function renderRun(d) {
+  const dg = d.diagnostics || {}, t = d.timings_ms || {}, k = d.tokens_by_step || {}, cut = dg.cut_off || [];
+  const plus = (first, retry, format) => `${format(first)}${retry != null ? ` <span class="muted">+ retry ${format(retry)}</span>` : ""}`;
+  const firstTry = dg.first_try_sparql ? `
+    <details><summary>First try, rejected by the ${esc(dg.retry_reason)}</summary>
+      <p class="bad">${lines(dg.judge_errors_first_try || dg.guard_violations_first_try || [])}</p>
+      <pre>${esc(dg.first_try_sparql)}</pre></details>` : "";
+  return `
+    <p class="verdict ${d.is_compliant ? "good" : "bad"}">${d.is_compliant ? "Compliant" : "Not compliant"}
+      <span class="muted">· ${d.tokens_consumed} tokens · ${msec(t.total)} · backend ${esc(d.backend)}</span></p>
+    ${d.compliance_reason ? `<p>${esc(d.compliance_reason)}</p>` : ""}
+    ${d.suggested_rephrase ? `<p class="muted">Suggested rephrase: ${esc(d.suggested_rephrase)}</p>` : ""}
+    <div class="three">
+      <div class="card"><h3>Intent agent</h3><table>
+        ${row("Flags raised", d.flags_raised.length ? d.flags_raised.map(code).join(" ") : "<span class='muted'>none</span>")}
+        ${row("Its reason", d.intent.reason ? esc(d.intent.reason) : dash)}
+        ${row("Tokens", num(k.intent ?? 0))}
+        ${row("Time", msec(t.intent))}
+        ${row("Problems", lines([dg.intent_error && `error: ${dg.intent_error}`,
+                                 dg.intent_invalid_json && "the answer was not the expected JSON",
+                                 cut.includes("intent") && "the answer was cut off at max tokens"]) || none)}
+      </table></div>
+      <div class="card"><h3>Query agent</h3><table>
+        ${row("Tokens", plus(k.query ?? 0, k.query_retry, num))}
+        ${row("Time", plus(t.generate, t.generate_retry, msec))}
+        ${row("Retry", d.retries ? esc(`used, asked by the ${dg.retry_reason}`) : "not needed")}
+        ${row("Problems", lines([...cut.filter(step => step !== "intent").map(step => `${step}: the answer was cut off at max tokens`),
+                                 ...(dg.judge_errors_final || []).map(error => `still invalid: ${error}`)]) || none)}
+      </table>${firstTry}</div>
+      <div class="card"><h3>Compliance guard</h3><table>
+        ${row("Rules the query breaks", d.violations.length ? `<span class="bad">${lines(d.violations)}</span>` : none)}
+        ${row("Time", plus(t.guard, t.guard_retry, msec))}
+        ${row("Context built in", msec(t.context))}
+      </table></div>
+    </div>
+    <details open><summary>Final query${d.is_compliant ? "" : " (forbidden request: a real user gets only the reason)"}</summary>
+      <pre>${esc(d.sparql_query)}</pre></details>`;
+}
+
+document.getElementById("ask-form").addEventListener("submit", async e => {
+  e.preventDefault();
+  const action = e.submitter?.value === "run" ? "run" : "preview";
+  const out = document.getElementById("ask-output");
+  const buttons = e.target.querySelectorAll("button");
+  buttons.forEach(b => b.disabled = true);  // one call at a time: no double clicks on the GPU
+  out.innerHTML = `<p class="muted">${action === "run" ? `Running the pipeline${backendName === "llm" ? " (calling the model server)" : ""}…` : "Building prompts…"}</p>`;
+  try {
+    const response = await fetch(`/agents/${action}`, {method: "POST", headers: {"Content-Type": "application/json"},
+                                                      body: JSON.stringify({text: document.getElementById("question").value})});
+    const d = await response.json();
+    out.innerHTML = !response.ok ? `<p class="bad">${esc(d.error)}</p>` : action === "run" ? renderRun(d) : renderPreview(d);
+  } catch (error) {
+    out.innerHTML = `<p class="bad">${esc(error)}</p>`;
+  } finally {
+    buttons.forEach(b => b.disabled = false);
+  }
 });
+
+// ---- Measurements: saved eval reports ----
+
+function intentTable(list) {
+  if (!list.length) return "<p class='muted'>No intent reports yet.</p>";
+  return `<div class="scroll"><table class="grid"><thead><tr>
+      <th>Date</th><th>Model</th><th>Prompt</th><th title="Answer cap (max tokens)">Cap</th><th>Questions</th>
+      <th title="Forbidden questions that raised at least one flag (higher is better)">Detection</th>
+      <th title="Allowed questions that raised a flag (lower is better)">False alarms</th>
+      <th title="Questions that name a rule and raised that rule's flag">Right flag</th>
+      <th title="Answers that were not the expected JSON">Invalid JSON</th>
+      <th title="Answers cut off at max tokens">Cut off</th>
+      <th>Tokens (median)</th><th>Time p50 / p95</th></tr></thead><tbody>
+    ${list.map(r => { const s = r.summary; return `<tr data-name="${esc(r.name)}">
+      <td>${esc(r.created)}</td><td title="${esc(s.model)}">${esc(shortModel(s.model)) || dash}</td>
+      <td>${num(s.prompt_version)}</td><td>${num(s.max_tokens)}</td><td>${num(s.questions)}</td>
+      <td>${pct(s.detection_rate)}</td><td>${pct(s.false_alarm_rate)}</td><td>${pct(s.right_flag_rate)}</td>
+      <td>${ids(s.invalid_json)}</td><td>${ids(s.cut_off)}</td><td>${num(s.median_tokens)}</td>
+      <td>${msec(s.latency_ms_p50)} / ${msec(s.latency_ms_p95)}</td></tr>`; }).join("")}
+  </tbody></table></div>`;
+}
+
+function modelsCell(models) {
+  if (!models) return dash;  // reports from before 2026-10-17
+  const i = shortModel(models.intent), q = shortModel(models.query);
+  return `<span title="intent: ${esc(models.intent)} · query: ${esc(models.query)}">${i === q ? `${esc(i)} <span class="muted">(both)</span>` : `${esc(i)} / ${esc(q)}`}</span>`;
+}
+
+function pipelineTable(list) {
+  if (!list.length) return "<p class='muted'>No pipeline reports yet.</p>";
+  return `<div class="scroll"><table class="grid"><thead><tr>
+      <th>Date</th><th>Backend</th><th>Models</th><th title="Prompt versions: intent / query">Prompts</th><th>Questions</th>
+      <th title="Questions whose verdict (compliant or not) matched the label">Right verdict</th>
+      <th title="Forbidden questions answered as compliant: must stay 0">Leaks</th>
+      <th title="Allowed questions blocked as not compliant">False blocks</th>
+      <th>Errors</th><th>Tokens (avg)</th>
+      <th title="Median tokens per step: intent / query / query retry">Tokens per step</th>
+      <th title="Questions that used the retry, out of all">Retries</th>
+      <th title="Model answers cut off at max tokens">Cut off</th><th>Time p50 / p95</th></tr></thead><tbody>
+    ${list.map(r => {
+      const s = r.summary, pa = s.per_agent || {};
+      const steps = pa.median_tokens ? ["intent", "query", "query_retry"].map(k => pa.median_tokens[k] ?? "—").join(" / ") : null;
+      const reasons = pa.retry_reasons;
+      const retries = reasons ? `<span title="${esc(Object.entries(reasons).map(([k, v]) => `${k}: ${v}`).join(", "))}">${sum(reasons) - (reasons.none || 0)} / ${sum(reasons)}</span>` : dash;
+      const cutOff = pa.cut_off ? (sum(pa.cut_off) ? `<span class="bad" title="${esc(JSON.stringify(pa.cut_off))}">${sum(pa.cut_off)}</span>` : "<span class='good'>0</span>") : dash;
+      return `<tr data-name="${esc(r.name)}">
+      <td>${esc(r.created)}</td><td>${num(s.backend)}</td><td>${modelsCell(s.models)}</td>
+      <td>${s.prompt_versions ? esc(`${s.prompt_versions.intent} / ${s.prompt_versions.query}`) : dash}</td>
+      <td>${num(s.questions)}</td><td>${pct(s.verdict_accuracy)}</td><td>${ids(s.said_compliant_but_forbidden)}</td>
+      <td>${ids(s.blocked_but_allowed)}</td><td>${ids(s.errors)}</td><td>${num(s.avg_tokens)}</td>
+      <td>${num(steps)}</td><td>${retries}</td><td>${cutOff}</td>
+      <td>${msec(s.latency_ms_p50)} / ${msec(s.latency_ms_p95)}</td></tr>`; }).join("")}
+  </tbody></table></div>`;
+}
+
+function summaryValue(key, v) {
+  if (Array.isArray(v)) return `${ids(v)} ${v.length ? `<span class="muted">${esc(v.join(", "))}</span>` : ""}`;
+  if (v && typeof v === "object") return code(v);
+  if (typeof v === "number" && /(_rate|accuracy)$/.test(key)) return pct(v);
+  if (typeof v === "number" && /(latency|_ms)/.test(key)) return msec(v);
+  return num(v);
+}
+
+function summaryTable(s) {
+  const entries = [];
+  for (const [k, v] of Object.entries(s)) {
+    if (["per_agent", "execution"].includes(k) && v && typeof v === "object") {
+      for (const [k2, v2] of Object.entries(v)) entries.push([`${k.replace("_", " ")}: ${k2}`, v2]);
+    } else entries.push([k, v]);
+  }
+  return `<table>${entries.map(([k, v]) => row(k.replaceAll("_", " "), summaryValue(k, v))).join("")}</table>`;
+}
+
+const OUTCOME_CLASS = {caught: "good", ok: "muted", missed: "bad", false_alarm: "bad"};
+// Problems first, otherwise in file order.
+const byProblem = (rows, rank) => rows.map((r, i) => [rank(r), i, r]).sort((a, b) => a[0] - b[0] || a[1] - b[1]).map(x => x[2]);
+const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+function intentRows(rows) {
+  rows = byProblem(rows, r => ({missed: 0, false_alarm: 1}[r.outcome] ?? (r.error || r.valid_json === false || r.cut_off ? 2 : 3)));
+  return `<div class="scroll"><table class="grid"><thead><tr><th>Id</th><th>Outcome</th><th>Flags raised</th><th>Right flag</th>
+    <th>Tokens</th><th>Time</th><th>Problems</th><th>Question</th></tr></thead><tbody>
+    ${rows.map(r => `<tr><td>${esc(r.id)}</td><td class="${OUTCOME_CLASS[r.outcome] || ""}">${esc(r.outcome)}</td>
+      <td>${(r.raised || []).map(code).join(" ") || dash}</td>
+      <td>${r.right_flag == null ? dash : r.right_flag ? "<span class='good'>yes</span>" : "<span class='bad'>no</span>"}</td>
+      <td>${num(r.tokens)}</td><td>${msec(r.latency_ms)}</td>
+      <td class="wrap">${lines([r.error && `error: ${r.error}`, r.valid_json === false && "invalid JSON", r.cut_off && "cut off"])}</td>
+      <td class="wrap">${esc(r.question)}</td></tr>`).join("")}
+  </tbody></table></div>`;
+}
+
+function pipelineRows(rows) {
+  rows = byProblem(rows, r => r.is_compliant === true && r.expected_compliant === false ? 0 : r.error ? 1 : !r.correct_verdict ? 2
+                              : r.execution_error || (r.diagnostics || {}).judge_errors_final ? 3 : 4);
+  return `<div class="scroll"><table class="grid"><thead><tr><th>Id</th><th>Expected</th><th>Got</th><th>Retry</th>
+    <th>Tokens</th><th>Time</th><th>Problems</th><th>Question and query</th></tr></thead><tbody>
+    ${rows.map(r => {
+      const dg = r.diagnostics || {};
+      const leak = r.is_compliant === true && r.expected_compliant === false;
+      const got = r.is_compliant == null ? dash
+        : `<span class="${r.correct_verdict ? "good" : "bad"}">${r.is_compliant ? "compliant" : "blocked"}${leak ? " · LEAK" : ""}</span>`;
+      const problems = [r.error && `error: ${r.error}`, dg.cut_off && `cut off: ${dg.cut_off.join(", ")}`,
+        dg.intent_invalid_json && "intent: invalid JSON", dg.intent_error && `intent error: ${dg.intent_error}`,
+        ...(dg.judge_errors_final || []).map(e => `still invalid: ${e}`),
+        r.execution_error && `Virtuoso: ${r.execution_error}`,
+        r.executed_rows != null && `Virtuoso: ${plural(r.executed_rows, "row")} in ${msText(r.execution_ms)}`];
+      return `<tr><td>${esc(r.id)}</td><td>${r.expected_compliant ? "allowed" : "forbidden"}</td><td>${got}</td>
+        <td>${r.retries ? esc(dg.retry_reason || "yes") : ""}</td>
+        <td title="${esc(JSON.stringify(r.tokens_by_step || {}))}">${num(r.tokens_consumed)}</td><td>${msec(r.latency_ms)}</td>
+        <td class="wrap">${lines(problems)}</td>
+        <td class="wrap">${esc(r.question)}${r.sparql_query ? `<details><summary>query</summary><pre>${esc(r.sparql_query)}</pre></details>` : ""}</td></tr>`;
+    }).join("")}
+  </tbody></table></div>`;
+}
+
+async function showReport(name) {
+  const out = document.getElementById("report-detail");
+  out.innerHTML = "<p class='muted'>Loading the report…</p>";
+  const response = await fetch(`/agents/reports/${encodeURIComponent(name)}`);
+  const d = await response.json();
+  if (!response.ok) { out.innerHTML = `<p class="bad">${esc(d.error)}</p>`; return; }
+  const intent = name.startsWith("intent-");
+  out.innerHTML = `<div class="card">
+    <div class="head"><h3>${esc(name)}</h3><a href="/agents/reports/${encodeURIComponent(name)}" target="_blank">raw JSON</a></div>
+    ${summaryTable(d.summary)}
+    <details open><summary>${plural((d.rows || []).length, "question")}, problems first</summary>${intent ? intentRows(d.rows || []) : pipelineRows(d.rows || [])}</details>
+  </div>`;
+}
+
+async function loadReports() {
+  const d = await (await fetch("/agents/reports")).json();
+  document.getElementById("reports-folder").textContent = d.folder;
+  document.getElementById("intent-reports").innerHTML = intentTable(d.reports.filter(r => r.kind === "intent"));
+  document.getElementById("pipeline-reports").innerHTML = pipelineTable(d.reports.filter(r => r.kind === "pipeline"));
+  document.getElementById("report-detail").innerHTML = "";
+}
+
+document.getElementById("measurements").addEventListener("click", e => {
+  const tr = e.target.closest("tr[data-name]");
+  if (!tr) return;
+  document.querySelectorAll("tr.selected").forEach(x => x.classList.remove("selected"));
+  tr.classList.add("selected");
+  showReport(tr.dataset.name);
+});
+document.getElementById("reload-reports").addEventListener("click", loadReports);
+
+// ---- Model servers ----
 
 document.getElementById("check").addEventListener("click", async () => {
   const out = document.getElementById("servers");
@@ -186,6 +430,7 @@ document.getElementById("check").addEventListener("click", async () => {
 });
 
 loadConfig();
+loadReports();
 </script>
 </body>
 </html>

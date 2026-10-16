@@ -30,11 +30,11 @@ def test_example_agent_returns_the_top_example():
     assert run(ExampleQueryAgent().generate("q", context)) == ("SELECT * WHERE { ?s ?p ?o }", 0)
 
 
-def fake_server(reply_text: str, seen: list):
+def fake_server(reply_text: str, seen: list, finish_reason: str = "stop"):
     def handler(request: httpx.Request) -> httpx.Response:
         seen.append(json.loads(request.content))
         return httpx.Response(200, json={
-            "choices": [{"message": {"content": reply_text}}],
+            "choices": [{"message": {"content": reply_text}, "finish_reason": finish_reason}],
             "usage": {"prompt_tokens": 100, "completion_tokens": 20},
         })
     return httpx.MockTransport(handler)
@@ -63,6 +63,16 @@ def test_llm_query_agent_extracts_sparql_from_a_fenced_answer():
     sparql, tokens = run(agent.generate("q", Context(), feedback="add an aggregate"))
     assert sparql == "SELECT ?x WHERE { ?x ?p ?o }\n" and tokens == 120
     assert "previous query was rejected: add an aggregate" in seen[0]["messages"][1]["content"]
+
+
+def test_agents_report_answers_cut_off_at_max_tokens():
+    seen = []
+    query_agent = LLMQueryAgent(LLMClient("http://gpu/v1", transport=fake_server("```sparql\nSELECT ?x WHERE {", seen, "length")), "coder")
+    reply = run(query_agent.generate_detailed("q", Context()))
+    assert reply.truncated and reply.finish_reason == "length" and reply.tokens == 120
+    intent_agent = LLMIntentAgent(LLMClient("http://gpu/v1", transport=fake_server('{"asks_for_identi', seen, "length")), "m")
+    intent = run(intent_agent.classify_detailed("Which patients?"))
+    assert intent.truncated and not intent.valid_json and not intent.flags.flagged
 
 
 def test_judge_fixes_prefixes_and_flags_terms_missing_from_the_data():
