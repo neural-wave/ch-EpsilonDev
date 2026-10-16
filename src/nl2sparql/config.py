@@ -14,10 +14,11 @@ def _path(name: str, default: Path) -> Path:
     return Path(value) if value else default
 
 
-def _json_object(name: str) -> dict:
+def _json_object(name: str) -> dict | None:
+    """A JSON object from the environment, or None when the variable is unset or blank."""
     value = os.environ.get(name, "").strip()
     if not value:
-        return {}
+        return None
     try:
         parsed = json.loads(value)
     except json.JSONDecodeError as error:
@@ -27,16 +28,46 @@ def _json_object(name: str) -> dict:
     return parsed
 
 
+def _flag(name: str, default: bool) -> bool:
+    return os.environ.get(name, str(default)).strip().lower() not in ("0", "false", "no")
+
+
+@dataclass(frozen=True)
+class AgentSettings:
+    """Everything one LLM agent uses, after per-agent overrides fall back to the shared LLM_* values."""
+
+    name: str  # "intent" or "query"
+    model: str
+    base_url: str
+    api_key: str
+    extra_body: dict
+    max_tokens: int
+    prompt_version: str
+    timeout_seconds: float
+    verify_tls: bool
+
+
 @dataclass(frozen=True)
 class Settings:
     backend: str = "stub"  # "stub" or "llm"
+    # Shared LLM settings: both agents use them unless overridden below.
     llm_base_url: str = "http://localhost:8000/v1"
     llm_api_key: str = "not-needed"
     llm_query_model: str = ""
-    llm_intent_model: str = ""
     llm_timeout_seconds: float = 30.0
-    llm_verify_tls: bool = True  # set LLM_VERIFY_TLS=false for self-signed certificates (Vast.ai)
+    llm_verify_tls: bool = True  # set LLM_VERIFY_TLS=false for self-signed certificates
     llm_extra_body: dict = field(default_factory=dict)  # LLM_EXTRA_BODY, JSON merged into every request
+    # Intent agent overrides (empty or None = use the shared value).
+    llm_intent_model: str = ""
+    llm_intent_base_url: str = ""
+    llm_intent_api_key: str = ""
+    llm_intent_extra_body: dict | None = None
+    # Per-agent generation limits and prompt versions.
+    llm_intent_max_tokens: int = 200
+    llm_query_max_tokens: int = 900
+    intent_prompt_version: str = "v1"
+    query_prompt_version: str = "v1"
+    # Pipeline.
     virtuoso_endpoint: str = "http://localhost:8890/sparql"
     max_input_chars: int = 2000
     max_retries: int = 1
@@ -47,24 +78,57 @@ class Settings:
     assets_dir: Path = field(default=REPO_ROOT / "assets")
     log_path: Path | None = field(default=REPO_ROOT / "logs" / "requests.jsonl")
 
+    def agent(self, name: str) -> AgentSettings:
+        """Resolved settings of one agent: "intent" or "query"."""
+        if name == "intent":
+            return AgentSettings(
+                name="intent",
+                model=self.llm_intent_model or self.llm_query_model,
+                base_url=self.llm_intent_base_url or self.llm_base_url,
+                api_key=self.llm_intent_api_key or self.llm_api_key,
+                extra_body=self.llm_extra_body if self.llm_intent_extra_body is None else self.llm_intent_extra_body,
+                max_tokens=self.llm_intent_max_tokens,
+                prompt_version=self.intent_prompt_version,
+                timeout_seconds=self.llm_timeout_seconds,
+                verify_tls=self.llm_verify_tls,
+            )
+        if name == "query":
+            return AgentSettings(
+                name="query",
+                model=self.llm_query_model,
+                base_url=self.llm_base_url,
+                api_key=self.llm_api_key,
+                extra_body=self.llm_extra_body,
+                max_tokens=self.llm_query_max_tokens,
+                prompt_version=self.query_prompt_version,
+                timeout_seconds=self.llm_timeout_seconds,
+                verify_tls=self.llm_verify_tls,
+            )
+        raise ValueError(f"Unknown agent {name!r}: use 'intent' or 'query'.")
+
     @classmethod
     def from_env(cls) -> "Settings":
         env = os.environ
-        query_model = env.get("LLM_QUERY_MODEL", "")
         return cls(
             backend=env.get("NL2SPARQL_BACKEND", "stub").strip().lower(),
             llm_base_url=env.get("LLM_BASE_URL", cls.llm_base_url),
             llm_api_key=env.get("LLM_API_KEY", cls.llm_api_key),
-            llm_query_model=query_model,
-            llm_intent_model=env.get("LLM_INTENT_MODEL", "") or query_model,
+            llm_query_model=env.get("LLM_QUERY_MODEL", ""),
             llm_timeout_seconds=float(env.get("LLM_TIMEOUT_SECONDS", cls.llm_timeout_seconds)),
-            llm_verify_tls=env.get("LLM_VERIFY_TLS", "true").strip().lower() not in ("0", "false", "no"),
-            llm_extra_body=_json_object("LLM_EXTRA_BODY"),
+            llm_verify_tls=_flag("LLM_VERIFY_TLS", True),
+            llm_extra_body=_json_object("LLM_EXTRA_BODY") or {},
+            llm_intent_model=env.get("LLM_INTENT_MODEL", ""),
+            llm_intent_base_url=env.get("LLM_INTENT_BASE_URL", ""),
+            llm_intent_api_key=env.get("LLM_INTENT_API_KEY", ""),
+            llm_intent_extra_body=_json_object("LLM_INTENT_EXTRA_BODY"),
+            llm_intent_max_tokens=int(env.get("LLM_INTENT_MAX_TOKENS", cls.llm_intent_max_tokens)),
+            llm_query_max_tokens=int(env.get("LLM_QUERY_MAX_TOKENS", cls.llm_query_max_tokens)),
+            intent_prompt_version=env.get("INTENT_PROMPT_VERSION", cls.intent_prompt_version).strip(),
+            query_prompt_version=env.get("QUERY_PROMPT_VERSION", cls.query_prompt_version).strip(),
             virtuoso_endpoint=env.get("VIRTUOSO_ENDPOINT", cls.virtuoso_endpoint),
             max_input_chars=int(env.get("MAX_INPUT_CHARS", cls.max_input_chars)),
             max_retries=int(env.get("MAX_RETRIES", cls.max_retries)),
-            return_noncompliant_query=env.get("RETURN_NONCOMPLIANT_QUERY", "true").strip().lower()
-            not in ("0", "false", "no"),
+            return_noncompliant_query=_flag("RETURN_NONCOMPLIANT_QUERY", True),
             data_dir=_path("NL2SPARQL_DATA_DIR", REPO_ROOT / "data"),
             assets_dir=_path("NL2SPARQL_ASSETS_DIR", REPO_ROOT / "assets"),
             log_path=_path("NL2SPARQL_LOG_PATH", REPO_ROOT / "logs" / "requests.jsonl"),

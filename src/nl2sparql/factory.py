@@ -2,12 +2,18 @@
 from __future__ import annotations
 
 from nl2sparql.agents import ExampleQueryAgent, HeuristicIntentAgent, LLMIntentAgent, LLMQueryAgent
-from nl2sparql.config import Settings
+from nl2sparql.agents.prompts import intent_prompt, query_prompt
+from nl2sparql.config import AgentSettings, Settings
 from nl2sparql.context import ContextBuilder, ExampleBank, SchemaCards, TerminologyIndex
 from nl2sparql.guard import ComplianceGuard, PropertyKinds
 from nl2sparql.judge import Judge
 from nl2sparql.llm import LLMClient
 from nl2sparql.orchestrator import Pipeline
+
+
+def llm_client(agent: AgentSettings) -> LLMClient:
+    return LLMClient(agent.base_url, agent.api_key, agent.timeout_seconds,
+                     verify_tls=agent.verify_tls, extra_body=agent.extra_body)
 
 
 def build_pipeline(settings: Settings, exclude_exact_examples: bool = False) -> Pipeline:
@@ -19,12 +25,11 @@ def build_pipeline(settings: Settings, exclude_exact_examples: bool = False) -> 
         exclude_exact_examples=exclude_exact_examples,
     )
     if settings.backend == "llm":
-        if not settings.llm_query_model:
+        intent, query = settings.agent("intent"), settings.agent("query")
+        if not query.model:
             raise ValueError("NL2SPARQL_BACKEND=llm needs LLM_QUERY_MODEL (and optionally LLM_INTENT_MODEL).")
-        client = LLMClient(settings.llm_base_url, settings.llm_api_key, settings.llm_timeout_seconds,
-                           verify_tls=settings.llm_verify_tls, extra_body=settings.llm_extra_body)
-        intent_agent = LLMIntentAgent(client, settings.llm_intent_model or settings.llm_query_model)
-        query_agent = LLMQueryAgent(client, settings.llm_query_model)
+        intent_agent = LLMIntentAgent(llm_client(intent), intent.model, intent.max_tokens, intent_prompt(intent.prompt_version))
+        query_agent = LLMQueryAgent(llm_client(query), query.model, query.max_tokens, query_prompt(query.prompt_version))
     elif settings.backend == "stub":
         intent_agent, query_agent = HeuristicIntentAgent(), ExampleQueryAgent()
     else:

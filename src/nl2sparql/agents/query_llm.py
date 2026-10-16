@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import re
 
-from nl2sparql.agents.prompts import QUERY_SYSTEM, query_user_prompt
+from nl2sparql.agents.prompts import QUERY_PROMPTS, QueryPrompt
 from nl2sparql.llm import LLMClient
 from nl2sparql.models import Context
 
@@ -16,14 +16,18 @@ def extract_sparql(text: str) -> str:
 
 
 class LLMQueryAgent:
-    def __init__(self, client: LLMClient, model: str):
+    def __init__(self, client: LLMClient, model: str, max_tokens: int = 900, prompt: QueryPrompt = QUERY_PROMPTS["v1"]):
         self.client = client
         self.model = model
+        self.max_tokens = max_tokens
+        self.prompt = prompt
+
+    def messages(self, text: str, context: Context, feedback: str | None = None) -> list[dict]:
+        return [
+            {"role": "system", "content": self.prompt.system},
+            {"role": "user", "content": self.prompt.render_user(text, context, feedback)},
+        ]
 
     async def generate(self, text: str, context: Context, feedback: str | None = None) -> tuple[str, int]:
-        messages = [
-            {"role": "system", "content": QUERY_SYSTEM},
-            {"role": "user", "content": query_user_prompt(text, context, feedback)},
-        ]
-        reply = await self.client.chat(self.model, messages, max_tokens=900)
+        reply = await self.client.chat(self.model, self.messages(text, context, feedback), max_tokens=self.max_tokens)
         return extract_sparql(reply.text), reply.tokens
