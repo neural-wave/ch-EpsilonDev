@@ -35,6 +35,8 @@ request ─► input check ─┬─► intent agent (LLM, JSON) ─────
 - **The guard** asks for it only when the request is not flagged and the query breaks a rule.
 - **A flagged request** never gets a guard retry.
 
+The retry is decided by code, not by the agents. The judge or the guard finds the problem, and the orchestrator calls the query agent again. The query agent only sees the feedback added to its prompt. Module B's part of the retry is how well the model corrects itself and how many tokens that costs.
+
 **Stand-ins.** With `NL2SPARQL_BACKEND=stub`, no model is used:
 - `HeuristicIntentAgent` applies keyword rules.
 - `ExampleQueryAgent` copies the SPARQL of the most similar example.
@@ -206,7 +208,7 @@ This step runs on the GPU and needs the instance owner's OK. It takes about 15�
 ## 8. Known issues
 
 1. **About a third of requests use the retry,** mostly asked by the judge for invalid SPARQL on complex questions (#01, #08). Every retry is another ~1,800-token call and seconds of latency. `first_try_sparql` and `judge_errors_first_try` in the pipeline report show what went wrong.
-2. **The judge retry also runs for requests the intent agent will flag,** because the intent result arrives in parallel. That spends tokens on a forbidden request. It also gives the jury a valid query to judge, so changing it is a trade-off.
+2. **The judge retry also runs for requests the intent agent will flag,** because the intent result arrives in parallel. That spends query-agent tokens on a forbidden request, but it also gives the jury a valid query to judge. When to retry is decided by the judge and the orchestrator (modules D and A), not by the agents.
 3. **An unusable intent answer reads as "no flags".** This covers invalid JSON, a cut-off answer or a failed call. The request then relies on the guard's check of the query alone. It is visible now (`intent_invalid_json`, `cut_off`, `intent_error`) but not handled.
 4. **Some valid queries still fail or return nothing:**
    - #05 and #10 fail only in Virtuoso.
