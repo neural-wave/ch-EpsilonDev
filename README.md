@@ -83,6 +83,24 @@ Each module has one owner and a fixed interface (see [docs/plans/2026-10-16-base
 | Eval and demo | `eval/`, `src/nl2sparql/demo/` | | 80+ labeled questions, perf timings, demo for the video |
 | Integration | `orchestrator.py`, `factory.py`, `api.py` | | early exit, timeouts, deployment |
 
+## How we work as a team
+
+1. **Set up once:** clone, then `python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt && cp .env.example .env`. Check with `python -m pytest -q`: everything passes without Virtuoso or a GPU.
+2. **One branch per module and topic,** named after your module: `integration/...`, `agents/...`, `data/...`, `guard/...` or `eval/...`. Open a pull request into `main`; GitHub runs the tests on every pull request.
+3. **Before asking for a merge:** `python -m pytest -q` passes, and `python eval/run_eval.py` does not get worse. Paste its summary in the pull request.
+4. **Shared interfaces:** change `src/nl2sparql/models.py` and `src/nl2sparql/agents/base.py` only after agreeing with the team.
+5. **LLM access:** ask Santiago for the GPU endpoint and token, or for SSH access to open a tunnel. The token goes in your `.env`, never in a commit.
+6. **Virtuoso is optional.** You need it only for `--execute` in the eval, the profiling scripts and the demo's dev check. See [infra/virtuoso](infra/virtuoso/README.md).
+
+**Baseline to beat** (31 questions, 2026-10-17):
+
+| Backend | Verdicts correct | Forbidden marked compliant | Latency p50 | Tokens per request |
+|---|---|---|---|---|
+| `stub` (no model) | 87% | 0 | 13 ms | 0 |
+| `llm`, Qwen3.5-9B on an RTX 5090 | 90% | 0 | 2.8 s | ~3,000 |
+
+With the LLM, 9 of the 13 compliant queries return data on the dev database; 2 return no rows and 2 fail in Virtuoso.
+
 ## Rules for this repo
 
 - The repo becomes public after the event. Never commit ontology files, patient data, or anything derived from SNOMED CT, ICD-10-GM, CHOP, LOINC or UCUM (`.gitignore` blocks the usual paths).
