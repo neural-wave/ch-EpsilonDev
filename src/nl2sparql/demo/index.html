@@ -42,16 +42,18 @@ async function ask(text) {
   if (!data.is_compliant && data.suggested_rephrase && /\?$/.test(data.suggested_rephrase)) {
     html += `<p><button id="rephrase">Ask this instead: ${escapeHtml(data.suggested_rephrase)}</button></p>`;
   }
-  html += `<pre>${escapeHtml(data.sparql_query)}</pre>`;
+  if (data.sparql_query) {
+    html += `<pre>${escapeHtml(data.sparql_query)}</pre>`;
+  } else {
+    html += `<p class="muted">A forbidden request gets only the reason: no query is shown and nothing runs.</p>`;
+  }
   html += `<p class="muted">Tokens: ${data.tokens_consumed} · timings (ms): ${escapeHtml(JSON.stringify(data.timings_ms))}</p>`;
   if (data.executed) {
     const head = data.columns.map(c => `<th>${escapeHtml(c)}</th>`).join("");
     const body = data.rows.map(r => "<tr>" + data.columns.map(c => `<td>${escapeHtml(r[c])}</td>`).join("") + "</tr>").join("");
-    html += `<p class="muted">Ran on the knowledge base in ${data.execution_ms} ms</p><table><tr>${head}</tr>${body}</table>`;
+    html += `<p class="muted">Dev check, not part of the system: ran on the local database in ${data.execution_ms} ms</p><table><tr>${head}</tr>${body}</table>`;
   } else if (data.execution_error) {
-    html += `<p class="no">Execution failed: ${escapeHtml(data.execution_error)}</p>`;
-  } else if (!data.is_compliant) {
-    html += `<p class="muted">Nothing was executed.</p>`;
+    html += `<p class="muted">Dev check skipped: ${escapeHtml(data.execution_error)}</p>`;
   }
   out.innerHTML = html;
   const again = document.getElementById("rephrase");

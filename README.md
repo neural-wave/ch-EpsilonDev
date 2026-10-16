@@ -10,7 +10,9 @@ POST /nl-to-sparql {"text"}
   → {sparql_query, tokens_consumed, is_compliant, compliance_reason}
 ```
 
-The API never executes queries. Only the demo page and the eval harness run compliant queries on Virtuoso. Design: [docs/specs/2026-10-16-nl-to-sparql-design.md](docs/specs/2026-10-16-nl-to-sparql-design.md).
+The pipeline is **database-agnostic**: nothing behind `/nl-to-sparql` connects to a database, as the jury requires. Virtuoso is a development tool only. We use it offline to build the data files, and in the eval harness and the demo's optional dev check to verify results and performance.
+
+For a forbidden request a real user gets only the reason. For the hackathon the API also returns the literal query so the jury can judge it; `RETURN_NONCOMPLIANT_QUERY=false` switches to the real behavior. Design: [docs/specs/2026-10-16-nl-to-sparql-design.md](docs/specs/2026-10-16-nl-to-sparql-design.md).
 
 ## Quick start
 

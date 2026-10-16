@@ -24,6 +24,9 @@ class Settings:
     virtuoso_endpoint: str = "http://localhost:8890/sparql"
     max_input_chars: int = 2000
     max_retries: int = 1
+    # Hackathon: the jury asked for the literal query of forbidden requests so they can judge it.
+    # In real use a forbidden request returns only the reason (set RETURN_NONCOMPLIANT_QUERY=false).
+    return_noncompliant_query: bool = True
     data_dir: Path = field(default=REPO_ROOT / "data")
     assets_dir: Path = field(default=REPO_ROOT / "assets")
     log_path: Path | None = field(default=REPO_ROOT / "logs" / "requests.jsonl")
@@ -42,6 +45,8 @@ class Settings:
             virtuoso_endpoint=env.get("VIRTUOSO_ENDPOINT", cls.virtuoso_endpoint),
             max_input_chars=int(env.get("MAX_INPUT_CHARS", cls.max_input_chars)),
             max_retries=int(env.get("MAX_RETRIES", cls.max_retries)),
+            return_noncompliant_query=env.get("RETURN_NONCOMPLIANT_QUERY", "true").strip().lower()
+            not in ("0", "false", "no"),
             data_dir=_path("NL2SPARQL_DATA_DIR", REPO_ROOT / "data"),
             assets_dir=_path("NL2SPARQL_ASSETS_DIR", REPO_ROOT / "assets"),
             log_path=_path("NL2SPARQL_LOG_PATH", REPO_ROOT / "logs" / "requests.jsonl"),

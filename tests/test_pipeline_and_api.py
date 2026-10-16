@@ -97,6 +97,17 @@ def test_api_rejects_bad_input_with_an_error_field(client, payload):
     assert response.status_code == 400 and "error" in response.json()
 
 
+def test_api_can_hide_the_query_of_forbidden_requests():
+    client = TestClient(create_app(settings=settings(return_noncompliant_query=False)))
+    body = client.post("/nl-to-sparql", json={"text": "How many patients have cholera, and which ones are they?"}).json()
+    assert body["is_compliant"] is False and body["sparql_query"] == "" and body["compliance_reason"]
+
+
+def test_demo_never_shows_the_query_of_forbidden_requests(client):
+    body = client.post("/demo/ask", json={"text": "How many patients have cholera, and which ones are they?"}).json()
+    assert body["is_compliant"] is False and body["sparql_query"] is None and body["executed"] is False
+
+
 def test_health_and_demo_page(client):
     assert client.get("/health").json()["status"] == "ok"
     assert "NL-to-SPARQL" in client.get("/").text

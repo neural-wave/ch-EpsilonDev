@@ -1,5 +1,6 @@
 """HTTP API. POST /nl-to-sparql follows API_specification.md exactly.
 
+The pipeline is database-agnostic: nothing behind /nl-to-sparql connects to a database.
 /demo/* routes serve the demo page only: they are not part of the judged API.
 """
 from __future__ import annotations
@@ -46,6 +47,8 @@ def create_app(pipeline: Pipeline | None = None, settings: Settings | None = Non
         }
         if not result.is_compliant:
             payload["compliance_reason"] = result.compliance_reason
+            if not settings.return_noncompliant_query:  # real use: the user gets only the reason
+                payload["sparql_query"] = ""
         return payload
 
     @app.get("/health")
@@ -62,7 +65,8 @@ def create_app(pipeline: Pipeline | None = None, settings: Settings | None = Non
         if error is not None:
             return error
         answer = {
-            "sparql_query": result.sparql_query,
+            # The demo shows what a user would see: never the query of a forbidden request.
+            "sparql_query": result.sparql_query if result.is_compliant else None,
             "tokens_consumed": result.tokens_consumed,
             "is_compliant": result.is_compliant,
             "compliance_reason": result.compliance_reason,
@@ -70,7 +74,9 @@ def create_app(pipeline: Pipeline | None = None, settings: Settings | None = Non
             "timings_ms": result.timings_ms,
             "executed": False,
         }
-        if result.is_compliant:  # only compliant queries ever reach the knowledge base
+        # Optional dev check, outside the system: run a compliant query on the local Virtuoso to see
+        # the result and its execution time. The pipeline itself never touches a database.
+        if result.is_compliant:
             try:
                 rows = await VirtuosoClient(settings.virtuoso_endpoint).select(result.sparql_query)
                 answer.update(executed=True, columns=rows.columns, rows=rows.rows[:200], execution_ms=round(rows.elapsed_ms, 1))

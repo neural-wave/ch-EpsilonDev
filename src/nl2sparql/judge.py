@@ -3,6 +3,8 @@
 Base version: add missing standard prefixes, check the syntax, and flag SPHN classes or
 properties that never occur in the data (e.g. sphn:hasRankCode from the 2026.1 schema).
 Any error triggers the shared retry with the error text as feedback.
+
+Database-agnostic by design: the judge never contacts a database (confirmed by the jury).
 """
 from __future__ import annotations
 

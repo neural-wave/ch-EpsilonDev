@@ -81,6 +81,8 @@ A detailed version of this flow, traced for one allowed and one forbidden reques
 ### 4.1 API layer
 
 - FastAPI app exposing `POST /nl-to-sparql`, exactly as in `API_specification.md`. No extra response fields.
+- Forbidden requests: the API returns the literal query because the jury asked for it, to judge better. A real user gets only the reason: `RETURN_NONCOMPLIANT_QUERY=false` switches to that behavior (empty `sparql_query`).
+- Database-agnostic: nothing behind the endpoint connects to a database (jury feedback, 2026-10-16).
 - Status codes: `200` for every finished translation; `400` for invalid input; `5xx` when the pipeline cannot produce a query (for example, the LLM server is down). Errors use `{"error": "..."}`.
 - `tokens_consumed` is the sum of prompt and completion tokens reported by the LLM server for every call in the request (intent, generation, retry).
 - Timeouts: one per LLM call and one for the whole request, both configurable.
@@ -141,7 +143,7 @@ At request time, within a budget of about 50 ms:
 - **Parse.** Remove the Virtuoso extensions (`DEFINE` lines, `OPTION (inference ...)` clauses), then parse with rdflib's SPARQL parser. A syntax error triggers the retry.
 - **Schema check.** Every `sphn:` class and property must exist in the schema cards. Every terminology IRI must exist in the index. An unknown term triggers the retry, with the closest valid names in the feedback.
 - **Style fixes** applied in code, without a retry: missing `PREFIX` declarations, the inference option on code type patterns.
-- **Optional:** if a Virtuoso endpoint is configured, run `EXPLAIN` to confirm the query compiles. This is off by default until we know whether one is reachable during judging.
+- **No database access:** the judge never contacts a database. The jury ruled out the optional `EXPLAIN` check: the system must be database-agnostic.
 
 ### 4.7 Compliance guard (code)
 
@@ -179,7 +181,7 @@ A variable is instance-level when it is the subject of a record pattern (`?dx a 
 
 - `asyncio`: input check, then the intent agent runs concurrently with context → query agent → judge, then the guard.
 - One retry per request, shared between the judge and the guard.
-- Early exit, behind a feature flag that is off by default. If the organizers confirm that only the verdict counts for forbidden requests, a clear intent flag cancels generation.
+- No early exit: the jury wants the literal query of forbidden requests in the response, so generation always runs.
 - Every request is logged as one JSONL line: text, flags, query, verdict, per-step timings, tokens, retries.
 
 ### 4.9 LLM serving
@@ -194,9 +196,9 @@ A variable is instance-level when it is the subject of a record pattern (`?dx a 
 
 A single page:
 1. A question box that calls the API.
-2. Shows the SPARQL, the verdict and the reason.
-3. When the request is compliant, runs the query on Virtuoso and shows the result and the execution time.
-4. When it is not, shows the suggestion and an "Ask this instead" button. The button sends the suggestion as a new request through the full pipeline.
+2. Shows the verdict. For a compliant request it also shows the SPARQL.
+3. Optionally runs a compliant query on the local Virtuoso to check the result and its execution time. The jury confirmed this is not required.
+4. For a forbidden request it shows only the reason and the suggestion, never the query, plus an "Ask this instead" button. The button sends the suggestion as a new request through the full pipeline.
 
 The demo UI is not part of the judged API.
 
@@ -220,7 +222,9 @@ The demo UI is not part of the judged API.
 | Triples (patients + ontologies) | 10.8M + 13.0M | 611.7M + 13.0M |
 | SPARQL endpoint | `http://localhost:8890/sparql` | `http://localhost:8891/sparql` |
 
-Example #05 takes 25.6 s on dev. The full table of official example timings on perf goes in the report.
+These databases are for development only: profiling, checking results and measuring performance. The pipeline never connects to them (jury feedback, 2026-10-16).
+
+Example #05 takes 25.6 s on dev. On perf, #01 exceeds 30 minutes and #03 takes 28 minutes, so query performance is a major lever.
 
 ## 7. Repo layout
 
@@ -251,10 +255,11 @@ nl2sparql/                 # becomes NW_26_<Company>_<Team>
 | Question | Default until answered |
 |---|---|
 | Only `SELECT` allowed? (API spec and rules disagree) | Yes, only `SELECT` |
-| Forbidden request: literal query expected? | Yes, literal query with `is_compliant: false` |
+| Forbidden request: literal query expected? | **Answered by the jury:** return it so they can judge; a real user gets only the reason |
 | Is result correctness evaluated? | Yes, we optimize for correct results |
 | How is our system run, on which hardware, and how do we reach the GPU? | Model behind an OpenAI-compatible URL set by environment variable |
-| Is a Virtuoso endpoint reachable during judging? | No; `EXPLAIN` stays off |
+| Can the system use a database at runtime? | **Answered by the jury:** no, it must be database-agnostic |
+| Must compliant queries be executed? | **Answered by the jury:** no, it is optional |
 | How are queries timed: HTTP or `query.sh` (isql)? | HTTP. If isql, avoid constructs isql rejects, such as `;` inside `GROUP_CONCAT` |
 | Gray zones: fine-grained `GROUP BY`, `MIN`/`MAX` that reveal one patient | `GROUP BY` on identifiers or exact timestamps is non-compliant; `MIN`/`MAX` over dates is allowed |
 | Request language | English only |
