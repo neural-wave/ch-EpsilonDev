@@ -210,6 +210,10 @@ nl2sparql/
 
 **Shared interfaces**: [models.py](src/nl2sparql/models.py) and [agents/base.py](src/nl2sparql/agents/base.py). Change them only after agreeing with the team.
 
+**Guides per topic:**
+- [docs/DATA.md](docs/DATA.md): how the patient graphs look, with examples. For everyone.
+- [docs/GUARD.md](docs/GUARD.md): how the compliance guard works, its tools and its backlog. For module D.
+
 ## 6. Getting started on your computer
 
 You need Python 3.11 or newer. You do **not** need Virtuoso or a GPU to work on the code.
@@ -329,6 +333,9 @@ scripts/runbox.sh eval --execute --branch guard/my-fix     # eval with the LLM +
 | `data/property_kinds.json` | What each of the 199 properties points to: value, value set or link. The guard relies on it | yes | `python scripts/profile_data.py` (about 2 minutes) |
 | `data/schema_cards.json` | The 164 classes present in the data (the schema defines 214), with their properties | yes | same script |
 | `assets/terminology_index.jsonl` | Code IRIs with their labels | **no**, restricted | `python scripts/build_terminology_index.py` |
+| `data/guard_corpus.jsonl` | 37 queries the LLM really wrote, with labels and the guard's verdict | yes | `python scripts/export_guard_corpus.py` (run machine, after LLM runs) |
+
+The full guide to the data, with examples, is [docs/DATA.md](docs/DATA.md).
 
 ## 11. Evaluation and baseline numbers
 

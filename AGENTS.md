@@ -2,6 +2,8 @@
 
 Read [README.md](README.md) first. It is the team's master document: the challenge, the jury's feedback, the architecture and its reasons, setup, configuration, the GPU, the run machine, baseline numbers, known pitfalls and the backlog per module. This file only repeats what you must never get wrong.
 
+Before touching queries, data or prompts, read [docs/DATA.md](docs/DATA.md), which explains how the patient graphs look. For the compliance guard or the judge (module D), also read [docs/GUARD.md](docs/GUARD.md).
+
 ## Rules you must follow
 
 - **Never commit or paste restricted material.** That covers ontology and terminology files (SNOMED CT, ICD-10-GM, CHOP, LOINC, UCUM), anything derived from them (`assets/`), patient data, `.env`, tokens and GPU host details. The repo becomes public after the event.
