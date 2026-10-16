@@ -94,15 +94,33 @@ class QueryFacts:
     iris: set[URIRef] = field(default_factory=set)
     filters: list[object] = field(default_factory=list)
     touches_patient_data: bool = False
+    type_objects: set[Variable] = field(default_factory=set)  # objects of rdf:type: always classes
 
     def raise_to(self, variable: Variable, level: Sensitivity) -> None:
+        if variable in self.type_objects:
+            level = min(level, Sensitivity.CATEGORY)
         self.sensitivity[variable] = max(self.sensitivity.get(variable, Sensitivity.CONSTANT), level)
 
 
 def analyse(algebra: CompValue, kinds: PropertyKinds, ontology_graphs: frozenset[str]) -> QueryFacts:
     facts = QueryFacts()
+    _collect_type_objects(algebra, facts.type_objects)
     _visit(algebra, facts, kinds, ontology_graphs, in_ontology=False)
     return facts
+
+
+def _collect_type_objects(node, found: set[Variable]) -> None:
+    """In SPHN data the object of rdf:type is a class or a code concept, never a patient record."""
+    if isinstance(node, (list, tuple, set)):
+        for item in node:
+            _collect_type_objects(item, found)
+    elif isinstance(node, CompValue):
+        if node.name == "BGP":
+            found.update(o for _, p, o in node.triples if p == RDF.type and isinstance(o, Variable))
+            return
+        for key, value in node.items():
+            if not key.startswith("_"):
+                _collect_type_objects(value, found)
 
 
 def expression_sensitivity(expr: object, facts: QueryFacts) -> Sensitivity:

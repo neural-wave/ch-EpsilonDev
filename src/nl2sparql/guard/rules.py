@@ -15,7 +15,6 @@ RECORD_IRI_RE = re.compile(r"^https://biomedit\.ch/rdf/sphn-resource/[^/]*-sphn-
 SELECT_STAR_RE = re.compile(r"\bSELECT\s+(?:DISTINCT\s+|REDUCED\s+)?\*", re.IGNORECASE)
 FIRST_SELECT_RE = re.compile(r"\bSELECT\b", re.IGNORECASE)
 STRING_MATCHERS = {"Builtin_REGEX", "Builtin_CONTAINS", "Builtin_STRSTARTS", "Builtin_STRENDS", "Builtin_sameTerm"}
-LISTING_AGGREGATES = {"Aggregate_Sample", "Aggregate_GroupConcat"}
 PICKING_AGGREGATES = {"Aggregate_Min", "Aggregate_Max", "Aggregate_Sample", "Aggregate_GroupConcat"}
 AGGREGATE_NAMES = {
     "Aggregate_Min": "MIN", "Aggregate_Max": "MAX", "Aggregate_Sample": "SAMPLE",
@@ -154,21 +153,25 @@ def _exposed_group_keys(projected, extends, facts: QueryFacts, group_vars: set) 
 
 def _expression_violations(variable, expr, facts: QueryFacts, group_vars: set) -> list[Violation]:
     found = []
+    # What reaches the output: YEAR(SAMPLE(?date)) only exposes a year, SAMPLE(?date) the exact date.
+    output = expression_sensitivity(expr, facts)
     for used in _variables_in(expr):
         aggregate = facts.aggregates.get(used)
-        if aggregate is not None:
-            if aggregate.name not in PICKING_AGGREGATES:
-                continue
-            if aggregate.name == "Aggregate_Sample" and aggregate.vars in group_vars:
-                continue  # rdflib carries projected GROUP BY keys as SAMPLE; the key check covers them
-            level = expression_sensitivity(aggregate.vars, facts)
-            name = AGGREGATE_NAMES[aggregate.name]
-            if level >= Sensitivity.INSTANCE:
-                found.append(Violation("R5", f"?{variable} uses {name} over identifiers or record IRIs."))
-            elif aggregate.name in LISTING_AGGREGATES and level in (Sensitivity.VALUE, Sensitivity.TIMESTAMP):
-                found.append(Violation("R2", f"?{variable} uses {name} to list individual values."))
-        elif used not in group_vars:
-            found.append(Violation("R2", f"?{variable} uses ?{used} outside an aggregate."))
+        if aggregate is None:
+            if used not in group_vars:
+                found.append(Violation("R2", f"?{variable} uses ?{used} outside an aggregate."))
+            continue
+        if aggregate.name not in PICKING_AGGREGATES:
+            continue
+        if aggregate.name == "Aggregate_Sample" and aggregate.vars in group_vars:
+            continue  # rdflib carries projected GROUP BY keys as SAMPLE; the key check covers them
+        name = AGGREGATE_NAMES[aggregate.name]
+        if output >= Sensitivity.INSTANCE:
+            found.append(Violation("R5", f"?{variable} uses {name} over identifiers or record IRIs."))
+        elif aggregate.name == "Aggregate_GroupConcat" and output >= Sensitivity.VALUE:
+            found.append(Violation("R2", f"?{variable} uses {name} to list individual values."))
+        elif aggregate.name == "Aggregate_Sample" and output >= Sensitivity.TIMESTAMP:
+            found.append(Violation("R2", f"?{variable} uses {name} to pick one record's exact value."))
     return found
 
 

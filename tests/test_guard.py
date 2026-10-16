@@ -78,3 +78,16 @@ def test_allowed_request_with_broken_query_gets_a_retry_hint(guard):
     decision = guard.decide(_example(12), IntentFlags())
     assert not decision.compliant
     assert decision.retry_hint and "aggregated" in decision.retry_hint
+
+
+GROUPING_CASES = [
+    ("group by year expression", True, PREFIXES + "SELECT (YEAR(?dt) AS ?year) (COUNT(DISTINCT ?g) AS ?n) WHERE { GRAPH ?g { ?e a sphn:LabTestEvent ; sphn:hasDateTime ?dt } } GROUP BY (YEAR(?dt))"),
+    ("sample of exact date", False, PREFIXES + "SELECT (SAMPLE(?dt) AS ?when) (COUNT(DISTINCT ?g) AS ?n) WHERE { GRAPH ?g { ?e a sphn:LabTestEvent ; sphn:hasDateTime ?dt } }"),
+    ("class also used as subject", True, PREFIXES + "SELECT ?m (COUNT(DISTINCT ?g) AS ?n) WHERE { GRAPH ?g { ?p a sphn:BilledProcedure ; sphn:hasCode ?code . ?code a ?concept . OPTIONAL { ?concept rdfs:label ?label } } BIND(REPLACE(STR(?concept), \"^.*/\", \"\") AS ?m) } GROUP BY ?m"),
+]
+
+
+@pytest.mark.parametrize("name,compliant,query", GROUPING_CASES, ids=[c[0] for c in GROUPING_CASES])
+def test_grouping_cases_found_by_the_llm_eval(guard, name, compliant, query):
+    violations = guard.check_query(query)
+    assert (not violations) == compliant, violations
