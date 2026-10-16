@@ -59,16 +59,16 @@ await Pipeline.run(text: str) -> PipelineResult        # raises InputError, Pipe
 
 ## Tasks
 
-- [ ] **1. Skeleton:** `pyproject.toml`, `requirements.txt`, `.gitignore`, `.env.example`, `config.py`, `models.py`. Check: `pip install -r requirements.txt` and `python -c "import nl2sparql"`.
-- [ ] **2. Input check** + `tests/test_input_check.py`.
-- [ ] **3. SPARQL parsing** (`sparql/parse.py`, `prefixes.py`, `terms.py`) + `tests/test_sparql.py`.
-- [ ] **4. Data assets:** `scripts/import_examples.py` and `scripts/profile_data.py` write `data/examples.jsonl`, `data/property_kinds.json`, `data/schema_cards.json` and seed `eval/questions.jsonl`.
-- [ ] **5. Guard** (`guard/provenance.py`, `rules.py`, `decision.py`) + `tests/test_guard.py`: the 15 official examples and crafted cases must match their labels.
-- [ ] **6. Context** (`context/bm25.py`, `examples.py`, `schema.py`, `terminology.py`, `builder.py`) + `scripts/build_terminology_index.py` + `tests/test_context.py`.
-- [ ] **7. Judge** + `tests/test_judge.py`.
-- [ ] **8. LLM client and agents** (`llm.py`, `agents/*`) + `tests/test_agents.py` (LLM calls mocked with `httpx.MockTransport`).
-- [ ] **9. Orchestrator and factory** + `tests/test_orchestrator.py` (fake agents: parallelism, retry rules, tokens, errors).
-- [ ] **10. API, demo and Virtuoso client** + `tests/test_api.py` (contract from `API_specification.md`).
-- [ ] **11. Eval runner** (`eval/run_eval.py`) and first baseline report.
-- [ ] **12. Infra wrappers and README.**
-- [ ] **13. Final check:** full test suite, API smoke test with curl, eval run, commit.
+- [x] **1. Skeleton:** `pyproject.toml`, `requirements.txt`, `.gitignore`, `.env.example`, `config.py`, `models.py`. Check: `pip install -r requirements.txt` and `python -c "import nl2sparql"`.
+- [x] **2. Input check** + `tests/test_input_check.py`.
+- [x] **3. SPARQL parsing** (`sparql/parse.py`, `prefixes.py`, `terms.py`) + `tests/test_sparql.py`.
+- [x] **4. Data assets:** `scripts/import_examples.py` and `scripts/profile_data.py` write `data/examples.jsonl`, `data/property_kinds.json`, `data/schema_cards.json` and seed `eval/questions.jsonl`.
+- [x] **5. Guard** (`guard/provenance.py`, `rules.py`, `decision.py`) + `tests/test_guard.py`: the 15 official examples and crafted cases must match their labels.
+- [x] **6. Context** (`context/bm25.py`, `examples.py`, `schema.py`, `terminology.py`, `builder.py`) + `scripts/build_terminology_index.py` + `tests/test_context.py`.
+- [x] **7. Judge** + `tests/test_judge.py`.
+- [x] **8. LLM client and agents** (`llm.py`, `agents/*`) + `tests/test_agents.py` (LLM calls mocked with `httpx.MockTransport`).
+- [x] **9. Orchestrator and factory** + `tests/test_orchestrator.py` (fake agents: parallelism, retry rules, tokens, errors).
+- [x] **10. API, demo and Virtuoso client** + `tests/test_api.py` (contract from `API_specification.md`).
+- [x] **11. Eval runner** (`eval/run_eval.py`) and first baseline report.
+- [x] **12. Infra wrappers and README.**
+- [x] **13. Final check:** full test suite, API smoke test with curl, eval run, commit.
