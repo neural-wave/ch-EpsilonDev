@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NL-to-SPARQL Demo</title>
+<style>
+  :root { --bg: #f4f6f7; --card: #fff; --ink: #142028; --muted: #5a6a73; --ok: #1f7a45; --no: #b93d0f; --line: #d3dbe0; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 system-ui, sans-serif; }
+  main { max-width: 900px; margin: 0 auto; padding: 32px 16px; display: grid; gap: 16px; }
+  textarea { width: 100%; min-height: 70px; font: inherit; padding: 10px; border: 1px solid var(--line); border-radius: 8px; box-sizing: border-box; }
+  button { font: inherit; padding: 8px 16px; border-radius: 8px; border: 0; background: var(--ink); color: #fff; cursor: pointer; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: grid; gap: 10px; }
+  .verdict { font-weight: 600; }
+  .ok { color: var(--ok); } .no { color: var(--no); }
+  pre { margin: 0; overflow-x: auto; background: var(--bg); padding: 12px; border-radius: 6px; font-size: 13px; }
+  table { border-collapse: collapse; font-size: 14px; } td, th { border-bottom: 1px solid var(--line); padding: 4px 10px; text-align: left; }
+  .muted { color: var(--muted); font-size: 13px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>NL-to-SPARQL</h1>
+  <form id="ask">
+    <textarea id="text">How many patients have a billed diagnosis of cholera?</textarea>
+    <button type="submit">Ask</button>
+  </form>
+  <section id="out" class="card" hidden></section>
+</main>
+<script>
+const out = document.getElementById("out");
+const escapeHtml = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
+async function ask(text) {
+  out.hidden = false;
+  out.innerHTML = "<p class='muted'>Thinking…</p>";
+  const response = await fetch("/demo/ask", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({text})});
+  const data = await response.json();
+  if (!response.ok) { out.innerHTML = `<p class="no">${escapeHtml(data.error)}</p>`; return; }
+  let html = data.is_compliant
+    ? `<p class="verdict ok">Compliant</p>`
+    : `<p class="verdict no">Not compliant</p><p>${escapeHtml(data.compliance_reason)}</p>`;
+  if (!data.is_compliant && data.suggested_rephrase && /\?$/.test(data.suggested_rephrase)) {
+    html += `<p><button id="rephrase">Ask this instead: ${escapeHtml(data.suggested_rephrase)}</button></p>`;
+  }
+  html += `<pre>${escapeHtml(data.sparql_query)}</pre>`;
+  html += `<p class="muted">Tokens: ${data.tokens_consumed} · timings (ms): ${escapeHtml(JSON.stringify(data.timings_ms))}</p>`;
+  if (data.executed) {
+    const head = data.columns.map(c => `<th>${escapeHtml(c)}</th>`).join("");
+    const body = data.rows.map(r => "<tr>" + data.columns.map(c => `<td>${escapeHtml(r[c])}</td>`).join("") + "</tr>").join("");
+    html += `<p class="muted">Ran on the knowledge base in ${data.execution_ms} ms</p><table><tr>${head}</tr>${body}</table>`;
+  } else if (data.execution_error) {
+    html += `<p class="no">Execution failed: ${escapeHtml(data.execution_error)}</p>`;
+  } else if (!data.is_compliant) {
+    html += `<p class="muted">Nothing was executed.</p>`;
+  }
+  out.innerHTML = html;
+  const again = document.getElementById("rephrase");
+  if (again) again.onclick = () => { document.getElementById("text").value = data.suggested_rephrase; ask(data.suggested_rephrase); };
+}
+document.getElementById("ask").addEventListener("submit", e => { e.preventDefault(); ask(document.getElementById("text").value); });
+</script>
+</body>
+</html>
