@@ -237,6 +237,17 @@ v2 was written after seeing these 73 questions, so 100% was optimistic. The bigg
 4. **Measure on the run machine.** Run the intent eval for intent prompts, the pipeline eval for query prompts. Compare the new row with the v1 row under **Measurements**.
 5. **If v2 wins,** make it the default in `config.py` and `.env.example`, and update the baseline above.
 
+### When the guard's gray zones change
+
+The intent prompt (v4) and the labels in `eval/intent_questions.jsonl` follow the guard's current assumptions in GUARD.md §6:
+- small groups are allowed;
+- MIN/MAX are allowed;
+- grouping by an exact date is forbidden;
+- schema questions are allowed;
+- only SELECT is allowed.
+
+If module D changes one of them, update both the prompt and the affected labels (group `gray` and their notes), then rerun `python eval/run_intent_eval.py --concurrency 4`. The intent agent and the guard must agree on what is allowed. Otherwise the request text and the query get different verdicts.
+
 ## 7. Changing a model: Apertus for the intent agent
 
 **Why try it:**
