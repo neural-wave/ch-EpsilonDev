@@ -7,6 +7,7 @@ This guide separates completed local work from real-graph validation. The root [
 | Work | Owner | Status | What the status means |
 | --- | --- | --- | --- |
 | Retrieval, loaders, deterministic behavior, synthetic tests, and local benchmark | You / local contributor | **Complete locally** | Implemented and exercised with synthetic fixtures and checked-in snapshots. |
+| Sanitized RDF profile comparison helper | You / local contributor | **Implemented; not executed** | `scripts/compare_data_profile.py` is written, but has not been run per the code-only request. |
 | Final local checks and branch handoff | You / local contributor | **Complete** | Focused/full tests and benchmark were rerun; the `guardjudge` branch was pushed. See evidence below. |
 | Dev graph profile, real terminology index, and actual-data evaluation | Santiago | **Pending run-machine access** | No real graph was available in this checkout; these steps have not been verified. |
 | Perf graph measurements | Santiago | **Pending perf access** | No real performance-graph timings have been collected. |
@@ -23,6 +24,7 @@ The existing real-data integration path is offline: `scripts/profile_data.py` pr
 - [x] Kept BM25 defaults: the synthetic benchmark did not meet the threshold for changing them.
 - [x] Measured prompt sizes for typical and expanded synthetic context. These are measurements, not an enforced context budget.
 - [x] Preserved the factory-owned fail-closed validation for required profile snapshots; coordinate with teammate A before changing it.
+- [x] Added `scripts/compare_data_profile.py` for numeric-only snapshot comparison. It reports aggregate additions/removals/changes without printing schema terms, properties, or profile entries.
 
 ### Local evidence
 
@@ -41,9 +43,11 @@ PYTHONPATH=src .venv311/bin/python scripts/retrieval_benchmark.py
 
 The numeric-only synthetic benchmark used 14 fabricated cases. Default and candidate BM25 settings each scored **92.9% top-1** and **100% top-3**; their p50 retrieval latency was **0.0041 ms**, **0.0042 ms**, and **0.0041 ms**. No candidate improved top-1 by the required 5 percentage points, so defaults remain unchanged. Typical and expanded synthetic rendered prompts were **668** and **37,624 characters**. These are local synthetic measurements, not an LLM or real-graph evaluation.
 
+The profile comparison helper was added after these recorded test and benchmark runs. It has not been executed; the evidence above does not cover that new script.
+
 ## Your local work — complete; no RDF graph required
 
-There are no outstanding local implementation or verification tasks in the current checklist. Final checks were run and the branch was pushed. The commands used were:
+There are no outstanding local implementation tasks in the current checklist. The profile-comparison helper was added after the recorded verification and was intentionally not executed; run it as part of the Santiago profile workflow below. The previously verified code was pushed on `guardjudge`. The commands used for that recorded verification were:
 
 ```bash
 PYTHONPATH=src .venv311/bin/python -m pytest -q tests/test_context.py
@@ -68,11 +72,10 @@ git diff --check
   ```bash
   profile_dir="$(mktemp -d)"
   python scripts/profile_data.py --endpoint http://localhost:8890/sparql --data-dir "$profile_dir"
-  diff -u data/property_kinds.json "$profile_dir/property_kinds.json"
-  diff -u data/schema_cards.json "$profile_dir/schema_cards.json"
+  python scripts/compare_data_profile.py --profile-dir "$profile_dir"
   ```
 
-- [ ] Confirm the profile is non-empty; summarize only sanitized differences in classes, properties, kinds, and aggregate counts.
+- [ ] Confirm the profile is non-empty; review the comparison script's aggregate counts for differences in classes, properties, kinds, and schema terms. Do not paste raw profile files or entry-level diffs into shared reports.
 - [ ] Refresh committed snapshots only when the graph profile supports the change, then rerun focused and full local tests.
 - [ ] Keep profiling an offline maintenance action; never call it from the API request path.
 
