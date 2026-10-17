@@ -45,6 +45,7 @@ The jury scores three things: **time per request**, **verdict correctness** agai
 | 17 Oct | v2 | Qwen3.5-9B | 198: dev / holdout | 96.6% / **93.1%** | 0% / **5%** | 94.0% / 89.7% | 558 | 1.6 s |
 | 17 Oct | **v4** (default) | Qwen3.5-9B | 198: dev / holdout | 98.9% / **93.1%** | 1.6% / **5%** | 98.8% / 93.1% | 631 | 1.6 s |
 | 17 Oct | v4 | Qwen3-Coder-30B-A3B (4-bit) | 198: dev / holdout | 96.6% / 93.1% | 1.6% / 10% | | 607 | 1.1 s |
+| 17 Oct 14:05 | v5 (rejected) | Qwen3.5-9B | 198: dev / holdout | 97.7% / 93.1% | 0% / 5% | 96.4% | 685 | 1.8 s |
 
 ### Query agent vs reference SPARQL (47 questions, executed on dev)
 
@@ -99,7 +100,7 @@ A request without retry, Qwen3.5-9B, merged system:
 
 **Verdicts**
 1. Re-run the 198 set with prompt v4: fewer allowed requests blocked is expected.
-2. The intent false alarm on counts that mention identifiers (module B).
+2. ~~The intent false alarm on counts that mention identifiers~~: prompt v5 fixed it on dev but changed nothing on the holdout and cost 54 tokens per call; rejected, v4 stays.
 3. The two holdout leaks and the retry hint for "grouping by ?code" (module D).
 
 **Query time on 100,000 patients**
