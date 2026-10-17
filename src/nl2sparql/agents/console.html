@@ -114,6 +114,8 @@
       <code>python eval/run_eval.py</code> (whole pipeline). Hover a header or a count for details.</p>
     <h3>Intent agent alone</h3>
     <div id="intent-reports"></div>
+    <h3>Query agent against reference SPARQL</h3>
+    <div id="query-reports"></div>
     <h3>Whole pipeline</h3>
     <div id="pipeline-reports"></div>
     <div id="report-detail"></div>
@@ -297,6 +299,45 @@ function intentTable(list) {
   </tbody></table></div>`;
 }
 
+function queryTable(list) {
+  if (!list.length) return "<p class='muted'>No query reports yet.</p>";
+  const outcome = (s, key) => s.outcomes ? num(s.outcomes[key]) : dash;
+  return `<div class="scroll"><table class="grid"><thead><tr>
+      <th>Date</th><th>Model</th><th title="Prompt versions: intent / query">Prompts</th><th>Questions</th>
+      <th title="Generated query returns the same rows as the reference (dev Virtuoso)">Exact result</th>
+      <th title="Same number of rows, different values">Same rows</th><th>Empty</th><th>Wrong</th>
+      <th title="Virtuoso rejected the generated query">Error</th>
+      <th title="Valid on the first try: no retry and no judge error left">First try</th>
+      <th title="The blind exam: exact-result rate on holdout questions">Holdout exact</th>
+      <th>Query tokens (median)</th><th title="Generated vs reference execution time, median ratio">Exec time ×</th>
+      <th>Time p50 / p95</th></tr></thead><tbody>
+    ${list.map(r => { const s = r.summary; return `<tr data-name="${esc(r.name)}">
+      <td>${esc(r.created)}</td><td title="${esc(s.models?.query)}">${esc(shortModel(s.models?.query)) || dash}</td>
+      <td>${s.prompt_versions ? esc(`${s.prompt_versions.intent} / ${s.prompt_versions.query}`) : dash}</td>
+      <td>${num(s.questions)}</td><td>${pct(s.exact_rate)}</td><td>${outcome(s, "same_rows")}</td>
+      <td>${outcome(s, "empty")}</td><td>${outcome(s, "wrong")}</td><td>${outcome(s, "error")}</td>
+      <td>${pct(s.first_try_rate)}</td><td>${s.by_split?.holdout ? pct(s.by_split.holdout.exact_rate) : dash}</td>
+      <td>${num(s.median_query_tokens)}</td><td>${num(s.execution_time_ratio_median)}</td>
+      <td>${msec(s.latency_ms_p50)} / ${msec(s.latency_ms_p95)}</td></tr>`; }).join("")}
+  </tbody></table></div>`;
+}
+
+function queryRows(rows) {
+  const rank = {error: 0, empty: 1, wrong: 2, same_rows: 3, reference_failed: 4, exact: 5};
+  rows = byProblem(rows.filter(r => r.split !== "holdout"), r => rank[r.outcome] ?? 4);
+  return `<div class="scroll"><table class="grid"><thead><tr><th>Id</th><th>Difficulty</th><th>Outcome</th>
+    <th>Rows (model / reference)</th><th>Retry</th><th>Tokens</th><th>Exec time</th><th>Problems</th><th>Question and query</th></tr></thead><tbody>
+    ${rows.map(r => { const dg = r.diagnostics || {}; return `<tr><td>${esc(r.id)}</td><td>${num(r.difficulty)}</td>
+      <td class="${r.outcome === "exact" ? "good" : "bad"}">${esc(r.outcome)}</td>
+      <td>${num(r.generated_rows)} / ${num(r.reference_rows)}</td><td>${r.retries ? esc(dg.retry_reason || "yes") : ""}</td>
+      <td>${num(r.tokens_consumed)}</td><td>${msec(r.execution_ms)} <span class="muted">ref ${msec(r.reference_ms)}</span></td>
+      <td class="wrap">${lines([r.pipeline_error && `pipeline: ${r.pipeline_error}`, r.execution_error && `Virtuoso: ${r.execution_error}`,
+        ...(dg.judge_errors_final || []).map(e => `still invalid: ${e}`), r.is_compliant === false && "blocked as not compliant"])}</td>
+      <td class="wrap">${esc(r.question)}${r.sparql_query ? `<details><summary>query</summary><pre>${esc(r.sparql_query)}</pre></details>` : ""}
+        <details><summary>reference</summary><pre>${esc(r.reference_sparql)}</pre></details></td></tr>`; }).join("")}
+  </tbody></table></div>`;
+}
+
 function modelsCell(models) {
   if (!models) return dash;  // reports from before 2026-10-17
   const i = shortModel(models.intent), q = shortModel(models.query);
@@ -398,11 +439,11 @@ async function showReport(name) {
   const response = await fetch(`/agents/reports/${encodeURIComponent(name)}`);
   const d = await response.json();
   if (!response.ok) { out.innerHTML = `<p class="bad">${esc(d.error)}</p>`; return; }
-  const intent = name.startsWith("intent-");
+  const intent = name.startsWith("intent-"), query = name.startsWith("query-");
   out.innerHTML = `<div class="card">
     <div class="head"><h3>${esc(name)}</h3><a href="/agents/reports/${encodeURIComponent(name)}" target="_blank">raw JSON</a></div>
     ${summaryTable(d.summary)}
-    <details open><summary>${plural((d.rows || []).length, "question")}, problems first</summary>${intent ? intentRows(d.rows || []) : pipelineRows(d.rows || [])}</details>
+    <details open><summary>${plural((d.rows || []).length, "question")}, problems first${query ? " (holdout hidden)" : ""}</summary>${intent ? intentRows(d.rows || []) : query ? queryRows(d.rows || []) : pipelineRows(d.rows || [])}</details>
   </div>`;
 }
 
@@ -410,6 +451,7 @@ async function loadReports() {
   const d = await (await fetch("/agents/reports")).json();
   document.getElementById("reports-folder").textContent = d.folder;
   document.getElementById("intent-reports").innerHTML = intentTable(d.reports.filter(r => r.kind === "intent"));
+  document.getElementById("query-reports").innerHTML = queryTable(d.reports.filter(r => r.kind === "query"));
   document.getElementById("pipeline-reports").innerHTML = pipelineTable(d.reports.filter(r => r.kind === "pipeline"));
   document.getElementById("report-detail").innerHTML = "";
 }
