@@ -36,10 +36,11 @@ def run_query(endpoint: str, sparql: str, timeout_ms: int) -> dict:
         response = httpx.post(endpoint, data={"query": sparql, "timeout": str(timeout_ms)},
                               headers={"Accept": ACCEPT_JSON}, timeout=timeout_ms / 1000 + 60)
         seconds = round(time.perf_counter() - started, 2)
-        if response.status_code != 200:
+        # HTTP 206 is Virtuoso's "partial content": the server-side timeout stopped the query.
+        if response.status_code not in (200, 206):
             return {"seconds": seconds, "rows": None, "complete": False, "error": response.text.strip()[:160]}
         rows = len(response.json().get("results", {}).get("bindings", []))
-        complete = response.headers.get("X-SQL-State", "") != "S1TAT"
+        complete = response.status_code == 200 and response.headers.get("X-SQL-State", "") != "S1TAT"
         return {"seconds": seconds, "rows": rows, "complete": complete, "error": None}
     except Exception as error:  # report and keep going
         return {"seconds": round(time.perf_counter() - started, 2), "rows": None, "complete": False, "error": str(error)[:160]}
@@ -74,11 +75,11 @@ def main() -> None:
     for item in candidates:
         reference = time_query(args.endpoint, item["reference_sparql"], args.runs, args.timeout_ms)
         generated = time_query(args.endpoint, item["sparql_query"], args.runs, args.timeout_ms)
-        ratio = (round(generated["seconds"] / reference["seconds"], 2)
-                 if generated["seconds"] and reference["seconds"] else None)
+        both = reference["complete"] and generated["complete"] and reference["seconds"] and generated["seconds"] is not None
+        ratio = round(generated["seconds"] / reference["seconds"], 2) if both else None
         rows.append({"id": item["id"], "split": item.get("split", "dev"), "question": item["question"],
                      "dev_outcome": item.get("outcome"), "reference": reference, "generated": generated, "ratio": ratio})
-        fmt = lambda r: ("timeout" if not r["complete"] and not r["error"] else "error" if r["error"] else f"{r['seconds']:.2f}s")
+        fmt = lambda r: ("error" if r["error"] else "timeout" if not r["complete"] else f"{r['seconds']:.2f}s")
         print(f"{item['id']:12} reference {fmt(reference):>8}  generated {fmt(generated):>8}  "
               f"ratio {ratio if ratio is not None else '-':>6}  {item['question'][:55]}")
 
