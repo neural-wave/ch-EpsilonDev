@@ -10,11 +10,23 @@ from nl2sparql.models import Context
 from nl2sparql.sparql.order import reorder
 
 FENCE_RE = re.compile(r"```(?:sparql)?\s*(.*?)```", re.DOTALL | re.IGNORECASE)
+LANGUAGE_TAG_RE = re.compile(r"^sparql(?=\s|$)", re.IGNORECASE)
 
 
 def extract_sparql(text: str) -> str:
+    """The query inside the answer's code fence, or the whole answer without one. An answer cut off at
+    max_tokens keeps its opening fence (q-013, official-08): with a single fence, the query is what follows
+    it, or what precedes a lone closing one."""
     match = FENCE_RE.search(text)
-    return (match.group(1) if match else text).strip() + "\n"
+    if match:
+        sparql = match.group(1)
+    elif text.count("```") == 1:
+        before, _, after = text.partition("```")
+        after = LANGUAGE_TAG_RE.sub("", after.lstrip())
+        sparql = after if after.strip() else before
+    else:
+        sparql = text
+    return sparql.strip() + "\n"
 
 
 @dataclass(frozen=True)

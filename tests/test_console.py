@@ -1,11 +1,17 @@
 import json
+import sys
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 
-from conftest import DATA_DIR
-from nl2sparql.api import create_app
-from nl2sparql.config import Settings
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "eval"))
+from run_eval import agent_setup  # noqa: E402
+from run_query_eval import eval_setup  # noqa: E402
+
+from conftest import DATA_DIR  # noqa: E402
+from nl2sparql.api import create_app  # noqa: E402
+from nl2sparql.config import Settings  # noqa: E402
 
 
 @pytest.fixture()
@@ -28,6 +34,23 @@ def test_config_shows_both_agents_and_hides_secrets(client):
     assert intent["max_answer_tokens"] == 200 and query["max_answer_tokens"] == 1500
     assert "secret-token-123" not in str(config) and intent["api_key"].startswith("set (")
     assert config["context"]["examples_in_bank"] == 19 and config["pipeline"]["schema_classes_loaded"] == 164
+
+
+def test_config_counts_the_dev_references_in_the_bank(client):
+    assert client.get("/agents/config").json()["context"]["dev_references_in_bank"] == 0
+    with_references = TestClient(create_app(settings=Settings(data_dir=DATA_DIR, log_path=None, context_dev_references=True)))
+    context = with_references.get("/agents/config").json()["context"]
+    assert context["dev_references_in_bank"] == 45 and context["examples_in_bank"] == 19 + 45
+
+
+@pytest.mark.parametrize("flag", [False, True])
+def test_eval_reports_record_the_dev_references_flag(flag):
+    # The runs page compares reports by their setup: with the flag on, only the holdout numbers are comparable.
+    configured = Settings(data_dir=DATA_DIR, log_path=None, context_dev_references=flag)
+    expected = {"examples": 3, "cards": 8, "codes": 5, "dev_references": flag}
+    assert agent_setup(configured)["context"] == expected
+    setup = eval_setup(configured, concurrency=4)
+    assert setup["context"] == expected and setup["concurrency"] == 4 and setup["backend"] == "stub"
 
 
 def test_preview_builds_the_real_prompts_without_calling_a_model(client):

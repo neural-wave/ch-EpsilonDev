@@ -1,11 +1,16 @@
-"""Judge check: the query restricts to the coded concepts the question names.
+"""Judge checks that read the question: the query must answer what it asks.
 
-The console showed "How many patients have cholera on a hospital bill, by sex?" answered with all
-patients by sex: the query agent dropped the cholera pattern, and no other check compares the codes the
-question names with the query. The terminology index (context/terminology.py) maps the question's words
-to the code candidates of the prompt; this check takes the candidates the question names strongly and
-requires the query to use that code, a subcode or a parent code of the same system anywhere: a typed
-pattern, VALUES, a FILTER, or a string that spells the code or its name.
+Two checks, both exported through CHECKS with the signature (question, parsed, text, schema, terminology):
+check_question_coverage, the coded concepts the question names, and check_record_count_asked, the
+record count the question asks for. Each one costs the request its only judge retry when it fires, so
+both prefer a miss to a false alarm.
+
+Concept coverage. The console showed "How many patients have cholera on a hospital bill, by sex?"
+answered with all patients by sex: the query agent dropped the cholera pattern, and no other check
+compares the codes the question names with the query. The terminology index (context/terminology.py)
+maps the question's words to the code candidates of the prompt; this check takes the candidates the
+question names strongly and requires the query to use that code, a subcode or a parent code of the
+same system anywhere: a typed pattern, VALUES, a FILTER, or a string that spells the code or its name.
 
 A false alarm costs the request its only judge retry and a miss costs nothing, so a match is strong only
 when it cannot be a coincidence:
@@ -34,20 +39,49 @@ Measured with the real index (17 October): zero hits on the 16 official examples
 the 45 dev reference queries, each against its own question; on the dev rows of the query and pipeline
 evals, one hit on the final queries (official-06, which filters on a CHOP namespace that does not exist
 and returns nothing) and none on the first tries. tests/test_judge_coverage.py builds a small index.
+
+Record count. "How many drug prescriptions are for continuous dosing ...? Give the number of patients
+for each as well" came back with the patients only, and "How many allergy episodes are confirmed ..."
+with the patients counted under ?episodes: the second failure analysis found the asked record count
+missing or counted on the wrong unit in ten of the dev answers, all wrong. The question asks for a
+record count when a cue ("how many", "the number of", "give") is followed by at most two modifiers and
+a record noun. The nouns come from the schema cards: the head word of every class that carries
+hasSubjectPseudoIdentifier, which is how SPHN marks the records of a patient (procedure, prescription,
+diagnosis, episode, event, case, encounter, death, ...), plus the everyday plurals the class names do
+not spell (stays, admissions, visits, tests, follow-ups, records). A patient word among the modifiers
+makes it a patient count ("how many patients with a prescription", "how many of them"), and a kind word
+a count of categories ("how many different procedures"). The query then has to count records
+somewhere: COUNT(*), or a COUNT over a variable the query types (?x a sphn:Class, or ?x a ?class), a
+code node of a record (one node per record) or an alias of either (BIND(?record AS ?x)); a per-patient
+count in a sub-select counts too, because "how many prescriptions does a patient have on average" is
+answered that way. COUNT(DISTINCT ?g) and its aliases count patients. The hint names the question's
+own words, and the query's record variable when its class matches them ("imaging procedures" ->
+?procedure a sphn:ImagingProcedure) or when it is the only typed variable.
+
+Measured on the same references: the cue matches 23 of the 45 dev questions, official-11 and
+team-ex-01, and every one of their reference queries counts records (0 false alarms). On the dev rows
+of the 17 October query eval: 10 final queries, all wrong (q-003, q-005, q-011, q-042, q-049, q-054,
+q-055, q-057, q-066, q-068) and 8 first tries, none of them a right answer; the hint applied by hand
+to the finals of q-049, q-042 and q-003 gives exact, exact_numbers and exact_numbers on dev.
 """
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass
 
-from rdflib import Literal, URIRef
+from rdflib import Literal, URIRef, Variable
+from rdflib.namespace import RDF
 
 from nl2sparql.context.bm25 import STOPWORDS, TOKEN_RE, fold
-from nl2sparql.context.schema import SYNONYMS, SchemaCards, stem, words
+from nl2sparql.context.schema import IRREGULAR_PLURALS, PROVENANCE_CLASSES, SYNONYMS, SchemaCards, stem, words
 from nl2sparql.context.terminology import ICD_CODE_RE, SEMANTIC_TAG_RE, TerminologyIndex, label_words, parent_code
+from nl2sparql.judge_checks.semantics import (
+    CODE_PROPERTY_RE, GRAPH, RECORD_WORDS, _alias_words, _column_aggregates, _mentions, _nodes, _triples,
+)
+from nl2sparql.judge_checks.scope import _is_projected_key
 from nl2sparql.models import CodeEntry
 from nl2sparql.sparql.parse import ParsedQuery
-from nl2sparql.sparql.prefixes import INFERENCE_RULE_SET, STANDARD_PREFIXES
+from nl2sparql.sparql.prefixes import INFERENCE_RULE_SET, SPHN, STANDARD_PREFIXES
 from nl2sparql.sparql.terms import collect_iris
 
 # The systems the check holds the query to: the prefix the hint writes and the record variable it names.
@@ -65,6 +99,29 @@ YEAR_RE = re.compile(r"^\d{4}/")  # the data's code classes carry a year: icd-10
 BLOCK_RE = re.compile(r"^([A-Z]\d{2})-([A-Z]\d{2})$")  # an ICD-10-GM block: E10-E14
 SPAN_RE = re.compile(r"[\w\s-]+")  # words, spaces and hyphens: "non-insulin-dependent diabetes mellitus"
 ICD_IN_TEXT_RE = re.compile(r"(?<![A-Za-z0-9.])([A-Z]\d{2}(?:-[A-Z]\d{2}|\.\d{1,2})?)(?!\d)")  # E11, E11.9, E10-E14
+
+# The cue of a record count, then at most MAX_MODIFIERS words and the record noun: "how many imaging
+# procedures", "the number of follow-ups", "give procedures and patients per side".
+CUE_RE = re.compile(r"\b(?:how many|number of|give)\b")
+QUESTION_WORD_RE = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")  # "follow-ups" and "day-care" stay one word
+MAX_MODIFIERS = 2
+RECORD_MARKER = "hasSubjectPseudoIdentifier"  # the property every patient-level SPHN record carries
+# Count nouns for records that the class names do not spell: the stay (AdministrativeCase), the visit
+# (HealthcareEncounter), the administration (DrugAdministrationEvent), the lab test (LabTestEvent).
+COMMON_RECORD_NOUNS = frozenset({
+    "record", "stay", "admission", "hospitalization", "hospitalisation", "visit", "administration", "test",
+    "transplant", "implant", "follow-up", "followup",
+})
+# Head words of record classes that name an attribute of the patient: "how many nationalities" asks for kinds.
+ATTRIBUTE_WORDS = frozenset({"sex", "age", "date", "status", "nationality"})
+# A modifier that turns the cue into a patient count or a count of categories.
+PATIENT_WORDS = frozenset({
+    "patient", "patients", "pt", "pts", "people", "person", "persons", "subject", "subjects", "individual",
+    "individuals", "man", "men", "woman", "women", "baby", "babies", "of", "them", "these", "those", "their",
+})
+KIND_WORDS = frozenset({"different", "distinct", "unique", "separate", "various", "kind", "kinds", "type", "types"})
+DETERMINERS = frozenset({"the", "a", "an", "all", "any", "such", "total"})  # modifiers the hint does not repeat
+NOUN_CLASSES = {"visit": ("HealthcareEncounter",)}  # count nouns the card picker's SYNONYMS do not map
 
 
 @dataclass(frozen=True)
@@ -270,3 +327,214 @@ def _hint(match: _Match) -> str:
         f"Add it to the record the question is about: ?{record} sphn:hasCode ?code . "
         f'?code a {concept} OPTION (inference "{INFERENCE_RULE_SET}") .'
     )
+
+
+# ------------------------------------------------------------------------------- the record count
+@dataclass(frozen=True)
+class _Asked:
+    phrase: str  # the question's words for the records: "imaging procedures", "follow-ups"
+    stems: frozenset[str]  # the stems of those words, to find the query's record variable
+
+
+@dataclass(frozen=True)
+class _Counts:
+    """What the query's COUNT aggregates count, and what nothing binds."""
+    records: bool  # some COUNT counts records (see _count_analysis)
+    patients: Variable | None  # the alias of the outermost COUNT(DISTINCT ?g), or of a count of patients
+    unbound: tuple[Variable, ...]  # COUNT inputs that nothing binds, in query order
+    projected_unbound: frozenset[Variable]  # projected variables that nothing binds
+    grouped: frozenset[Variable]  # GROUP BY keys
+
+
+def check_record_count_asked(question: str, parsed: ParsedQuery, text: str, schema: SchemaCards,
+                             terminology: TerminologyIndex | None = None) -> list[str]:
+    """One hint when the question asks how many records and the query counts none of them. The terminology
+    is accepted so the judge can loop over CHECKS; this check does not read it."""
+    if not question or parsed.algebra is None:
+        return []
+    asked = _asked_records(question, _record_nouns(schema))
+    if asked is None:
+        return []
+    counts = _count_analysis(parsed.algebra, schema)
+    if counts.records:
+        return []
+    return [_record_hint(asked, counts, parsed.algebra, text, schema)]
+
+
+def _record_nouns(schema: SchemaCards) -> set[str]:
+    """The singular nouns a question counts records with: the head word of every class that carries the
+    record marker (FollowUp, whose head is not a word, is joined: follow-up), plus the common ones."""
+    nouns = set(COMMON_RECORD_NOUNS)
+    for name, card in schema.classes.items():
+        if RECORD_MARKER not in card["properties"]:
+            continue
+        parts = words(name)
+        if len(parts) > 1 and len(parts[-1]) <= 2:
+            nouns.update(("-".join(parts), "".join(parts)))
+        elif parts[-1] not in ATTRIBUTE_WORDS:
+            nouns.add(parts[-1])
+    return nouns
+
+
+def _asked_records(question: str, nouns: set[str]) -> _Asked | None:
+    """The records the question asks to count: the first cue followed by at most MAX_MODIFIERS words and
+    a plural record noun, with no patient or kind word between, inside one clause."""
+    lowered = re.sub(r"\b(\w+) (ups?)\b", r"\1-\2", question.lower())  # "follow ups" -> "follow-ups"
+    for cue in CUE_RE.finditer(lowered):
+        clause = re.split(r"[.,;:?!]", lowered[cue.end():], maxsplit=1)[0]
+        following = QUESTION_WORD_RE.findall(clause)[: MAX_MODIFIERS + 1]
+        for position, word in enumerate(following):
+            if word in PATIENT_WORDS or word in KIND_WORDS:
+                break
+            singular = _singular(word)
+            if singular is not None and singular in nouns:
+                modifiers = [modifier for modifier in following[:position] if modifier not in DETERMINERS]
+                stems = {stem(part) for modifier in modifiers + [singular] for part in modifier.split("-")}
+                stems.add(singular.replace("-", ""))  # follow-up: the query may spell it ?followup
+                return _Asked(" ".join(modifiers + [word]), frozenset(stems))
+    return None
+
+
+def _singular(word: str) -> str | None:
+    """The singular of a plural noun (episodes -> episode, diagnoses -> diagnosis); None for any other word,
+    so that "recorded" never passes as the noun "record"."""
+    if word in IRREGULAR_PLURALS:
+        return IRREGULAR_PLURALS[word]
+    if not word.endswith("s") or word.endswith(("ss", "us", "is")):
+        return None
+    singular = stem(word)
+    return singular if singular != word else None
+
+
+def _count_analysis(algebra, schema: SchemaCards) -> _Counts:
+    """A COUNT counts records when it is COUNT(*) or reads a node of the data: a variable the query types
+    (?x a sphn:Class, ?x a ?class, ?code a icd-10-gm:A00), the subject of an sphn property, the object of a
+    link or code property (one node per record; the shared provenance nodes excepted), or an alias of one
+    (BIND(?record AS ?x)). ?g, the other GRAPH variables and their aliases count patients."""
+    nodes = _nodes(algebra)
+    node_properties = _node_properties(schema)
+    bound, records, patients = set(), set(), {GRAPH}
+    for subject, predicate, obj in _triples(algebra):
+        bound.update(term for term in (subject, predicate, obj) if isinstance(term, Variable))
+        if isinstance(subject, Variable) and (predicate == RDF.type or str(predicate).startswith(SPHN)):
+            records.add(subject)
+        name = str(predicate)[len(SPHN):] if str(predicate).startswith(SPHN) else None
+        if isinstance(obj, Variable) and name and (name in node_properties or CODE_PROPERTY_RE.match(name)):
+            records.add(obj)
+    grouped = set()
+    for node in nodes:
+        if node.name == "values":
+            bound.update(variable for row in node.res for variable in row)
+        elif node.name == "Graph" and isinstance(node.get("term"), Variable):
+            bound.add(node.term)
+            patients.add(node.term)
+        elif node.name == "Extend" and not str(node.var).startswith("__agg") and not _is_projected_key(node):
+            bound.add(node.var)  # a projected GROUP BY key is Extend(?key, SAMPLE(?key)) and binds nothing new
+        elif node.name == "Group" and isinstance(node.expr, list):
+            grouped.update(key for key in node.expr if isinstance(key, Variable))
+    aliases = [(node.var, node.expr) for node in nodes if node.name == "Extend" and isinstance(node.expr, Variable)]
+    for found in (records, patients):
+        grown = True
+        while grown:  # BIND(?record AS ?x), and BIND(?x AS ?y) after it
+            grown = False
+            for variable, source in aliases:
+                if source in found and variable not in found:
+                    found.add(variable)
+                    grown = True
+    counts_records, unbound, patient_alias = False, [], None
+    for node in nodes:
+        if node.name != "AggregateJoin":
+            continue
+        for aggregate in node.A:
+            if aggregate.name != "Aggregate_Count":
+                continue
+            variable = aggregate.vars if isinstance(aggregate.vars, Variable) else None
+            if aggregate.vars == "*" or variable in records:
+                counts_records = True
+            elif variable is not None and variable not in bound and variable not in unbound:
+                unbound.append(variable)
+    for _, alias, aggregate in _column_aggregates(algebra):  # the outermost SELECT first
+        if aggregate.name == "Aggregate_Count" and isinstance(aggregate.vars, Variable) and aggregate.vars in patients:
+            patient_alias = alias
+            break
+    projected_unbound = {variable for node in nodes if node.name == "Project" for variable in node.PV if variable not in bound}
+    return _Counts(counts_records, patient_alias, tuple(unbound), frozenset(projected_unbound), frozenset(grouped))
+
+
+def _node_properties(schema: SchemaCards) -> set[str]:
+    """The sphn properties whose object is a node of the record (a linked record, a sub-node, a code
+    node), not a literal, a value-set member or a provenance node shared by every record of the patient.
+    Without cards the set is empty and only the code properties (has*Code) are known to the caller."""
+    found = set()
+    for card in schema.classes.values():
+        for prop, info in card["properties"].items():
+            if info.get("kind") != "resource":
+                continue
+            targets = info.get("targets") or ([info["target"]] if info.get("target") else [])
+            if info.get("code_system") or any(target not in PROVENANCE_CLASSES for target in targets):
+                found.add(prop)
+    return found
+
+
+def _record_hint(asked: _Asked, counts: _Counts, algebra, text: str, schema: SchemaCards) -> str:
+    alias = re.sub(r"[^a-z0-9]+", "_", asked.phrase)
+    typed = _typed_variables(algebra, text)
+    record = _record_for(asked, typed, schema)
+    name = f"?{record}" if record is not None else "?record"
+    where = "" if record is not None else " where ?record is the variable typed with the records' class" + (
+        f" (one of {', '.join('?' + str(variable) for variable, _ in typed)})" if 1 < len(typed) <= 4 else ""
+    )
+    counted = f"(COUNT(DISTINCT {name}) AS ?{alias})"
+    asks = f"The question asks how many {asked.phrase}, but"
+    if Variable(alias) in counts.projected_unbound:  # SELECT ?stays ... GROUP BY ?stays, bound nowhere
+        clauses = " and GROUP BY" if Variable(alias) in counts.grouped else ""
+        return f"{asks} nothing binds ?{alias}: replace it in the SELECT{clauses} with {counted}{where}."
+    if counts.unbound:  # COUNT(DISTINCT ?x) with nothing binding ?x: an attempt at the record count
+        first = counts.unbound[0]
+        listed = " or ".join(f"?{variable}" for variable in counts.unbound[:2])
+        return (
+            f"{asks} nothing binds {listed}, so the COUNT over it is empty. Bind the record, not the patient, "
+            f"inside the block that selects it: BIND({name} AS ?{first}){where}, and keep COUNT(DISTINCT ?{first})."
+        )
+    if counts.patients is None:
+        return f"{asks} the query never counts them. Add {counted} to the SELECT{where}."
+    patients = counts.patients
+    if str(patients) == alias or _mentions(_alias_words(patients), RECORD_WORDS):
+        patients = Variable("patients")  # the patient count sits under the records' name
+    return f"{asks} the query counts only patients. Add {counted} next to (COUNT(DISTINCT ?g) AS ?{patients}){where}."
+
+
+def _typed_variables(algebra, text: str) -> list[tuple[Variable, str]]:
+    """(variable, class) for every '?x a sphn:Class' pattern, in the order of the text."""
+    classes: dict[Variable, str] = {}
+    for subject, predicate, obj in _triples(algebra):
+        if predicate == RDF.type and isinstance(subject, Variable) and isinstance(obj, URIRef) and str(obj).startswith(SPHN):
+            classes.setdefault(subject, str(obj)[len(SPHN):])
+    return sorted(classes.items(), key=lambda item: (text.find(f"?{item[0]}"), str(item[0])))
+
+
+def _record_for(asked: _Asked, typed: list[tuple[Variable, str]], schema: SchemaCards) -> Variable | None:
+    """The query's variable for the records: the typed variable whose class the question's words name best
+    (?procedure a sphn:ImagingProcedure for "imaging procedures", ?case a sphn:AdministrativeCase for
+    "stays"; on a tie a record class, then the shorter name: Death before DeathDate), or the only typed
+    variable."""
+    if len(typed) == 1:
+        return typed[0][0]
+    named = {cls for phrases, classes in SYNONYMS.items() for phrase in phrases for cls in classes
+             if " " not in phrase and stem(phrase) in asked.stems}
+    named |= {cls for noun, classes in NOUN_CLASSES.items() for cls in classes if noun in asked.stems}
+    scored = []
+    for variable, cls in typed:
+        parts = words(cls)
+        matched = len(asked.stems & {stem(part) for part in parts}) + (1 if cls in named else 0)
+        if matched:
+            marked = RECORD_MARKER in schema.classes.get(cls, {}).get("properties", {})
+            scored.append(((matched, marked, -len(parts)), variable))
+    if not scored:
+        return None
+    best = max(score for score, _ in scored)
+    candidates = [variable for score, variable in scored if score == best]
+    return candidates[0] if len(candidates) == 1 else None
+
+
+CHECKS = [check_question_coverage, check_record_count_asked]

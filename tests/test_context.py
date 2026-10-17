@@ -157,7 +157,7 @@ def test_schema_cards_pick_named_classes():
     found = cards.cards_for("How many patients have a billed diagnosis of cholera?", k=3)
     assert found[0].startswith("sphn:BilledDiagnosis [")
     assert "hasRank = one of sphn-individual:Principal | sphn-individual:Complementary | sphn-individual:Secondary" in found[0]
-    assert 'hasCode -> ICD-10-GM code: ?c a icd-10-gm:<code> OPTION (inference "https://biomedit.ch/rdf/sphn-resource/global")' in found[0]
+    assert "hasCode -> ICD-10-GM code (?c a ?concept; one code from the candidates to match a concept)" in found[0]
 
 
 def test_schema_cards_know_the_data_and_suggest_fixes():
@@ -307,8 +307,8 @@ def test_context_builder_respects_custom_top_k_settings():
             Example("two", "alpha condition", "SELECT * WHERE {}", True),
         ]),
         SchemaCards({
-            "AlphaCondition": {"instances": 1, "patients": 1, "properties": {}},
-            "BetaCondition": {"instances": 1, "patients": 1, "properties": {}},
+            "AlphaSyndrome": {"instances": 1, "patients": 1, "properties": {}},  # not "AlphaCondition": a candidate
+            "BetaSyndrome": {"instances": 1, "patients": 1, "properties": {}},  # whose label restates a class name is dropped
         }, []),
         TerminologyIndex([
             CodeEntry("https://example.test/code/a", "A00", "synthetic", ("alpha condition",)),
@@ -473,14 +473,17 @@ def test_schema_cards_render_code_systems_targets_and_namespaces():
                   "hasDrug": {"kind": "resource", "target": "Drug"}, "hasOld": {"kind": "resource", "target": "Code"}},
         "Wide": {"hasInput": {"kind": "resource", "targets": [f"Class{index:02d}" for index in range(30)]}},
     })
-    inference = 'OPTION (inference "https://biomedit.ch/rdf/sphn-resource/global")'
-    assert cards.render("Billed").endswith(f"hasCode -> CHOP code: ?c a chop:<code> {inference}")
+    concept = "(?c a ?concept; one code from the candidates to match a concept)"
+    assert cards.render("Billed").endswith(f"hasCode -> CHOP code {concept}")
     assert cards.render("Plain").endswith("hasCode -> generic sphn:Code (no terminology type: cannot be matched by ICD/CHOP/SNOMED)")
-    assert cards.render("Mixed").endswith(f"hasCode -> SNOMED CT code (95%; the rest generic sphn:Code): ?c a snomed:<code> {inference}")
+    assert cards.render("Mixed").endswith("hasCode -> SNOMED CT code (95%, the rest generic sphn:Code; ?c a ?concept; "
+                                          "one code from the candidates to match a concept)")
     variant = cards.render("Variant")
-    assert f"hasTypeCode -> code: ?c a <http://purl.obolibrary.org/obo/SO_...> {inference}" in variant
-    assert f"hasZygosityCode -> GENO code: ?c a geno:<code> {inference}" in variant
+    assert f"hasTypeCode -> code in <http://purl.obolibrary.org/obo/SO_> {concept}" in variant
+    assert f"hasZygosityCode -> GENO code {concept}" in variant
     assert variant.endswith(" (geno: <http://purl.obolibrary.org/obo/GENO_>)")
+    # No card holds a code the model could copy as it stands, nor the inference option (the prompt has it).
+    assert all("<code>" not in cards.render(name) and "inference" not in cards.render(name) for name in cards.classes)
     assert cards.render("Event").endswith("hasSample -> sphn:Sample | sphn:Isolate; hasDrug -> sphn:Drug; hasOld (link)")
     wide = cards.render("Wide")
     assert wide.count("sphn:Class") == 12 and wide.endswith("sphn:Class11 (the 12 most frequent of 30 classes)")
@@ -582,7 +585,104 @@ def test_profile_card_properties_measure_terminologies_targets_and_value_sets():
 def test_value_set_builder_caps_coded_sets_only():
     from scripts.build_value_sets import MAX_VALUES, keep
     individual = "https://biomedit.ch/rdf/sphn-schema/sphn/individual#"
+    assert MAX_VALUES == 20  # takes in Intent.hasCode (17 members) and TumorGradeAssessment.hasCode (18)
     assert keep({f"{individual}Area{index}": 1 for index in range(64)})
     assert keep({f"http://snomed.info/id/{index}": 1 for index in range(MAX_VALUES)})
     assert not keep({f"http://snomed.info/id/{index}": 1 for index in range(MAX_VALUES + 1)})
     assert not keep({f"http://snomed.info/id/{index}": 1 for index in range(MAX_VALUES)} | {f"{individual}X": 1})
+
+
+# --- Round 2 (17 October): no copyable placeholder, the patient link off the cards, more synonyms,
+# a value-set member among the code candidates --------------------------------------------------
+
+
+def test_cards_show_the_patient_link_only_on_the_pseudo_identifier_card():
+    cards = SchemaCards.load(DATA_DIR / "schema_cards.json")
+    assert sum("hasSubjectPseudoIdentifier" in card["properties"] for card in cards.classes.values()) == 79  # the data has it
+    with_link = [name for name in cards.classes if "hasSubjectPseudoIdentifier" in cards.render(name)]
+    assert with_link == ["SubjectPseudoIdentifier"]
+    assert cards.render("SubjectPseudoIdentifier") == (
+        "sphn:SubjectPseudoIdentifier [2000 records, 2000 patients] (every record links to it with hasSubjectPseudoIdentifier): "
+        "hasDataProvider -> sphn:DataProvider; hasIdentifier (string); hasSharedIdentifier (anyURI)"
+    )
+    assert cards.render("BloodPressure").startswith("sphn:BloodPressure [")  # a card without the link is unchanged
+    assert cards.in_data("hasSubjectPseudoIdentifier")  # the judge still knows the property exists
+
+
+def test_picker_takes_the_pseudo_identifier_card_from_the_question_not_from_an_example():
+    cards = SchemaCards.load(DATA_DIR / "schema_cards.json")
+    forbidden_example = ("SELECT ?g ?id WHERE { GRAPH ?g { ?dx a sphn:BilledDiagnosis ; sphn:hasSubjectPseudoIdentifier ?pid . "
+                         "?pid a sphn:SubjectPseudoIdentifier ; sphn:hasIdentifier ?id . } }")
+    found = names(cards.cards_for("How many patients have cholera on a hospital bill, by sex?", k=8, examples_sparql=forbidden_example))
+    assert "BilledDiagnosis" in found and "SubjectPseudoIdentifier" not in found
+    for question in ("List the pseudo identifiers of patients with type 2 diabetes.",
+                     "Give me the administrative case identifiers of all cholera admissions.",
+                     "Which patient IDs have a cholera diagnosis?"):
+        assert "SubjectPseudoIdentifier" in names(cards.cards_for(question, k=8)), question
+    assert "SubjectPseudoIdentifier" not in names(cards.cards_for("How many patients have cholera, and which ones are they?", k=8))
+
+
+@pytest.mark.parametrize("question,expected,unexpected", [
+    ("What are the most common ways we give drugs, how long do those treatments last, and how many start while the "
+     "patient is still in hospital?", {"DrugAdministrationEvent", "AdministrativeCase"}, set()),
+    ("How many babies are born early, and does that depend on how they were delivered?", {"Birth", "GestationalAgeAtBirth"}, set()),
+    ("Which preterm births had a gestational age below 32 weeks?", {"GestationalAgeAtBirth"}, set()),
+    ("How many patients were given medication by mouth, and how many by IV?", {"DrugAdministrationEvent"}, set()),
+    ("Which administration routes are used most?", {"DrugAdministrationEvent"}, set()),
+    ("How many inpatients had an adverse event?", {"AdministrativeCase", "AdverseEvent"}, set()),
+    ("How many procedures were done with a diagnostic intent, and how many for screening?", {"Intent"}, set()),
+    ("How many imaging procedures were done to guide another procedure?", {"ImagingProcedure", "Intent"}, set()),
+    # An imperative "give", or "early" in another sense, is no reason for a card.
+    ("Give the number of stays and the average, shortest and longest stay in days.", {"AdministrativeCase"}, {"DrugAdministrationEvent"}),
+    ("Give me all the cancer diagnoses as a graph I can take away.", {"OncologyDiagnosis"}, {"DrugAdministrationEvent"}),
+])
+def test_picker_synonyms_for_administration_gestational_age_inpatients_and_intent(question, expected, unexpected):
+    cards = SchemaCards.load(DATA_DIR / "schema_cards.json")
+    found = set(names(cards.cards_for(question, k=8)))
+    assert expected <= found and not (unexpected & found), found
+
+
+def test_a_code_candidate_that_is_a_value_set_member_pulls_its_class_through_a_shown_card(tmp_path):
+    value_sets = tmp_path / "value_sets.json"
+    value_sets.write_text(json.dumps({"classes": {
+        "Intent": {"hasCode": [{"value": "snomed:1000001", "label": "Screening - procedure intent", "count": 5},
+                               {"value": "snomed:1000002", "label": "Other", "count": 2}]},
+        "DrugAdministrationEvent": {"hasReasonToStopCode": [{"value": "snomed:1000003", "label": "Lost to follow-up", "count": 1},
+                                                            {"value": "snomed:1000002", "label": "Other", "count": 1}]},
+        "CopyNumberVariation": {"hasTypeCode": [{"value": "<http://purl.obolibrary.org/obo/SO_0001742>", "label": "copy_number_gain", "count": 3}]},
+    }}), encoding="utf-8")
+    cards = SchemaCards.load(DATA_DIR / "schema_cards.json", value_sets)
+    screening = CodeEntry("http://snomed.info/id/1000001", "1000001", "SNOMED CT", ("Screening - procedure intent (qualifier value)",))
+    other = CodeEntry("http://snomed.info/id/1000002", "1000002", "SNOMED CT", ("Other (qualifier value)",))
+    lost = CodeEntry("http://snomed.info/id/1000003", "1000003", "SNOMED CT", ("Lost to follow-up (finding)",))
+    gain = CodeEntry("http://purl.obolibrary.org/obo/SO_0001742", "SO_0001742", "SO", ("copy_number_gain",))
+    question = "How many imaging procedures were done for staging, and how many patients had each kind?"
+    assert names(cards.cards_for(question, k=2)) == ["ImagingProcedure", "AdministrativeCase"]  # a spare slot
+    assert names(cards.cards_for(question, k=2, codes=[screening])) == ["ImagingProcedure", "Intent"]  # hasIntent -> Intent
+    assert names(cards.cards_for(question, k=2, codes=[other])) == ["ImagingProcedure", "AdministrativeCase"]  # "Other" names nothing
+    # A member of a class no shown card links to scores nothing on its own.
+    follow_up = "How many patients were followed up by telephone?"
+    assert "DrugAdministrationEvent" not in names(cards.cards_for(follow_up, k=8, codes=[lost, other]))
+    # A full IRI in the value set is matched too (an OBO code typed on a copy-number variation).
+    variants = "How many variant descriptors carry a gain?"
+    assert names(cards.cards_for(variants, k=2, codes=[gain])) == ["VariantDescriptor", "CopyNumberVariation"]
+    assert "CopyNumberVariation" not in names(cards.cards_for(variants, k=2))
+    assert cards.cards_for(question, k=8, codes=[]) == cards.cards_for(question, k=8)
+
+
+def test_context_builder_hands_class_names_to_the_index_and_candidates_to_the_picker(tmp_path):
+    value_sets = tmp_path / "value_sets.json"
+    value_sets.write_text(json.dumps({"classes": {"Intent": {"hasCode": [
+        {"value": "snomed:373825000", "label": "Staging - procedure intent", "count": 1}]}}}), encoding="utf-8")
+    builder = ContextBuilder(
+        ExampleBank([]),
+        SchemaCards.load(DATA_DIR / "schema_cards.json", value_sets),
+        TerminologyIndex([
+            CodeEntry("http://snomed.info/id/363679005", "363679005", "SNOMED CT", ("Imaging (procedure)",)),
+            CodeEntry("http://snomed.info/id/373825000", "373825000", "SNOMED CT", ("Staging - procedure intent (qualifier value)",)),
+        ]),
+        k_cards=2,
+    )
+    context = builder.build("How many imaging procedures were done for staging?")
+    assert [entry.code for entry in context.code_candidates] == ["373825000"]  # "Imaging (procedure)" restates the class
+    assert [card.split(" ", 1)[0] for card in context.schema_cards] == ["sphn:ImagingProcedure", "sphn:Intent"]

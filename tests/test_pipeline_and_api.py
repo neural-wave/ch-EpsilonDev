@@ -11,6 +11,7 @@ from nl2sparql.config import Settings
 from nl2sparql.factory import build_pipeline
 from nl2sparql.agents.intent_llm import IntentReply
 from nl2sparql.agents.query_llm import QueryReply
+from nl2sparql.guard.decision import SYNTAX_LEAD
 from nl2sparql.intent_check import confirm_identifier_flag
 from nl2sparql.models import IntentFlags
 from nl2sparql.orchestrator import CUT_OFF_FEEDBACK, PipelineError
@@ -352,7 +353,7 @@ def test_judge_and_guard_each_have_their_own_retry():
     result = asyncio.run(pipeline_with(agent).run("Cholera cases by sex?"))
     assert result.is_compliant and result.retries == 2 and result.tokens_consumed == 160
     assert agent.feedback[1].startswith("Syntax error")
-    assert agent.feedback[2].startswith("The previous query breaks the privacy rules")
+    assert agent.feedback[2].startswith("The previous query breaks the privacy rules")  # the guard's R2 retry
     assert result.tokens_by_step == {"intent": 10, "query": 50, "query_retry": 100}
     assert result.diagnostics["retry_reason"] == "judge+guard"
     assert result.diagnostics["judge_errors_first_try"] and result.diagnostics["guard_violations_first_try"]
@@ -371,12 +372,15 @@ def test_guard_retry_that_comes_back_unparseable_still_gets_the_judge_retry():
     assert "SELECT ?x WHERE {" in result.diagnostics["rejected_retry_sparql"]
 
 
-def test_the_query_agent_is_asked_at_most_three_times():
+def test_the_query_agent_is_asked_at_most_three_times_when_no_retry_was_spent_on_syntax_alone():
     agent = ScriptedQueryAgent("SELECT ?x WHERE {", EXAMPLES["official-12"], "SELECT ?y WHERE {", EXAMPLES["official-03"])
     result = asyncio.run(pipeline_with(agent).run("Cholera cases by sex?"))
     assert not result.is_compliant and result.retries == 2 and len(agent.feedback) == 3
-    assert result.diagnostics["judge_errors_final"][0].startswith("Syntax error")
     assert agent.queries == [EXAMPLES["official-03"]]
+    # The guard's retry did not parse: the attempt the guard rejected is the less bad one and stays the answer.
+    assert "hasCoverageType" in result.sparql_query and result.violations[0].startswith("R2")
+    assert result.diagnostics["guard_kept_first_try"][0].startswith("Syntax error")
+    assert "?y" in result.diagnostics["guard_worse_retry_sparql"] and "judge_errors_final" not in result.diagnostics
 
 
 def test_no_retry_budget_means_no_retry_from_either_checker():
@@ -613,23 +617,159 @@ def test_health_and_demo_page(client):
     assert "NL-to-SPARQL" in client.get("/").text
 
 
-SOFT_HINT_QUERY = "SELECT (COUNT(DISTINCT ?g) AS ?total_episodes) WHERE { GRAPH ?g { ?e a sphn:AllergyEpisode } }"
+# Two identical aggregate columns: a semantic hint (severity 1) that no judge rewrite repairs.
+SOFT_HINT_QUERY = "SELECT (COUNT(DISTINCT ?g) AS ?married) (COUNT(DISTINCT ?g) AS ?single) WHERE { GRAPH ?g { ?c a sphn:CivilStatus } }"
 
 
 def test_a_retry_that_is_worse_by_the_judge_is_dropped_for_the_first_try():
-    # First try: runs, one semantic hint (records counted as patients). Retry: unparseable. Keep the first.
+    # First try: runs, one semantic hint (two identical columns). Retry: unparseable. Keep the first.
     agent = ScriptedQueryAgent(SOFT_HINT_QUERY, "SELECT ?x WHERE {")
-    result = asyncio.run(pipeline_with(agent).run("How many allergy episodes are there?"))
-    assert result.retries == 1 and "total_episodes" in result.sparql_query and result.is_compliant
+    result = asyncio.run(pipeline_with(agent).run("How are our patients split by civil status?"))
+    assert result.retries == 1 and "?married" in result.sparql_query and result.is_compliant
     assert result.diagnostics["kept_first_try"][0].startswith("Syntax error")
-    assert result.diagnostics["judge_errors_final"][0].startswith("COUNT(DISTINCT ?g) counts patients")
+    assert result.diagnostics["judge_errors_final"][0].startswith("columns ?married, ?single are all")
     assert "?x" in result.diagnostics["worse_retry_sparql"]
 
 
 def test_a_retry_that_is_less_bad_than_the_first_try_is_kept():
-    agent = ScriptedQueryAgent("SELECT ?x WHERE {", SOFT_HINT_QUERY)
-    result = asyncio.run(pipeline_with(agent).run("How many allergy episodes are there?"))
-    assert result.retries == 1 and "total_episodes" in result.sparql_query and "kept_first_try" not in result.diagnostics
+    # First try: unparseable. Retry: runs, one semantic hint. The judge's second retry (bought by the syntax-only
+    # first try) is unparseable again, so the first retry stays.
+    agent = ScriptedQueryAgent("SELECT ?x WHERE {", SOFT_HINT_QUERY, "SELECT ?y WHERE {")
+    result = asyncio.run(pipeline_with(agent).run("How are our patients split by civil status?"))
+    assert result.retries == 2 and "?married" in result.sparql_query and "kept_first_try" not in result.diagnostics
+    assert result.diagnostics["kept_first_retry"][0].startswith("Syntax error")
+    assert "?y" in result.diagnostics["worse_retry_sparql"]
+    assert result.diagnostics["judge_errors_final"][0].startswith("columns ?married, ?single are all")
+
+
+# One judge hint (two identical columns) and a guard violation the guard retries (R2: ?g returned per row).
+# The key is projected, so the judge's GROUP BY rewrite leaves it alone.
+LEAKING_HINT_QUERY = ("SELECT ?g (COUNT(DISTINCT ?g) AS ?married) (COUNT(DISTINCT ?g) AS ?single) "
+                      "WHERE { GRAPH ?g { ?c a sphn:CivilStatus } } GROUP BY ?g")
+
+
+def test_a_syntax_only_retry_buys_the_judge_a_second_retry():
+    # The retry is the first answer the semantic checks see: its hints get one more call instead of being final.
+    agent = ScriptedQueryAgent("SELECT ?x WHERE {", SOFT_HINT_QUERY, EXAMPLES["official-03"])
+    result = asyncio.run(pipeline_with(agent).run("How are our patients split by civil status?"))
+    assert result.is_compliant and result.retries == 2 and len(agent.feedback) == 3
+    assert agent.feedback[1].startswith("Syntax error")
+    assert agent.feedback[2].startswith("columns ?married, ?single are all")
+    assert result.diagnostics["retry_reason"] == "judge x2"
+    assert result.tokens_by_step == {"intent": 10, "query": 50, "query_retry": 100} and result.tokens_consumed == 160
+    assert result.diagnostics["judge_errors_first_try"][0].startswith("Syntax error")
+    assert result.diagnostics["judge_errors_first_retry"][0].startswith("columns ?married, ?single are all")
+    assert "SELECT ?x WHERE {" in result.diagnostics["first_try_sparql"]
+    assert "?married" in result.diagnostics["first_retry_sparql"]
+    assert "judge_errors_final" not in result.diagnostics and "rejected_retry_sparql" not in result.diagnostics
+
+
+def test_the_second_judge_retry_needs_a_first_try_rejected_for_syntax_alone():
+    # The first try parsed (one semantic hint): a retry that is still not clean is final, no extra call.
+    agent = ScriptedQueryAgent(SOFT_HINT_QUERY, SOFT_HINT_QUERY, EXAMPLES["official-03"])
+    result = asyncio.run(pipeline_with(agent).run("How are our patients split by civil status?"))
+    assert result.retries == 1 and result.diagnostics["retry_reason"] == "judge"
+    assert agent.queries == [EXAMPLES["official-03"]] and "judge_errors_first_retry" not in result.diagnostics
+    assert result.diagnostics["judge_errors_final"][0].startswith("columns ?married, ?single are all")
+
+
+def test_a_retry_that_is_unparseable_again_gets_no_second_judge_retry():
+    # Neither answer parsed: the guard's own retry follows (PARSE), not a second judge retry.
+    agent = ScriptedQueryAgent("SELECT ?x WHERE {", "SELECT ?y WHERE {", EXAMPLES["official-03"])
+    result = asyncio.run(pipeline_with(agent).run("Cholera by sex?"))
+    assert result.is_compliant and result.retries == 2 and result.diagnostics["retry_reason"] == "judge+guard"
+    assert agent.feedback[2].startswith(SYNTAX_LEAD)  # a parse error's retry carries the judge's diagnosis
+    assert "privacy rules" not in agent.feedback[2]
+
+
+def test_the_second_judge_retry_and_the_guard_retry_make_four_calls():
+    agent = ScriptedQueryAgent("SELECT ?x WHERE {", SOFT_HINT_QUERY, EXAMPLES["official-12"], EXAMPLES["official-03"])
+    result = asyncio.run(pipeline_with(agent).run("How are our patients split by civil status?"))
+    assert result.is_compliant and result.retries == 3 and len(agent.feedback) == 4
+    assert result.diagnostics["retry_reason"] == "judge x2+guard"
+    assert result.tokens_by_step == {"intent": 10, "query": 50, "query_retry": 150}
+    assert "?married" in result.diagnostics["first_retry_sparql"]
+    assert "hasCoverageType" in result.diagnostics["rejected_retry_sparql"]  # the second retry, rejected by the guard
+
+
+def test_the_second_judge_retry_is_skipped_when_it_would_not_fit_the_deadline():
+    class SlowQueryAgent(ScriptedQueryAgent):
+        async def generate(self, text, context, feedback=None):
+            await asyncio.sleep(0.3)
+            return await super().generate(text, context, feedback)
+
+    agent = SlowQueryAgent("SELECT ?x WHERE {", SOFT_HINT_QUERY, EXAMPLES["official-03"])
+    pipeline = pipeline_with(agent)
+    pipeline.request_timeout_seconds = 0.75  # room for two calls of 0.3 s, not for a third
+    result = asyncio.run(pipeline.run("How are our patients split by civil status?"))
+    assert result.retries == 1 and result.diagnostics["judge_retry_skipped"] == "deadline"
+    assert "?married" in result.sparql_query and agent.queries == [EXAMPLES["official-03"]]
+
+
+def test_the_extra_judge_call_is_taken_once_and_only_when_it_fits_the_deadline():
+    from nl2sparql.orchestrator import _Run
+
+    run = _Run(max_retries=1, deadline=100.0)
+    run.note_query_call(6.0)
+    assert not run.take_second_judge_retry(now=95.0) and run.diagnostics["judge_retry_skipped"] == "deadline"
+    assert run.take_second_judge_retry(now=94.0) and run.retries == 1 and run.diagnostics["retry_reason"] == "judge"
+    assert not run.take_second_judge_retry(now=0.0)  # once per request
+    assert not _Run(max_retries=0).take_second_judge_retry(now=0.0)  # no retry budget, no extra call
+
+
+def test_a_guard_retry_that_does_not_parse_is_dropped_for_the_attempt_the_guard_rejected():
+    # First try: judge-clean but leaks rows (R2). The guard's retry fails to parse twice (the judge's retry is
+    # spent inside it), so the leaking first try, the less bad attempt, stays the (non-compliant) answer.
+    agent = ScriptedQueryAgent(EXAMPLES["official-12"], "SELECT ?y WHERE {", "SELECT ?z WHERE {")
+    result = asyncio.run(pipeline_with(agent).run("Cholera cases by sex?"))
+    assert not result.is_compliant and result.retries == 2 and result.diagnostics["retry_reason"] == "judge+guard"
+    assert "hasCoverageType" in result.sparql_query and result.violations[0].startswith("R2")
+    assert result.diagnostics["guard_kept_first_try"][0].startswith("Syntax error")
+    assert "?z" in result.diagnostics["guard_worse_retry_sparql"] and "judge_errors_final" not in result.diagnostics
+
+
+def test_a_guard_retry_that_still_breaks_a_rule_but_is_no_worse_by_the_judge_is_kept():
+    agent = ScriptedQueryAgent(EXAMPLES["official-12"], EXAMPLES["official-13"])
+    result = asyncio.run(pipeline_with(agent).run("How are our patients split by civil status?"))
+    assert not result.is_compliant and result.retries == 1 and result.violations[0].startswith("R3")
+    assert "guard_kept_first_try" not in result.diagnostics and "judge_errors_final" not in result.diagnostics
+
+
+def test_the_guard_retry_is_told_when_the_rejected_answer_was_cut_off():
+    agent = DetailedQueryAgent((EXAMPLES["official-12"], "length"), (EXAMPLES["official-03"], "stop"))
+    result = asyncio.run(pipeline_with(agent).run("Cholera cases by sex?"))
+    assert result.is_compliant and result.retries == 1 and result.diagnostics["cut_off"] == ["query"]
+    assert agent.feedback[1].startswith(CUT_OFF_FEEDBACK)
+    assert "The previous query breaks the privacy rules" in agent.feedback[1]
+
+
+def test_the_cut_off_note_belongs_to_the_attempt_the_guard_rejected():
+    # The cut-off first try was rejected by the judge; the complete retry was rejected by the guard: the
+    # guard's feedback carries no cut-off note.
+    agent = DetailedQueryAgent(("```sparql\nSELECT ?x WHERE {", "length"), (EXAMPLES["official-12"], "stop"),
+                               (EXAMPLES["official-03"], "stop"))
+    result = asyncio.run(pipeline_with(agent).run("Cholera cases by sex?"))
+    assert result.is_compliant and result.retries == 2 and result.diagnostics["cut_off"] == ["query"]
+    assert agent.feedback[1].startswith(CUT_OFF_FEEDBACK)
+    assert agent.feedback[2].startswith("The previous query breaks the privacy rules")  # the guard's R2 retry
+
+
+def test_judge_errors_final_is_cleared_by_a_clean_guard_retry():
+    # First try: one judge hint and a guard violation. The judge's retry is worse (unparseable), so the first try
+    # is kept and the guard rejects it; the guard's retry is clean. judge_errors_final used to keep the hint.
+    agent = ScriptedQueryAgent(LEAKING_HINT_QUERY, "SELECT ?x WHERE {", EXAMPLES["official-03"])
+    result = asyncio.run(pipeline_with(agent).run("How are our patients split by civil status?"))
+    assert result.is_compliant and result.retries == 2 and result.diagnostics["retry_reason"] == "judge+guard"
+    assert result.diagnostics["kept_first_try"][0].startswith("Syntax error")
+    assert result.diagnostics["guard_violations_first_try"][0].startswith("R5")  # ?g, the patient graph, is returned
+    assert "judge_errors_final" not in result.diagnostics
+
+
+def test_judge_errors_final_describes_the_final_answer_after_a_guard_retry():
+    agent = ScriptedQueryAgent(EXAMPLES["official-12"], SOFT_HINT_QUERY, "SELECT ?x WHERE {")
+    result = asyncio.run(pipeline_with(agent).run("How are our patients split by civil status?"))
+    assert result.is_compliant and result.retries == 2 and "?married" in result.sparql_query
+    assert result.diagnostics["judge_errors_final"][0].startswith("columns ?married, ?single are all")
 
 
 def test_the_console_is_served_by_the_api_and_the_root_redirects_to_it():

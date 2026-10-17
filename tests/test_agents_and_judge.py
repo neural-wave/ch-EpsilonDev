@@ -417,3 +417,40 @@ def test_judge_asks_for_the_coded_concept_the_question_names():
     assert judge.check(query).ok  # without the question, as before
     errors = judge.check(query, "How many patients have cholera on a hospital bill, by sex?").errors
     assert [error.split(",")[0] for error in errors] == ["The question asks about cholera (icd-10-gm:A00)"]
+
+
+def test_extract_sparql_strips_an_unclosed_opening_fence():
+    from nl2sparql.agents.query_llm import extract_sparql
+
+    # q-013 and official-08: an answer cut off at max_tokens keeps its opening fence, which rdflib then rejects
+    assert extract_sparql("Here is the query:\n```sparql\nSELECT ?x WHERE { ?x ?p ?o }\n") == "SELECT ?x WHERE { ?x ?p ?o }\n"
+    assert extract_sparql("```\nSELECT ?x WHERE {") == "SELECT ?x WHERE {\n"
+    assert extract_sparql("SELECT ?x WHERE { ?x ?p ?o }\n```") == "SELECT ?x WHERE { ?x ?p ?o }\n"
+    # a closed fence and a plain answer read as before
+    assert extract_sparql("```sparql\nSELECT ?x WHERE { ?x ?p ?o }\n```\nDone.") == "SELECT ?x WHERE { ?x ?p ?o }\n"
+    assert extract_sparql("SELECT ?x WHERE { ?x ?p ?o }") == "SELECT ?x WHERE { ?x ?p ?o }\n"
+
+
+def test_judge_repairs_an_aggregation_mistake_without_the_model():
+    judge = Judge(SchemaCards.load(DATA_DIR / "schema_cards.json"))
+    query = ("SELECT (COUNT(DISTINCT ?procedure) AS ?procedures) (COUNT(DISTINCT ?g) AS ?patients) WHERE { GRAPH ?g { "
+             "?procedure a sphn:ImagingProcedure } } GROUP BY ?g ?procedure")
+    verdict = judge.check(query)
+    assert verdict.ok and "GROUP BY" not in verdict.sparql
+    assert verdict.repairs == [
+        "Dropped GROUP BY ?g ?procedure: every SELECT column is an aggregate, so the groups were unlabeled rows per "
+        "patient; the query now returns one overall row"
+    ]
+
+
+def test_judge_asks_for_the_record_count_the_question_asks_for():
+    judge = Judge(SchemaCards.load(DATA_DIR / "schema_cards.json"))
+    query = ("SELECT ?time_pattern (COUNT(DISTINCT ?g) AS ?patients) WHERE { GRAPH ?g { ?prescription a sphn:DrugPrescription ; "
+             "sphn:hasTimePattern ?pattern . ?pattern sphn:hasTypeCode ?code . ?code a ?concept . } "
+             'VALUES (?concept ?time_pattern) { (snomed:255238004 "Continuous") } } GROUP BY ?time_pattern')
+    assert judge.check(query).ok  # without the question, as before
+    question = "How many drug prescriptions are for continuous dosing? Give the number of patients as well."
+    assert judge.check(query, question).errors == [
+        "The question asks how many drug prescriptions, but the query counts only patients. "
+        "Add (COUNT(DISTINCT ?prescription) AS ?drug_prescriptions) next to (COUNT(DISTINCT ?g) AS ?patients)."
+    ]

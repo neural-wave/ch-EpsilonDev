@@ -563,6 +563,19 @@ def check_value_set_member(parsed: ParsedQuery, text: str, schema: SchemaCards) 
         (home_name, home_prop), _count = min(homes.items(), key=lambda item: (-item[1], _link_to(name, item[0][0], schema) is None, item[0]))
         shown = [f"{_short(iri)} ({labels[iri]})" if labels.get(iri) else _short(iri) for iri in bad]
         own = " | ".join(f"{entry['label']} {entry['value']}" for entry in values)
+        one = len(bad) == 1
+        if home_name == name:
+            # Another property of the same class: the model wants this property and picked a value from the
+            # other one. A "write ..." recipe for the other property was copied in 3 of 3 runs and changed the
+            # cohort (official-09: hasOutcome Death became hasConsequences Death), so the hint only lists the
+            # values and leaves the choice to the question.
+            listed = " | ".join(entry["label"] or entry["value"] for entry in values) if individual else own
+            named = _join([labels.get(iri) or _short(iri) for iri in bad])
+            errors.append(
+                f"{_join(shown)} {'is not a value' if one else 'are not values'} of sphn:{name} {prop}; its values: "
+                f"{listed}: use the one the question means ({named} {'is a value' if one else 'are values'} of {home_prop})."
+            )
+            continue
         subject, code = pattern.subject, pattern.object if isinstance(pattern.object, Variable) else "code"
         if individual:
             pattern_text = f"?{subject} a sphn:{home_name} ; sphn:{home_prop} {_short(bad[0])}"
@@ -571,7 +584,6 @@ def check_value_set_member(parsed: ParsedQuery, text: str, schema: SchemaCards) 
             pattern_text = f"?{subject} sphn:{_link_to(name, home_name, schema)} ?{via} . ?{via} sphn:{home_prop} ?{code} . ?{code} a ?concept"
         else:
             pattern_text = f"?{_snake(home_name)} a sphn:{home_name} ; sphn:{home_prop} ?{code} . ?{code} a ?concept"
-        one = len(bad) == 1
         errors.append(
             f"{_join(shown)} {'is not a value' if one else 'are not values'} of sphn:{name} {prop} (its values: {own}). "
             f"{'It is a value' if one else 'They are values'} of sphn:{home_name} {home_prop}: write {pattern_text}."

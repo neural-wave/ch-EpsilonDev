@@ -54,7 +54,17 @@ def test_sub_select_exports_only_the_variables_it_projects():
              "GROUP BY ?g } } GROUP BY ?cohort")
     assert check_unbound_variables(parse(query)) == [
         "?cohort is used in SELECT/GROUP BY but nothing binds it: add BIND(<expression> AS ?cohort) or a pattern that binds it.",
-        "AVG(?days): ?days is not bound in this scope (a sub-select only exports the variables it projects).",
+        "AVG(?days): ?days is not bound in this scope (a sub-select only exports the variables it projects): "
+        "add ?days to the sub-select's SELECT.",
+    ]
+    # q-073's final: a COUNT(DISTINCT) over a hidden variable is rendered as written, with the same remedy.
+    hidden_count = ("SELECT ?group_name (COUNT(DISTINCT ?follow_up) AS ?follow_ups) WHERE { { SELECT ?g (COUNT(DISTINCT ?follow_up) AS ?fu_count) "
+                    "WHERE { GRAPH ?g { ?follow_up a sphn:FollowUp } BIND('alive' AS ?group_name) } GROUP BY ?g } } GROUP BY ?group_name")
+    assert check_unbound_variables(parse(hidden_count)) == [
+        "?group_name is used in SELECT/GROUP BY but is not bound in this scope (a sub-select only exports the variables "
+        "it projects): add ?group_name to the sub-select's SELECT.",
+        "COUNT(DISTINCT ?follow_up): ?follow_up is not bound in this scope (a sub-select only exports the variables it "
+        "projects): add ?follow_up to the sub-select's SELECT.",
     ]
 
 
@@ -83,12 +93,53 @@ def test_per_patient_statistic_without_its_sub_select_gets_the_sketch_with_the_r
     ]
 
 
-def test_count_of_an_unbound_variable_suggests_the_conditional_count():
-    query = ("SELECT (COUNT(DISTINCT ?g) AS ?patients) (COUNT(DISTINCT ?cholera_prescription) AS ?cholera) "
+def test_count_of_an_unbound_patient_alias_suggests_the_conditional_count():
+    # q-060's ?g_with_abx and official-01's ?both_patient: a patient subgroup, bound from ?g.
+    query = ("SELECT (COUNT(DISTINCT ?g) AS ?patients) (COUNT(DISTINCT ?both_patient) AS ?both) (COUNT(?g_with_abx) AS ?abx) "
              "WHERE { GRAPH ?g { ?p a sphn:DrugPrescription } }")
     assert check_unbound_variables(parse(query)) == [
-        "COUNT(?cholera_prescription): nothing binds ?cholera_prescription. Count a subgroup with "
-        "OPTIONAL { GRAPH ?g { <condition> } BIND(?g AS ?cholera_prescription) } and COUNT(DISTINCT ?cholera_prescription)."
+        "COUNT(DISTINCT ?both_patient): nothing binds ?both_patient. Count a subgroup with "
+        "OPTIONAL { GRAPH ?g { <condition> } BIND(?g AS ?both_patient) } and COUNT(DISTINCT ?both_patient).",
+        "COUNT(?g_with_abx): nothing binds ?g_with_abx. Count a subgroup with "
+        "OPTIONAL { GRAPH ?g { <condition> } BIND(?g AS ?g_with_abx) } and COUNT(DISTINCT ?g_with_abx).",
+    ]
+
+
+def test_count_of_an_unbound_record_alias_binds_the_record_not_the_patient():
+    # q-011: the patient-level remedy was copied into the follow-up columns and the counts came out as patients.
+    query = ("SELECT (COUNT(DISTINCT ?g_telephone) AS ?patients_telephone) (COUNT(DISTINCT ?telephone_followup) AS ?count_telephone_followups) "
+             "WHERE { GRAPH ?g_telephone { ?record a sphn:FollowUp ; sphn:hasCode ?code . ?code a snomed:386473003 } BIND(?g_telephone AS ?g) }")
+    assert check_unbound_variables(parse(query)) == [
+        "COUNT(DISTINCT ?telephone_followup): nothing binds ?telephone_followup. The column counts records: bind the "
+        "sphn:FollowUp record of that pattern, BIND(?record AS ?telephone_followup), and COUNT(DISTINCT ?telephone_followup); "
+        "or one row per kind with VALUES (?concept ?kind) { ... } and GROUP BY ?kind."
+    ]
+    # q-074 and q-076: the alias ends with the typed record's name, so it is a record-level subgroup of that record.
+    suffix = ("SELECT (COUNT(DISTINCT ?proc) AS ?procedures) (COUNT(DISTINCT ?guided_proc) AS ?guided_procedures) "
+              "WHERE { GRAPH ?g { ?proc a sphn:ImagingProcedure } }")
+    assert check_unbound_variables(parse(suffix)) == [
+        "COUNT(DISTINCT ?guided_proc): nothing binds ?guided_proc. It counts ?proc records, so bind the record, not the "
+        "patient: OPTIONAL { GRAPH ?g { <condition on ?proc> } BIND(?proc AS ?guided_proc) } and COUNT(DISTINCT ?guided_proc)."
+    ]
+    # The record may be typed inside a sub-select: projected, it is in scope; hidden, the alias still names it.
+    for sub_select in ("{ SELECT ?g ?proc WHERE { GRAPH ?g { ?proc a sphn:ImagingProcedure } } }",
+                       "{ SELECT ?g (COUNT(DISTINCT ?proc) AS ?n) WHERE { GRAPH ?g { ?proc a sphn:ImagingProcedure } } GROUP BY ?g }"):
+        hidden = f"SELECT (COUNT(DISTINCT ?guided_proc) AS ?guided_procedures) WHERE {{ {sub_select} OPTIONAL {{ GRAPH ?g {{ ?proc sphn:hasIntent ?intent }} }} }}"
+        assert [hint.split(". ", 1)[1] for hint in check_unbound_variables(parse(hidden))] == [
+            "It counts ?proc records, so bind the record, not the patient: OPTIONAL { GRAPH ?g { <condition on ?proc> } "
+            "BIND(?proc AS ?guided_proc) } and COUNT(DISTINCT ?guided_proc)."
+        ]
+    # q-068: the typed record is ?drug_prescription and the column counts ?prescription.
+    misnamed = ("SELECT ?g (COUNT(DISTINCT ?prescription) AS ?prescriptions) WHERE { GRAPH ?g { ?drug_prescription a sphn:DrugPrescription } } GROUP BY ?g")
+    assert check_unbound_variables(parse(misnamed)) == [
+        "COUNT(DISTINCT ?prescription): nothing binds ?prescription. The column counts records: bind the sphn:DrugPrescription "
+        "record of that pattern, BIND(?drug_prescription AS ?prescription), and COUNT(DISTINCT ?prescription); or one row per "
+        "kind with VALUES (?concept ?kind) { ... } and GROUP BY ?kind."
+    ]
+    untyped = "SELECT (COUNT(DISTINCT ?cholera_prescription) AS ?n) WHERE { GRAPH ?g { ?p sphn:hasCode ?c } }"
+    assert check_unbound_variables(parse(untyped)) == [
+        "COUNT(DISTINCT ?cholera_prescription): nothing binds ?cholera_prescription. The column counts records: "
+        "COUNT(DISTINCT ?record) of that pattern, or one row per kind with VALUES (?concept ?kind) { ... } and GROUP BY ?kind."
     ]
 
 

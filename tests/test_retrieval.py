@@ -14,7 +14,7 @@ from nl2sparql.config import Settings
 from nl2sparql.context import ExampleBank, SchemaCards, TerminologyIndex
 from nl2sparql.context.bm25 import normalize_text
 from nl2sparql.context.examples import DEV_REFERENCE_SOURCE, needed_shape, reference_shape
-from nl2sparql.context.terminology import parent_code
+from nl2sparql.context.terminology import class_name_words, parent_code
 from nl2sparql.factory import DEV_REFERENCES_PATH, build_pipeline
 from nl2sparql.input_check import normalize_text as check_input
 from nl2sparql.judge import Judge
@@ -435,3 +435,25 @@ def test_subcodes_follow_a_matched_code_without_displacing_direct_matches():
 ])
 def test_parent_code(code, parent):
     assert parent_code(code) == parent
+
+
+def test_a_candidate_whose_label_restates_a_class_name_is_dropped_for_the_next_one():
+    """"Imaging (procedure)" only spells out sphn:ImagingProcedure (q-057 and q-074 typed the intent with it);
+    a label with more words, or a one-word class name, stays a candidate."""
+    index = TerminologyIndex([
+        CodeEntry("https://example.test/snomed/363679005", "363679005", "SNOMED CT", ("Imaging (procedure)",)),
+        CodeEntry("https://example.test/snomed/429892002", "429892002", "SNOMED CT", ("Guidance intent (qualifier value)",)),
+        CodeEntry("https://example.test/snomed/363680008", "363680008", "SNOMED CT", ("Diagnostic imaging (procedure)",)),
+        CodeEntry("https://example.test/snomed/419620001", "419620001", "SNOMED CT", ("Death (event)",)),
+        CodeEntry("https://example.test/snomed/75367002", "75367002", "SNOMED CT", ("Blood pressure (observable entity)",)),
+    ])
+    classes = ["ImagingProcedure", "Death", "BloodPressure", "DrugAdministrationEvent"]
+    question = "How many diagnostic imaging procedures were done to guide another, and how many deaths and blood pressures?"
+    codes = lambda **kw: [entry.code for entry in index.candidates(question, **kw)]  # noqa: E731
+    assert codes(k=2) == ["363679005", "363680008"]  # without class names nothing is dropped
+    assert codes(k=2, class_names=classes) == ["363680008", "419620001"]  # the freed slot goes to the next candidate
+    assert codes(k=5) == ["363679005", "363680008", "419620001", "75367002"]
+    assert codes(k=5, class_names=classes) == ["363680008", "419620001", "75367002"]
+    assert class_name_words(classes) == {frozenset({"imaging", "procedure"}), frozenset({"blood", "pressure"}),
+                                         frozenset({"drug", "administration", "event"})}
+    assert index.candidates("", class_names=classes) == [] and index.candidates(question, k=0, class_names=classes) == []

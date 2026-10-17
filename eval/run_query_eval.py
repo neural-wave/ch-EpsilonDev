@@ -264,20 +264,26 @@ async def main_async(args) -> None:
             return generated_row(item, result, round((time.perf_counter() - started) * 1000, 1))
 
     rows = await score(await asyncio.gather(*(generate(item) for item in questions)), virtuoso)
+    summary = summarize(rows, eval_setup(settings, args.concurrency))
+    print("\n" + json.dumps(summary, indent=2))
+    print(f"report: {write_report(settings, 'query', summary, rows)}")
+
+
+def eval_setup(settings: Settings, concurrency: int) -> dict:
+    """The configuration a report was made with, so that runs can be told apart. With CONTEXT_DEV_REFERENCES on,
+    dev questions retrieve their neighbours' reference queries: only the holdout numbers compare with other runs."""
     query_agent = settings.agent("query")
-    setup = {
+    return {
         "backend": settings.backend,
         "models": {"intent": settings.agent("intent").model, "query": query_agent.model} if settings.backend == "llm"
                   else {"intent": "stub", "query": "stub"},
         "prompt_versions": {"intent": settings.intent_prompt_version, "query": settings.query_prompt_version},
         "max_tokens": query_agent.max_tokens,
-        "context": {"examples": settings.context_examples, "cards": settings.context_cards, "codes": settings.context_codes},
+        "context": {"examples": settings.context_examples, "cards": settings.context_cards, "codes": settings.context_codes,
+                    "dev_references": settings.context_dev_references},
         "query_reorder": settings.query_reorder,
-        "concurrency": args.concurrency,
+        "concurrency": concurrency,
     }
-    summary = summarize(rows, setup)
-    print("\n" + json.dumps(summary, indent=2))
-    print(f"report: {write_report(settings, 'query', summary, rows)}")
 
 
 def main() -> None:
