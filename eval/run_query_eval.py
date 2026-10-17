@@ -2,6 +2,7 @@
 
     python eval/run_query_eval.py --concurrency 4      # backend from the environment, dev Virtuoso
     python eval/run_query_eval.py --split dev --limit 5
+    python eval/run_query_eval.py --rescore eval/reports/query-<date>.json   # execute again, no model calls
 
 Each question runs through the whole pipeline (context, query agent, judge, retry), the way the API
 answers it. An official question never sees its own example. Then the generated query and the reference
@@ -94,33 +95,10 @@ def rates(rows: list[dict]) -> dict:
     }
 
 
-async def main_async(args) -> None:
-    settings = Settings.from_env()
-    pipeline = build_pipeline(settings, exclude_exact_examples=True)
-    virtuoso = VirtuosoClient(settings.virtuoso_endpoint, timeout=args.execute_timeout)
-    questions = load_query_questions(settings)
-    if args.split != "all":
-        questions = [q for q in questions if q["split"] == args.split]
-    questions = questions[: args.limit or None]
-
-    semaphore = asyncio.Semaphore(max(1, args.concurrency))
-
-    async def generate(item: dict) -> dict:
-        async with semaphore:
-            started = time.perf_counter()
-            try:
-                result = await pipeline.run(item["question"])
-            except Exception as error:  # report and keep going
-                return {**item, "pipeline_error": str(error)[:200], "latency_ms": round((time.perf_counter() - started) * 1000, 1)}
-            return {**item, "pipeline_error": None, "latency_ms": round((time.perf_counter() - started) * 1000, 1),
-                    "sparql_query": result.sparql_query, "is_compliant": result.is_compliant,
-                    "retries": result.retries, "tokens_consumed": result.tokens_consumed,
-                    "tokens_by_step": result.tokens_by_step, "timings_ms": result.timings_ms,
-                    "diagnostics": result.diagnostics}
-
-    generated = await asyncio.gather(*(generate(item) for item in questions))
+async def score(rows_in: list[dict], virtuoso: VirtuosoClient) -> list[dict]:
+    """Run each generated and reference query on the database and compare their results."""
     rows = []
-    for item in generated:  # one at a time, so execution times are comparable
+    for item in rows_in:  # one at a time, so execution times are comparable
         reference_rows, reference_ms, reference_error = await execute(virtuoso, item["reference_sparql"])
         if item["pipeline_error"]:
             generated_rows, generated_ms, generated_error = None, None, item["pipeline_error"]
@@ -138,22 +116,19 @@ async def main_async(args) -> None:
             print(f"{row['outcome']:16} {row['id']:12} retries={row['retries']} "
                   f"rows {row['generated_rows']} vs {row['reference_rows']}  {row['question'][:70]}")
     print(f"{sum(r['split'] == 'holdout' for r in rows)} holdout questions answered (hidden)")
+    return rows
 
+
+def summarize(rows: list[dict], setup: dict) -> dict:
     scored = [r for r in rows if r["outcome"] != "reference_failed"]
     visible = [r for r in scored if r["split"] != "holdout"]
     ok = [r for r in scored if not r["pipeline_error"]]
     query_tokens = [r["tokens_by_step"].get("query", 0) + r["tokens_by_step"].get("query_retry", 0) for r in ok]
     ratios = [r["execution_ms"] / r["reference_ms"] for r in scored
               if r["outcome"] in ("exact", "same_rows") and r["reference_ms"] and r["execution_ms"]]
-    query_agent = settings.agent("query")
-    summary = {
+    return {
         "questions": len(rows),
-        "backend": settings.backend,
-        "models": {"intent": settings.agent("intent").model, "query": query_agent.model} if settings.backend == "llm"
-                  else {"intent": "stub", "query": "stub"},
-        "prompt_versions": {"intent": settings.intent_prompt_version, "query": settings.query_prompt_version},
-        "max_tokens": query_agent.max_tokens,
-        "concurrency": args.concurrency,
+        **setup,
         **rates(scored),
         "blocked_allowed": [r["id"] for r in visible if r.get("is_compliant") is False],
         "not_exact": [r["id"] for r in visible if r["outcome"] != "exact"],
@@ -169,6 +144,54 @@ async def main_async(args) -> None:
         "by_difficulty": {level: rates([r for r in visible if r.get("difficulty") == level])
                           for level in sorted({r.get("difficulty", "") for r in visible})},
     }
+
+
+async def main_async(args) -> None:
+    settings = Settings.from_env()
+    virtuoso = VirtuosoClient(settings.virtuoso_endpoint, timeout=args.execute_timeout)
+    if args.rescore:  # same generated queries, executed again (e.g. after the database was unavailable)
+        old = json.loads(Path(args.rescore).read_text(encoding="utf-8"))
+        keep = ("questions", "outcomes", "exact_rate", "executes_rate", "first_try_rate", "blocked_allowed", "not_exact",
+                "reference_failed", "retry_reasons", "median_query_tokens", "median_tokens", "latency_ms_p50",
+                "latency_ms_p95", "execution_time_ratio_median", "by_split", "by_difficulty")
+        setup = {key: value for key, value in old["summary"].items() if key not in keep} | {"rescored_from": Path(args.rescore).name}
+        rows = await score(old["rows"], virtuoso)
+        summary = summarize(rows, setup)
+        print("\n" + json.dumps(summary, indent=2))
+        print(f"report: {write_report(settings, 'query', summary, rows)}")
+        return
+
+    pipeline = build_pipeline(settings, exclude_exact_examples=True)
+    questions = load_query_questions(settings)
+    if args.split != "all":
+        questions = [q for q in questions if q["split"] == args.split]
+    questions = questions[: args.limit or None]
+    semaphore = asyncio.Semaphore(max(1, args.concurrency))
+
+    async def generate(item: dict) -> dict:
+        async with semaphore:
+            started = time.perf_counter()
+            try:
+                result = await pipeline.run(item["question"])
+            except Exception as error:  # report and keep going
+                return {**item, "pipeline_error": str(error)[:200], "latency_ms": round((time.perf_counter() - started) * 1000, 1)}
+            return {**item, "pipeline_error": None, "latency_ms": round((time.perf_counter() - started) * 1000, 1),
+                    "sparql_query": result.sparql_query, "is_compliant": result.is_compliant,
+                    "retries": result.retries, "tokens_consumed": result.tokens_consumed,
+                    "tokens_by_step": result.tokens_by_step, "timings_ms": result.timings_ms,
+                    "diagnostics": result.diagnostics}
+
+    rows = await score(await asyncio.gather(*(generate(item) for item in questions)), virtuoso)
+    query_agent = settings.agent("query")
+    setup = {
+        "backend": settings.backend,
+        "models": {"intent": settings.agent("intent").model, "query": query_agent.model} if settings.backend == "llm"
+                  else {"intent": "stub", "query": "stub"},
+        "prompt_versions": {"intent": settings.intent_prompt_version, "query": settings.query_prompt_version},
+        "max_tokens": query_agent.max_tokens,
+        "concurrency": args.concurrency,
+    }
+    summary = summarize(rows, setup)
     print("\n" + json.dumps(summary, indent=2))
     print(f"report: {write_report(settings, 'query', summary, rows)}")
 
@@ -179,6 +202,7 @@ def main() -> None:
     parser.add_argument("--concurrency", type=int, default=1, help="questions generated at once (default 1)")
     parser.add_argument("--execute-timeout", type=float, default=60.0)
     parser.add_argument("--limit", type=int, default=0)
+    parser.add_argument("--rescore", metavar="REPORT", help="re-execute the queries of an existing report (no model calls)")
     asyncio.run(main_async(parser.parse_args()))
 
 

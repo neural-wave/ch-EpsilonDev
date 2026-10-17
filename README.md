@@ -6,7 +6,7 @@ A researcher asks a question in English. We translate it into a SPARQL query ove
 
 This README is the single source of truth for the team. Read it once end to end before you start, then use the contents to jump around. If you work with an AI coding assistant, it also reads [AGENTS.md](AGENTS.md).
 
-*Last updated: Saturday 17 October 2026, 01:00. Deadline: **Sunday 18 October, 11:00**.*
+*Last updated: Saturday 17 October 2026, 05:15, after merging modules A, B, C and D. Deadline: **Sunday 18 October, 11:00**.*
 
 ## Contents
 
@@ -96,13 +96,15 @@ Feedback on our design, 16 October:
 
 | Area | State |
 |---|---|
-| Every component of the design | Built and wired end to end; the test suite runs locally and in pull-request CI |
-| LLM | Connected: Qwen3.5-9B served by vLLM on a Vast.ai RTX 5090 |
-| Quality (31 test questions) | 90% verdicts correct, **0 forbidden requests marked compliant**, 2.8 s median latency |
+| Modules A–D | **Merged on `main`** (17 October): integration with timeouts and safe retries (David), agents and context (Santiago), judge and context hardening (Adrika), compliance guard (Gayathri). 244 tests pass locally and in pull-request CI |
+| LLM | Qwen3.5-9B served by vLLM on a Vast.ai RTX 5090, for both agents. Coder-14B and Coder-30B were tested and not adopted ([section 8](#8-the-llm-on-the-gpu)) |
+| Verdicts, 31 shared questions | **90.3% correct, 0 forbidden requests marked compliant**, 3.1 s / 19.2 s latency (p50 / p95) |
+| Verdicts, 198 labeled questions | **91.3%** on the dev split and **83.7% on the blind holdout**. The main loss is allowed requests that end up blocked ([section 11](#11-evaluation-and-baseline-numbers)) |
+| Query quality | Weak on complex questions: 2 of 47 queries return exactly the reference result, and 64% run on Virtuoso |
+| Context | Terminology index (38,765 codes) and coded value sets (55 properties) built on the run machine; 96% of the codes reference queries need reach the query agent |
 | Knowledge base | Two local Virtuoso databases: dev (2,000 patients) and perf (100,000 patients) |
-| Demo page | Works: `http://localhost:8080` on the run machine |
-| GitHub | Being pushed; the official `NW_26_<Company>_<Team>` repo is pending |
-| Medical-code index | Script ready, index not built yet (module C) |
+| Demo page and agents console | `http://localhost:8080` and `/agents` on the run machine |
+| GitHub | `main` on EpsilonDev26/ep-rep; the official `NW_26_<Company>_<Team>` repo is pending |
 | Organizer answers | Several questions still open (see [section 14](#14-questions-for-the-organizers)) |
 
 ## 4. Architecture and design decisions
@@ -199,19 +201,20 @@ nl2sparql/
 │   ├── virtuoso.py               small client (scripts, eval, demo only)                  (C)
 │   └── demo/index.html           demo page                                                (E)
 ├── data/                         committed data files (no restricted content)             (C)
-├── scripts/                      import examples, profile data, terminology index, runbox (C)
+├── scripts/                      import examples, profile data, terminology index,
+│                                 value sets, profile comparison, retrieval benchmark, runbox (C)
 ├── infra/virtuoso/               how to run the two Virtuoso databases                    (C)
-├── eval/                         questions + evaluation harness                           (E)
+├── eval/                         labeled questions and the evals: pipeline, intent, query (E)
 ├── tests/                        unit tests, one file per module
-└── docs/                         design spec and implementation plan
+└── docs/                         guides per module, design spec, implementation plan
 ```
 
 | | Module | Owns | Tests | Owner |
 |---|---|---|---|---|
 | **A** | Integration | API, orchestrator, factory, config, input check, load test, deployment | `tests/test_pipeline_and_api.py`, `tests/test_input_check.py` | David |
-| **B** | Agents and prompts | `agents/`, `llm.py`, model choice | `tests/test_agents_and_judge.py` | Santiago (models) |
-| **C** | Data and context | `context/`, `scripts/`, `data/`, `infra/`, `virtuoso.py` | `tests/test_context.py` | Santiago |
-| **D** | Guard and judge | `guard/`, `judge.py`, `sparql/` | `tests/test_guard.py`, `tests/test_sparql.py` | Two teammates: judge, compliance guard |
+| **B** | Agents and prompts | `agents/`, `llm.py`, model choice | `tests/test_agents_and_judge.py` | Santiago |
+| **C** | Data and context | `context/`, `scripts/`, `data/`, `infra/`, `virtuoso.py` | `tests/test_context.py` | Santiago (Adrika hardened the loaders and retrieval) |
+| **D** | Guard and judge | `guard/`, `judge.py`, `sparql/` | `tests/test_guard.py`, `tests/test_sparql.py` | Adrika (judge), Gayathri (compliance guard) |
 | **E** | Eval and demo | `eval/`, `demo/`, report and video numbers | `python eval/run_eval.py` | |
 
 **Shared interfaces**: [models.py](src/nl2sparql/models.py) and [agents/base.py](src/nl2sparql/agents/base.py). Change them only after agreeing with the team.
@@ -220,6 +223,8 @@ nl2sparql/
 - [docs/DATA.md](docs/DATA.md): how the patient graphs look, with examples. For everyone.
 - [docs/data-and-context/README.md](docs/data-and-context/README.md): context module checklist, split between local tests and real-graph validation.
 - [docs/GUARD.md](docs/GUARD.md): how the compliance guard works, its tools and its backlog. For module D.
+- [docs/guard-and-judge/README.md](docs/guard-and-judge/README.md): what was verified locally in the guard and the judge, and what needs the run machine.
+- [docs/SPARQL_LLM_VALIDATOR.md](docs/SPARQL_LLM_VALIDATOR.md): SIB's sparql-llm validator, evaluated offline, and the Virtuoso-only errors the judge could catch. For module D.
 - [docs/LLM_AGENTS.md](docs/LLM_AGENTS.md): the two LLM agents, their configuration, how to measure them, how to change a prompt or a model, and their backlog. For module B.
 
 ## 6. Getting started on your computer
@@ -304,15 +309,21 @@ All settings come from environment variables; `.env.example` lists them. Load th
 **Changing the model** is done on the instance by its owner. Per the instance's own guide (`/etc/vast-agents-guide.md`, which AI agents must read before acting on the instance):
 
 1. Set both `VLLM_MODEL` and `MODEL_NAME` in `/etc/environment`.
-2. Run `supervisorctl restart vllm model-ui`.
+2. Stop the services with `supervisorctl stop vllm model-ui`.
+3. Kill the old server with `kill -TERM $(pgrep -f "vllm serve" | head -1)`. A plain restart leaves it holding port 18000, and the new server then fails with "Address already in use".
+4. Start them again with `supervisorctl start vllm model-ui`.
 
-vLLM listens on `127.0.0.1:18000`; Caddy in front adds token auth. Do not add `--api-key` to vLLM.
+The full procedure is in [docs/LLM_AGENTS.md](docs/LLM_AGENTS.md). vLLM listens on `127.0.0.1:18000`; Caddy in front adds token auth. Do not add `--api-key` to vLLM.
 
-**Candidates to compare later** (all Apache-2.0, not gated):
+**Models compared on 17 October** (query eval: 47 questions with a reference SPARQL; intent eval: 198 questions):
 
-- `Qwen/Qwen2.5-Coder-14B-Instruct-AWQ` or `-GPTQ-Int8`: stronger at code, fits in 32 GB when quantized.
-- `swiss-ai/Apertus-8B-Instruct-2509`: the model the organizers encourage, a good fit for the intent agent.
-- `Qwen/Qwen3-Coder-30B-A3B-Instruct`: needs a bigger GPU.
+| Model (Apache-2.0) | Exact results | Query runs | Latency p50 / p95 | Intent holdout: detected / false alarms |
+|---|---|---|---|---|
+| `Qwen/Qwen3.5-9B` (in use) | 2–3 of 47 | 68% | 6.9 / 19.0 s | 93% / 5% |
+| `Qwen/Qwen2.5-Coder-14B-Instruct-AWQ` | 2–3 of 47 | 72–74% | 4.5 / 10.9 s | not measured |
+| `cyankiwi/Qwen3-Coder-30B-A3B-Instruct-AWQ-4bit` | 3 of 47 | 60% | 3.6 / 7.5 s | 93% / 10% |
+
+A bigger model did not improve the SPARQL; it only changed speed. `swiss-ai/Apertus-8B-Instruct-2509`, the model the organizers encourage, is still a candidate for the intent agent ([docs/LLM_AGENTS.md](docs/LLM_AGENTS.md), section 7).
 
 **Cost.** Vast bills per hour while the instance runs, not per request, so run as many tests as you like. Stopping it halts GPU billing; storage is still billed. After a stop, the GPU may be taken by someone else when you restart.
 
@@ -342,6 +353,7 @@ scripts/runbox.sh eval --execute --branch guard/my-fix     # eval with the LLM +
 - Branches are checked out under `../nl2sparql-worktrees/`, so the running demo is never disturbed.
 - Logs are in `logs/`.
 - After a reboot: `colima start`, then `scripts/runbox.sh up`. The perf database starts with `docker start virtuoso-perf`.
+- **If dev Virtuoso answers HTTP 503**, slow queries from an eval are still running there: a client timeout does not stop a query on the server. Use `docker restart hackathon-virtuoso`. The data persists, and it answers again after about 3 minutes.
 
 ## 10. The knowledge base and the data files
 
@@ -364,10 +376,13 @@ scripts/runbox.sh eval --execute --branch guard/my-fix     # eval with the LLM +
 | `data/examples.jsonl` | 15 official examples + the worked example from the brief | yes | `python scripts/import_examples.py --release-dir ../hackathon-virtuoso-release` |
 | `data/property_kinds.json` | What each of the 199 properties points to: value, value set or link. The guard relies on it | yes | `python scripts/profile_data.py` (about 2 minutes) |
 | `data/schema_cards.json` | The 164 classes present in the data (the schema defines 214), with their properties | yes | same script |
-| `assets/terminology_index.jsonl` | Code IRIs with their labels | **no**, restricted | `python scripts/build_terminology_index.py` |
+| `assets/terminology_index.jsonl` | 38,765 code IRIs with their labels (ICD-10-GM, CHOP, and the SNOMED CT concepts used in the data) | **no**, restricted | `python scripts/build_terminology_index.py` (17 s) |
+| `assets/value_sets.json` | The few coded values each class property uses in the data (55 properties, e.g. civil status, tobacco use, consent); the schema cards show them | **no**, restricted | `python scripts/build_value_sets.py` (35 s) |
 | `data/guard_corpus.jsonl` | 37 queries the LLM really wrote, with labels and the guard's verdict | yes | `python scripts/export_guard_corpus.py` (run machine, after LLM runs) |
 
 The full guide to the data, with examples, is [docs/DATA.md](docs/DATA.md).
+
+Both `assets/` files are read once, when the API starts. They are optional: without them the query agent gets no code candidates or values, and the API still works. Build them on any machine that has the dev database.
 
 The terminology-index builder also reads the optional local file
 `assets/english_terminology_labels.jsonl`. Each line must contain
@@ -376,35 +391,57 @@ This file and the generated index are restricted and must never be committed.
 
 ## 11. Evaluation and baseline numbers
 
+Four evals, all run on the run machine (`set -a && source .env && set +a` first):
+
 ```bash
-python eval/run_eval.py                    # in-process, backend from the environment
-python eval/run_eval.py --execute          # also runs compliant queries on VIRTUOSO_ENDPOINT
-python eval/run_eval.py --url http://localhost:8080
-python eval/run_intent_eval.py             # the intent agent alone: detection rate, false alarms, tokens
+python eval/run_eval.py --execute                     # whole pipeline, 31 shared questions, one at a time
+python eval/run_eval.py --intent-cases --concurrency 4  # whole pipeline, 198 labeled questions: the verdict metric
+python eval/run_intent_eval.py --concurrency 4        # the intent agent alone, 198 questions
+python eval/run_query_eval.py --concurrency 4         # the query agent against 47 reference SPARQL queries (dev Virtuoso)
+python eval/run_query_eval.py --rescore eval/reports/query-<date>.json   # execute again, no model calls
 ```
 
-In-process pipeline runs also report, **per agent**:
-- tokens and time;
-- why retries happened, and the query each retry replaced;
-- answers cut off at the token cap.
+**Questions:**
+- **31 shared:** the 16 official examples (`data/examples.jsonl`) plus 15 team questions ([eval/questions.jsonl](eval/questions.jsonl)).
+- **198 labeled:** the 31 above plus 167 intent cases ([eval/intent_questions.jsonl](eval/intent_questions.jsonl)): paraphrases, traps, prompt injection, look-alikes, gray zones, style variants and three languages. 125 of them were written by an agent that never saw our prompts.
+- **47 with a reference query:** the 11 compliant official examples plus 36 questions ([eval/query_questions.jsonl](eval/query_questions.jsonl)) whose reference SPARQL was verified on the dev database.
 
-These appear in `per_agent` in the summary and in `diagnostics` in each row. The intent eval is the cheap way to compare intent models and prompts. The agents console (`/agents`, **Measurements**) shows every saved report side by side. [docs/LLM_AGENTS.md](docs/LLM_AGENTS.md) explains every field.
+**Rules of the evals:**
+- **Splits.** Questions are split into **dev** (may be studied one by one to improve prompts or context) and **holdout** (a blind exam: reported only as totals, never studied). The holdout numbers are our best guess for the jury's hidden list.
+- **Fair test.** An official question never sees its own example in the context.
+- **Reports** go to `eval/reports/` (git-ignored) and show up in the agents console (`/agents`, **Measurements**). [docs/LLM_AGENTS.md](docs/LLM_AGENTS.md) explains every field.
 
-- **Questions:** the 16 official examples (from `data/examples.jsonl`) plus team questions in [eval/questions.jsonl](eval/questions.jsonl). Each team question has `{id, question, expected_compliant, category}`.
-- **Fair test:** by default an official question cannot see its own example in the context.
-- **Reports** go to `eval/reports/`, which is git-ignored.
-
-**Baseline to beat** (31 questions):
+**Whole pipeline, 31 shared questions, one at a time:**
 
 | Backend | Verdicts correct | Forbidden marked compliant | Latency p50 / p95 | Tokens per request |
 |---|---|---|---|---|
 | `stub` (no model) | 87% | 0 | 13 ms / 53 ms | 0 |
-| `llm`, Qwen3.5-9B | **90%** | **0** | 2.8 s / 16.6 s | ~3,000 |
+| Qwen3.5-9B, 16 October (prompts v1, no codes) | 90% | 0 | 2.8 s / 16.6 s | ~3,000 |
+| **Qwen3.5-9B, 17 October (merged system)** | **90.3%** | **0** | 3.1 s / 19.2 s | ~3,700 |
 
-**Where the LLM run still fails:**
+**Whole pipeline, 198 labeled questions (17 October, 4 at a time):**
 
-- **Wrong verdicts:** #01 and #08 (the model wrote invalid SPARQL, even after the retry) and #07.
-- **Compliant queries executed on dev:** 9 of 13 return data, #06 and #09 return no rows, and #05 and #10 fail in Virtuoso.
+| Split | Verdicts correct | Forbidden marked compliant | Allowed blocked |
+|---|---|---|---|
+| dev (149) | 91.3% | 1 of 88 | 12 of 61 |
+| **holdout (49)** | **83.7%** | 2 of 29 | 6 of 20 |
+
+**Per agent (17 October):**
+- **Intent agent (prompt v4), holdout:** 93% of forbidden requests detected, 5% false alarms, resists prompt injection, 631 tokens per call.
+- **Query agent (prompt v2), 47 reference questions:**
+  - 2 return exactly the reference result;
+  - 64% run on Virtuoso;
+  - 57% are valid on the first try.
+
+  Of the 13 compliant queries in the 31-question run, 8 return rows, 2 return nothing and 3 fail in Virtuoso.
+
+**Why allowed requests end up blocked (dev, 12):**
+
+| Cause | Requests | Owner |
+|---|---|---|
+| The query does not parse, so the guard cannot check it. Two of these answers were cut off at the 900-token cap | 7 | B |
+| The query groups by the code node of each record instead of the concept (e.g. `GROUP BY ?code` for "the 10 most common diagnoses"). The guard flags it correctly, and the retry does not fix it | 4 | B, plus D for a clearer retry hint |
+| Intent false alarm ("How many patients have at least one identifier recorded?") | 1 | B |
 
 **Official example timings** (one run each on the run machine; dev: server time through isql, #06 over HTTP; perf: HTTP round trip):
 
@@ -440,49 +477,47 @@ Query performance is a major lever: even the organizers' own queries can take mi
 8. **Passing our parser does not mean Virtuoso accepts the query.** Two LLM queries failed only in Virtuoso. We may not ask the database at runtime, so the fix has to come from prompts and style rules.
 9. **The SIB `sparql-examples` repo has no SPHN examples.** It covers UniProt, Bgee, Rhea and the like. Reuse its format, not its content.
 10. **Vast's suggested SSH command forwards port 8080**, which clashes with our demo. Use another local port, e.g. `-L 8888:localhost:8080`.
+11. **rdflib's SPARQL parser is not thread-safe.** The orchestrator runs the judge and the guard in worker threads, and two requests parsing at once corrupted the parser for the rest of the process: every later request came back "not compliant". With 4 concurrent requests, 198 of 198 failed. `parse_sparql` now takes a lock, and a test parses from 8 threads at once.
+12. **A client timeout does not stop a Virtuoso query.** Slow queries from an eval kept running and saturated dev Virtuoso (HTTP 503). The query eval runs queries one at a time and can `--rescore` a report. Restart the container if it happens (section 9).
+13. **On our Vast instance, `supervisorctl restart vllm` keeps the old server alive** on port 18000. Kill it before starting the new model (section 8).
+14. **A bigger model did not fix the SPARQL.** Qwen3.5-9B, Coder-14B and Coder-30B-A3B gave the same exact-result rate. The levers are context (codes, examples) and prompts.
+15. **90% correct verdicts can hide poor SPARQL.** Measure query results against reference queries (`eval/run_query_eval.py`), not only verdicts.
+16. **Do not commit environments or editor settings.** A teammate's `.venv311/` (1,834 files) almost got merged. `.venv*/` and `.vscode/` are git-ignored now.
 
 ## 13. Next steps per module
 
-**A · Integration**
-- Decide where the API runs during judging and how it reaches the model. This depends on the organizers' answer in [section 14](#14-questions-for-the-organizers); no deployment mode is confirmed yet.
-- Run the HTTP load test against the LLM backend on the run machine. The command below sends eight concurrent API requests. Each request can make both agent calls concurrently, so model calls may queue at vLLM's eight-sequence limit. The tool calls only `/health` and `POST /nl-to-sparql`; it does not execute SPARQL.
+Most useful first. Measure every change with the evals in [section 11](#11-evaluation-and-baseline-numbers) and compare with the numbers there.
+
+**A · Integration** (David)
+- Run the HTTP load test against the LLM backend. It is safe to run now that parsing is thread-safe. Record `invalid_or_failed`, p50/p95 latency, throughput and mean tokens.
 
   ```bash
   python -m nl2sparql.load_test --url http://localhost:8080 \
     --questions eval/questions.jsonl --requests 32 --concurrency 8 --require-llm
   ```
 
-  Record `invalid_or_failed`, p50/p95 latency, throughput and mean tokens. The command is ready, but the eight-request LLM load run is still pending.
-- Install from scratch in a clean environment before submitting, then run the tests and the HTTP smoke checks in [section 6](#6-getting-started-on-your-computer).
-- Finish the jury README after the deployment answer arrives and all teammates confirm their full names and roles in [section 18](#18-team). The stub instructions above are for local development; judging needs the configured LLM backend.
+- Decide where the API runs during judging and how it reaches the model. This depends on the organizers' answer in [section 14](#14-questions-for-the-organizers).
+- Install from scratch in a clean environment, then run the tests and the HTTP smoke checks in [section 6](#6-getting-started-on-your-computer).
 
 **B · Agents and prompts** (Santiago). Full backlog in [docs/LLM_AGENTS.md](docs/LLM_AGENTS.md#9-backlog-for-module-b-most-useful-first).
-- Per-agent baseline on the GPU, then the Apertus comparison for the intent agent.
-- Prompts in the house style, so complex questions (#01, #08) produce valid SPARQL and fewer queries return 0 rows.
-- Cut tokens: about 3,000 per request today.
-- Measure the intent agent's false alarms and its resistance to prompt injection.
+- Raise `LLM_QUERY_MAX_TOKENS` from 900 to about 1,500. Six requests had an answer cut off.
+- Write query prompt v4: group by the concept class (`?c a ?concept`), never by the code node.
+- Fix the intent false alarm on counts that mention identifiers.
 
-**C · Data and context**
+**C · Data and context** (Santiago)
+- Add the 21 dev reference queries to the example bank. Measure only on the holdout.
+- Add English labels for ICD-10-GM and CHOP codes (`assets/english_terminology_labels.jsonl`; the builder already reads it). The labels are German and French today, and two needed codes were missed (nationality, therapeutic ultrasound).
+- Set a server-side query timeout in dev Virtuoso, so evals cannot saturate it.
 
-- Build the terminology index and add English names for ICD-10-GM and CHOP codes.
-- Better example retrieval, e.g. embeddings.
-- Write and validate more SPHN examples in the SIB `sparql-examples` format.
-
-**D · Guard and judge**
-
-- Encode the gray zones once the organizers answer.
-- Add judge style rules: inference on code patterns, `COUNT(DISTINCT ?g)`, pattern order.
-- Prevent Virtuoso-only errors without querying the database.
-- Add performance rewrites.
-- Add more trap tests.
+**D · Guard and judge** (Adrika, Gayathri)
+- Write a retry hint for "grouping by ?code" that says how to fix it: group by the concept class.
+- Find why a query filtering on a graph-name prefix with patient-ID digits passed as compliant (dev question `gen-106`). Two holdout leaks remain unexamined on purpose.
+- Catch Virtuoso-only errors in code before the guard. The patterns are in [docs/SPARQL_LLM_VALIDATOR.md](docs/SPARQL_LLM_VALIDATOR.md). Consider SIB's validator, offline.
+- Check whether `GROUP BY ?g` inside a subquery that is aggregated afterwards is a false alarm (official #10).
 
 **E · Eval and demo**
-
-- Grow to 80+ labeled questions: paraphrases, prompt-injection attempts, gray zones.
-- Run eval questions in parallel.
-- Store reference results to check correctness.
-- Build a 10-run timing harness on perf.
-- Polish the demo and prepare the numbers for the report and video.
+- Build a 10-run timing harness on perf: query performance is a main criterion.
+- Polish the demo and prepare the numbers for the report and the video.
 
 ## 14. Questions for the organizers
 
@@ -544,9 +579,9 @@ By **Sunday 18 October, 11:00**:
 
 | Full name | Role | Modules |
 |---|---|---|
-| Santiago Figueroa Luchetti | Architecture and backend | Architecture, B (agents and models), run machine |
-| Adrika | Backend | |
-| Gayathri | Backend | |
+| Santiago Figueroa Luchetti | Architecture and backend | Architecture, B (agents and models), C (data and context), run machine |
+| Adrika | Backend | D (judge), C groundwork (loader validation, retrieval) |
+| Gayathri | Backend | D (compliance guard) |
 | David | Backend | A (integration) |
 | Odinaka | Frontend | |
 

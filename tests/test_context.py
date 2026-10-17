@@ -274,27 +274,27 @@ def test_context_builder_combines_everything():
 
 def test_terminology_folds_plurals_and_snomed_tags_and_weighs_common_words():
     index = TerminologyIndex([
-        CodeEntry("http://snomed.info/id/77176002", "77176002", "SNOMED CT", ("Smoker (finding)",)),
-        CodeEntry("http://snomed.info/id/108241001", "108241001", "SNOMED CT", ("Dialysis procedure (procedure)",)),
-        CodeEntry("http://snomed.info/id/371883000", "371883000", "SNOMED CT", ("Outpatient procedure (procedure)",)),
-        *(CodeEntry(f"http://snomed.info/id/{n}", str(n), "SNOMED CT", (f"{kind} procedure (procedure)",))
+        CodeEntry("https://example.test/code/smoker", "T1", "synthetic", ("Smoker (finding)",)),
+        CodeEntry("https://example.test/code/dialysis", "T2", "synthetic", ("Dialysis procedure (procedure)",)),
+        CodeEntry("https://example.test/code/outpatient", "T3", "synthetic", ("Outpatient procedure (procedure)",)),
+        *(CodeEntry(f"https://example.test/code/{n}", f"P{n}", "synthetic", (f"{kind} procedure (procedure)",))
           for n, kind in enumerate(["Biopsy", "Imaging", "Laboratory", "Surgical", "Dental"], start=1)),
     ])  # as in the real index, "procedure" is a common word there
-    assert [e.code for e in index.candidates("How many patients are current smokers?")] == ["77176002"]
-    assert [e.code for e in index.candidates("Share of outpatient stays with a billed procedure")] == ["371883000"]
+    assert [e.code for e in index.candidates("How many patients are current smokers?")] == ["T1"]
+    assert [e.code for e in index.candidates("Share of outpatient stays with a billed procedure")] == ["T3"]
 
 
 def test_schema_cards_show_value_sets_and_rank_question_classes_first(tmp_path):
     import json
     value_sets = tmp_path / "value_sets.json"
     value_sets.write_text(json.dumps({"classes": {
-        "CivilStatus": {"hasCode": [{"value": "snomed:87915002", "label": "Married", "count": 5}]},
+        "CivilStatus": {"hasCode": [{"value": "snomed:1000001", "label": "Married", "count": 5}]},
         "AdverseEvent": {"hasOutcome": [{"value": "sphn-individual:Fatal", "label": "Fatal", "count": 3}]},
     }}))
     cards = SchemaCards.load(DATA_DIR / "schema_cards.json", value_sets)
     found = cards.cards_for("What is the civil status breakdown?", k=2,
                             examples_sparql="?dx a sphn:BilledDiagnosis ; sphn:hasRank ?rank .")
-    assert found[0].startswith("sphn:CivilStatus") and "code typed as one of Married snomed:87915002" in found[0]
+    assert found[0].startswith("sphn:CivilStatus") and "code typed as one of Married snomed:1000001" in found[0]
     assert "hasOutcome = one of sphn-individual:Fatal" in cards.render("AdverseEvent")
     assert cards.cards_for("Patients whose directive says do not resuscitate")[0].startswith("sphn:ResuscitationDirective")
 

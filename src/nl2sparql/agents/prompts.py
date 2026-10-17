@@ -173,10 +173,11 @@ Speed:
 # - Virtuoso-only failures: MEDIAN, window functions (OVER), UNBOUNDED, a declared bif: prefix,
 #   xsd:year(), division by zero, bif:datediff on an unbound date;
 # - integer averages (50 instead of 49.6).
+# The example code in the card format is a placeholder, so no terminology content is committed.
 QUERY_SYSTEM_V3 = QUERY_SYSTEM_V2.replace(
     """- Measured values are Quantity nodes: ?x sphn:hasQuantity ?q . ?q sphn:hasValue ?value .""",
     """- When a card lists the values of a property, use exactly those values:
-  "code typed as one of Married snomed:87915002 | ..." means ?x sphn:hasCode ?c . ?c a snomed:87915002 ,
+  "code typed as one of <label> snomed:<code> | ..." means ?x sphn:hasCode ?c . ?c a snomed:<code> ,
   "= one of sphn-individual:Fatal | ..." means ?x sphn:hasOutcome sphn-individual:Fatal .
 - Measured values are Quantity nodes: ?x sphn:hasQuantity ?q . ?q sphn:hasValue ?value .""",
 ).replace(

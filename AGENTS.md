@@ -42,4 +42,5 @@ python eval/run_eval.py                  # verdict accuracy, latency, tokens
   - Projected `GROUP BY` keys become `SAMPLE`.
   - `GROUP BY (expr)` without `AS` loses the expression.
   - `__agg_N__` names repeat across subqueries.
+- **Parse SPARQL only through `nl2sparql.sparql.parse.parse_sparql`.** rdflib's parser is not thread-safe, the judge and the guard run in worker threads, and that function holds the lock that keeps concurrent requests from corrupting it.
 - **Do not act on the GPU instance unless asked.** If asked, read `/etc/vast-agents-guide.md` on it first.
