@@ -17,7 +17,7 @@ The jury scores three things: **time per request**, **verdict correctness** agai
 
 **Rules.**
 - **Correctness on dev, timing on perf.** The dev database (2,000 patients) answers reference queries in seconds; on perf (100,000) the official references take minutes or hours, so only timing runs there, with Virtuoso's server-side `timeout`.
-- **Dev and holdout.** Questions marked `holdout` are a blind exam: never study them one by one or tune anything on them. A change is kept only if the holdout does not get worse.
+- **Dev and holdout.** Questions marked `holdout` are a blind exam: never study them one by one or tune anything on them. A change is kept only if the holdout does not get worse — beyond the run-to-run noise, which is about 4 holdout points (see the noise check in the scoreboard).
 - **One change per run.** Prompt version, context size, model, answer cap: change one, measure, commit with the numbers.
 - **Reports** land in `eval/reports/` (git-ignored) and show up in the agents console, <http://localhost:8080/agents>, under **Measurements**.
 - Latency is comparable only between runs at the same concurrency. Concurrency 4 adds queueing on an 8-sequence vLLM.
@@ -35,7 +35,9 @@ The jury scores three things: **time per request**, **verdict correctness** agai
 | 17 Oct 13:31 | as above, **2 examples instead of 3** (rejected) | | query eval only: queries that run 77% → 60%, allowed blocked 5 → 13, exact 3 → 1, query tokens 3,369 → 3,908 (more guard retries) | | | |
 | 17 Oct 13:39 | query **v5** (v4 + speed rules incl. `DEFINE sql:select-option "order"`), rejected | | 93.3% (1 leak, 9 allowed blocked) | **81.6%** (2 leaks, 7 of 20 allowed blocked) | 3.7 s / 19.7 s | ~4,090 |
 | 17 Oct 14:20 | v4 + **retry feedback carries the rejected query** (rejected) | | 94.0% | **85.7%** (2 leaks, 5 allowed blocked) | 3.8 s / 14.5 s | ~3,850 |
-| 17 Oct 14:35 | v4 again, same configuration (**noise check**) | | | | | |
+| 17 Oct 14:35 | v4 again, same configuration (**noise check**) | | 94.6% (1 leak, 7 allowed blocked) | **87.8%** (2 leaks, 4 of 20 allowed blocked) | 3.8 s / 20.2 s | ~3,820 |
+
+**Noise.** Two runs of the same configuration (13:20 and 14:35) differ by 4 points on the holdout (2 of its 49 questions) and flip 9 of the 198 verdicts (7 dev, 2 holdout; dev net +1). Vllm samples at temperature 0 but batching makes the answers non-deterministic, and one holdout question is worth 2 points. So a single run cannot see a change smaller than about 5 holdout points: judge a change on all 198 and on *which* questions flipped (the runs page lists them), not on the holdout percentage alone, and run the final candidate twice before it becomes the default.
 
 ### Intent agent alone
 
@@ -73,6 +75,7 @@ Reading: the context (codes) made more queries run; the prompt v4 halved the blo
 | 17 Oct 13:30 | 36 v4 queries that ran on dev, 1 warm-up + 2 timed runs, 60 s server limit | 22 pairs completed on both sides: median generated 0.3 s vs reference 0.5 s, ratio 0.9. 11 reference queries pass 60 s (#01, #02, #04, #05, #06, #10, q-014, q-017, q-025, q-028, q-033); 6 generated pass 60 s, 4 of them where the reference also does. Generated slow where the reference is fast: q-018 and q-026 time out (reference 3.8 s and 0.5 s); spec-01 takes 1.4 s for a 0.01 s reference (×142) with the right result; #09, q-009, q-036 are ×3–4. 15 fast generated queries return a wrong or empty result on dev. |
 
 | 17 Oct 14:00 | 31 v5 queries that ran on dev, same protocol | Worse: 8 generated time-outs (v4: 6), including q-013, q-014, q-015, q-017 and q-020 which were fine with v4; spec-01 still 1.5 s. Forcing the join order with `DEFINE sql:select-option "order"` only helps when the written order is good, and the model does not order patterns reliably. |
+| 17 Oct 14:30 | The 47 v4 queries after the deterministic reorder pass (`QUERY_REORDER`, `nl2sparql.sparql.order`: code patterns first + `DEFINE sql:select-option "order"`), same protocol | On dev nothing changes except q-013, which Virtuoso refused before and now runs (13 queries reordered, 34 untouched apart from the DEFINE). On perf, mixed: spec-01 1.42 → 0.02 s (reference 0.01), official-01 4.5 → 2.5 s, q-009 1.9 → 1.3 s, but q-015 0.19 → 9.0 s and q-017 1.3 → 8.8 s. Forcing the order wins when code-first is the right plan and loses when it is not; the pass stays off until it applies only to the shapes where it wins. |
 
 A fast query with a wrong result scores nothing: read this table together with the exact-result column above.
 

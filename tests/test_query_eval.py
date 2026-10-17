@@ -17,3 +17,11 @@ def test_outcomes_for_wrong_empty_and_failed_queries():
     assert compare(reference, []) == "empty"
     assert compare(reference, [{"a": "1"}, {"a": "2"}]) == "wrong"
     assert compare(reference, None) == "error"
+
+
+def test_run_all_prints_only_the_last_summary_lines():
+    from run_all import tail_matching
+
+    output = "Loading model\nok q-001 exact\nXX q-002 wrong\nreport: /tmp/x.json\n" + "".join(f"ok q-{i:03} exact\n" for i in range(3, 13))
+    tail = tail_matching(output)
+    assert tail.count("\n") == 6 and tail.endswith("ok q-012 exact\n") and "report" not in tail and "Loading" not in tail
