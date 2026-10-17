@@ -280,7 +280,7 @@ def test_retry_feedback_can_carry_the_previous_query():
     pipeline.retry_with_previous_query = True
     asyncio.run(pipeline.run("Cholera cases by sex?"))
     assert agent.feedback[1].startswith("The previous query breaks the privacy rules")
-    assert "The rejected query was:\n" in agent.feedback[1] and "GROUP_CONCAT" in agent.feedback[1]
+    assert "The rejected query was:\n" in agent.feedback[1] and "hasCoverageType" in agent.feedback[1]
 
 
 def test_guard_retry_failure_keeps_the_first_query_and_verdict():
