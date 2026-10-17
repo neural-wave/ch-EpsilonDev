@@ -13,7 +13,7 @@ This guide records what Adrika completed in Module C and the remaining work for 
 | Perf-graph measurement | Not verified | Santiago must run repeated scale measurements on perf after dev validation. |
 | Verified both locally and against real RDF | No | Local synthetic results are not evidence of real-graph behavior. |
 
-**Access in Adrika's checkout, checked 2026-10-17:** `.env` is absent, and localhost ports 8890 (dev) and 8891 (perf) are closed. No real RDF profile, terminology index, or graph evaluation was performed here. The `guardjudge` branch was pushed at `7a7713698af27ff043c574dc611decddc9bb903c`.
+**Access in Adrika's checkout, last checked 2026-10-17:** `.env` is absent, and localhost ports 8890 (dev) and 8891 (perf) are closed. No real RDF profile, terminology index, or graph evaluation was performed here. The current local test tree is uncommitted and based on `d9235ba2984e66e0ab847be924a1ae7d3fb595e8`; use the current branch commit and runbox test step before treating it as shared.
 
 ## What Adrika completed
 
@@ -30,17 +30,14 @@ This guide records what Adrika completed in Module C and the remaining work for 
 The profile-comparison helper is in commit `51b817f77c66bf27c9f54fe12324f1e1a25154d4`; its synthetic tests are in `471054aef4847b94e210bc31ed07a487c136cfbe`.
 
 ```text
-PYTHONPATH=src .venv311/bin/python -m pytest -q tests/test_context.py
-41 passed
-
-PYTHONPATH=src .venv311/bin/python -m pytest -q tests/test_profile_comparison.py
-3 passed
+PYTHONPATH=src .venv311/bin/python -m pytest -q tests/test_context.py tests/test_profile_comparison.py
+44 passed
 
 PYTHONPATH=src .venv311/bin/python -m pytest -q
-171 passed, 1 existing Starlette/anyio deprecation warning
+191 passed, 1 existing Starlette/anyio deprecation warning
 ```
 
-The synthetic retrieval benchmark used 14 fabricated cases. Default and both candidate BM25 settings scored **92.9% top-1** and **100% top-3**; p50 retrieval latency was **0.0041 ms**, **0.0042 ms**, and **0.0041 ms**. No candidate met the 5-point top-1 improvement threshold. Typical and expanded synthetic rendered prompts were 668 and 37,624 characters. These are synthetic measurements, not real-graph or LLM results. The benchmark was run before the profile-comparison helper was added; that helper does not alter retrieval.
+The synthetic retrieval benchmark used 14 fabricated cases. On the latest run, default and both candidate BM25 settings each scored **92.9% top-1** and **100% top-3**; p50 retrieval latency was **0.0039 ms**, **0.0038 ms**, and **0.0037 ms**. No candidate met the 5-point top-1 improvement threshold. Typical and expanded synthetic rendered prompts were 668 and 37,624 characters. These are synthetic measurements, not real-graph or LLM results. The benchmark outputs aggregate numeric metrics only.
 
 ## Existing code Santiago can use
 

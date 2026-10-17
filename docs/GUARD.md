@@ -66,7 +66,7 @@ Propagation:
 
 | Rule | Check in `rules.py` | Fails on |
 |---|---|---|
-| R4 | Query form must be `SelectQuery`, with no federated `SERVICE` clause | CONSTRUCT, ASK, DESCRIBE, any update, or SERVICE access to another endpoint |
+| R4 | Query form must be `SelectQuery`, with no federated `SERVICE` clause | CONSTRUCT, ASK, DESCRIBE, any update, or any SERVICE clause |
 | R1 | No patient graph IRI (`http://example.org/graph/…`) or record IRI (`…/sphn-resource/…-sphn-…`) anywhere, including `FROM` and `FROM NAMED`; no identifier literal in a pattern; no filter comparing an identifier with a constant | `GRAPH <…/mock_data-1_0042>`, `FROM NAMED <…/mock_data-1_0042>`, `?s sphn:hasIdentifier "ID-1…"`, `FILTER(STR(?g) = "…")` |
 | R3 | At least one patient pattern with a concrete property, or `rdf:type` with a concrete class | `?s ?p ?o` alone, `?s a ?class` alone |
 | R2 | The outermost SELECT is aggregated. No `SELECT *`. Every projected value is an aggregate or a `GROUP BY` key that is not instance-level or an exact timestamp; `HAVING (COUNT(DISTINCT ?g) = 1)` is rejected | rows of values, `GROUP BY ?date`, `GROUP_CONCAT` of values, `SAMPLE` of a timestamp, one-patient groups |
@@ -105,7 +105,7 @@ Regenerate the corpus on the run machine after new LLM runs: `python scripts/exp
 
 ## 6. Current assumptions (gray zones)
 
-These are our defaults until the organizers answer (README, section 14):
+These describe the current implementation. Policy answers are still pending (README, section 14); confirm them before extending or relaxing these rules:
 
 | Case | Today | Where |
 |---|---|---|
@@ -115,6 +115,7 @@ These are our defaults until the organizers answer (README, section 14):
 | `MIN`/`MAX` of dates or values | Allowed, even if it points at one patient | R5 only checks identifiers |
 | `SAMPLE` of a value | Allowed; of a timestamp, rejected | R2 |
 | Minimum group size | `HAVING (COUNT(DISTINCT ?g) = 1)` is rejected; larger thresholds are not enforced | R2 |
+| Federated `SERVICE` | Rejected as R4 | R4 |
 | Ontology-only queries | Allowed | exception above |
 | `hasSubjectPseudoIdentifier` | Treated as an identifier (its name contains `Identifier`) | provenance |
 | `FILTER(STRSTARTS(STR(?g), "…"))` | Allowed for the bare prefix, rejected when the literal contains digits | R1 |
@@ -131,12 +132,13 @@ The parser library has quirks we hit and handled:
 ## 8. Backlog for module D (most useful first)
 
 1. **Reconcile corpus status after a fresh run-machine LLM evaluation.** Locally, #01 and #08 have parse errors and #07 is accepted by current Guard/Judge, unlike its committed status. Review sanitized post-retry outcomes and logs; do not infer the cause from the corpus alone.
-2. **Cut retries.** 32% of LLM requests use the retry. The judge now flags missing inference on explicit ICD-10-GM/CHOP code patterns and non-distinct `COUNT(?g)` patient counts (algebra-based, so a `COUNT(?g)` over a `SELECT DISTINCT ?g` subquery passes); missing standard prefixes are repaired automatically. Find which judge errors still trigger most retries (`logs/requests.jsonl` on the run machine).
-3. **Catch Virtuoso-only errors statically.** LLM queries pass our parser but fail in Virtuoso, for example with `NULL`, `MEDIAN`, `OVER`, a declared `bif:` prefix or `xsd:year()`. We may not ask the database at runtime. The patterns found by the query eval are listed in [SPARQL_LLM_VALIDATOR.md](SPARQL_LLM_VALIDATOR.md).
-4. **More trap tests:**
-   - identifiers smuggled through `CONCAT`, `SUBSTR` or `STR(?record)`;
-   - a subquery that projects `?g`, wrapped in an outer aggregate (safe when only a count is returned; unsafe when concatenated or sampled);
-   - less common combinations of nested graph scope, filters, binds, aggregates, grouping and property paths. Existing tests cover identity transforms, nested patient projections, `FROM NAMED`, `OPTIONAL`/`UNION`, inverse/alternative paths, and a combined nested graph/path/filter/bind/aggregate case.
-5. **`SERVICE` and singleton groups.** `SERVICE` (federated) clauses are rejected as R4 in the current code; confirm with the organizers that this is wanted. Ask whether singleton groups such as `HAVING (COUNT(DISTINCT ?g) = 1)` need special handling before changing behavior.
-6. **Encode the gray zones** once the organizers answer: minimum group size, fine-grained grouping, and `MIN`/`MAX`.
-6. **Later, with module B:** performance rewrites for the slow shapes (README, section 11).
+2. **Measure retry value.** The Judge already provides inference-per-code-pattern and `COUNT(DISTINCT ?g)` feedback, and the parser inserts standard prefixes. Use fresh run-machine logs to identify which diagnostics trigger retries and whether the retries improve results.
+3. **Catch Virtuoso-only errors statically.** Two LLM queries passed our parser but failed in Virtuoso, for example with `NULL` or a `GRAPH` nested inside `GRAPH`. We may not ask the database at runtime. The patterns found by the query eval (`MEDIAN`, `OVER`, a declared `bif:` prefix, `xsd:year()`, ungrouped variables) are listed in [SPARQL_LLM_VALIDATOR.md](SPARQL_LLM_VALIDATOR.md).
+4. **Continue synthetic interaction tests only for identified gaps** in nested graph scope, filters, binds, aggregates, grouping, and property paths. Existing tests cover identity transforms, nested patient projections, `FROM NAMED`, `OPTIONAL`/`UNION`, inverse/alternative paths, and combined nested graph/path/filter/bind/aggregate behavior.
+5. **Confirm current policy-dependent behavior:** the current code rejects federated `SERVICE` and groups filtered to exactly one patient. Ask whether those restrictions are intended and whether a larger minimum group size is required; do not extend either rule before the decision.
+6. **Encode remaining gray zones** once the organizers answer: fine-grained grouping and `MIN`/`MAX`.
+7. **Later, with module B:** performance rewrites for the slow shapes (README, section 11).
+
+## Latest offline verification
+
+On 17 October 2026, the focused Guard, SPARQL, Judge, pipeline/API, context, and profile-comparison tests passed **182 tests**. The full suite passed **191 tests**, with one existing Starlette/anyio deprecation warning. These results are for an uncommitted working tree based on `d9235ba2984e66e0ab847be924a1ae7d3fb595e8`; they do not verify real RDF graphs or Virtuoso behavior. The SERVICE check now explicitly reports R4, and its regression test covers the reason, retry hint, local-query near-miss, and no-retry behavior for flagged intent.

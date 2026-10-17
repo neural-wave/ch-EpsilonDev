@@ -6,7 +6,7 @@ This guide records what Adrika implemented and verified locally, what Santiago s
 
 | Area | Status | Owner / next action |
 | --- | --- | --- |
-| Guard R1–R5 and shared SPARQL parsing | Implemented and locally verified | Preserve current behavior unless regression evidence supports a bug fix. |
+| Guard R1–R5 and shared SPARQL parsing | Implemented and locally verified | Current code rejects SERVICE as R4 and singleton-patient HAVING groups as R2; confirm these policy choices with the team/organizers. |
 | Judge syntax, prefix, term, and style diagnostics | Implemented and locally verified | Review retry value on fresh run-machine LLM results. |
 | Synthetic Guard/Judge regression coverage | Passing locally | Re-run on `guardjudge` with the runbox test command. |
 | Real RDF metadata and Virtuoso execution | Not verified | Santiago must profile and execute queries on dev. |
@@ -14,7 +14,7 @@ This guide records what Adrika implemented and verified locally, what Santiago s
 | Virtuoso-only static diagnostics and performance guidance | Evidence-gated | Reproduce a concrete error or repeatable improvement before adding code. |
 | Organizer-dependent policies | Pending | Keep existing behavior until decisions arrive. |
 
-**Code revision described here:** `51d998327ce1e39159e3abcc174ccc5a70f41dfa` on branch `guardjudge`. This handoff rewrite is a documentation-only follow-up to that code revision.
+**Tested local tree:** uncommitted working tree based on `d9235ba2984e66e0ab847be924a1ae7d3fb595e8` on branch `guardjudge`. The code and documentation changes recorded in this guide have not been committed or pushed; do not use the base SHA as the tested revision.
 
 **Access from Adrika's checkout, checked 2026-10-17:** `.env` is absent; localhost ports 8890 (dev) and 8891 (perf) are closed. No real-graph profiling, Virtuoso query execution, or fresh LLM evaluation was performed here. Local tests do not count as real-graph verification.
 
@@ -25,6 +25,8 @@ This guide records what Adrika implemented and verified locally, what Santiago s
 - Fixed R1 classifier wiring in `src/nl2sparql/guard/rules.py` so `_single_patient` uses the supplied `PropertyKinds` instance.
 - Restored inverse identifier-path detection. Identifier paths ending in a literal are checked using the supplied classifier; the valid `hasValue` near-miss remains allowed.
 - Preserved the current R1–R5 decisions, verdict behavior, reasons, and retry contract: a query violation cannot become compliant, and a request flagged as forbidden is never retried.
+- Fixed the merged SERVICE regression: `ServiceGraphPattern` facts now produce an R4 violation. A synthetic near-miss confirms a local SELECT is accepted; tests also check the reason, retry hint, and no retry for flagged intent.
+- Current code rejects `HAVING` conditions that reduce patient groups to exactly one. A synthetic trigger, valid minimum-two near-miss, reason, and retry feedback are covered. This policy is awaiting team/organizer confirmation; do not infer approval from the code change.
 - Added or verified synthetic trigger/near-miss coverage across nested queries, graph scopes, `VALUES`, filters, `BIND`, aggregates, grouping, property paths, identity-preserving transforms, `OPTIONAL`, and `UNION`.
 
 ### Judge and parser
@@ -36,38 +38,35 @@ This guide records what Adrika implemented and verified locally, what Santiago s
 ### Other verified constraints
 
 - API fields, shared interfaces, literal-translation behavior, open-source model requirements, and request-time database independence were left unchanged.
-- Organizer-dependent behavior was not introduced for fine-grained grouping, `MIN`/`MAX`, minimum group size, `SERVICE`, or singleton groups.
+- No change was made to fine-grained grouping or `MIN`/`MAX`. Current code does enforce a singleton-group rejection and SERVICE rejection; both need policy confirmation. Larger minimum-size thresholds remain unenforced.
 - Local corpus review found parse errors for #01 and #08 and a discrepancy between committed and current local Guard/Judge acceptance for #07. These are unresolved until a fresh LLM run and retry-log review.
 
 ## Local evidence
 
-Latest Guard-specific results recorded for this branch:
+Latest local results on the tested working tree:
 
 ```text
 PYTHONPATH=src python -m pytest -q tests/test_guard.py -k 'supplied_property_classifier or inverse_identifier_path'
 2 passed
 
-PYTHONPATH=src python -m pytest -q tests/test_guard.py
-68 passed
+PYTHONPATH=src .venv311/bin/python -m pytest -q tests/test_guard.py tests/test_sparql.py tests/test_agents_and_judge.py tests/test_pipeline_and_api.py tests/test_context.py tests/test_profile_comparison.py
+182 passed, 1 existing Starlette/anyio deprecation warning
 
-PYTHONPATH=src python -m pytest -q tests/test_guard.py tests/test_sparql.py tests/test_agents_and_judge.py tests/test_pipeline_and_api.py
-116 passed
-
-PYTHONPATH=src python -m pytest -q
-171 passed, 1 existing Starlette/anyio deprecation warning
+PYTHONPATH=src .venv311/bin/python -m pytest -q
+191 passed, 1 existing Starlette/anyio deprecation warning
 ```
 
 The full-suite result is the latest repository-wide run recorded on the branch. The local stub evaluation recorded 31 questions, 87.1% verdict accuracy, zero forbidden leaks, four allowed requests blocked, seven retries, p50/p95 latency of 12.7/49.9 ms, and zero tokens. This is a local code-path signal only; it is neither the configured LLM evaluation nor a Virtuoso execution result.
 
 ## What remains code-wise
 
-There is no known unconditional Guard/Judge implementation item in the current offline checklist. The Judge already has the currently agreed deterministic diagnostics; Guard already covers confirmed R1–R5 policy and the synthetic interaction cases listed above.
+There is no known additional offline implementation item after the SERVICE regression fix and local audit. The current merged singleton-group and SERVICE enforcement still needs team/organizer policy confirmation. Full local tests do not establish RDF profile freshness or Virtuoso compatibility.
 
 Further code changes are conditional:
 
 - Add a static Virtuoso compatibility diagnostic only after Santiago reproduces a specific failure on dev and identifies a query pattern. Pair it with a synthetic valid near-miss.
 - Add selective-pattern feedback only after team agreement and repeated performance evidence.
-- Add or alter privacy enforcement only after the organizer/team policy decisions below.
+- Do not extend or relax SERVICE/singleton privacy enforcement until the team/organizers confirm the intended behavior.
 - Fix any corpus/evaluation issue only after fresh LLM output and retry logs identify an actionable cause.
 
 ## Santiago's run-machine checklist
@@ -134,12 +133,12 @@ Review #01, #07, and #08 against the new run and inspect local retry logs. Deter
 
 ### 6. Resolve policy and performance gates
 
-Keep existing behavior until the organizers/team answer:
+Confirm these policy questions; current code behavior is listed where applicable:
 
 1. Is fine-grained grouping, such as grouping by exact birth date, compliant?
 2. Should `MIN`/`MAX` of values or dates be restricted when they can single out a record or patient?
 3. Is minimum group size required? If so, what threshold applies, including groups reduced to one by `HAVING`?
-4. Is `SERVICE` allowed?
+4. Is federated `SERVICE` allowed? Current code rejects it as R4.
 
 Before adding selective-pattern ordering feedback, get team agreement and measure repeated isolated timings on the perf graph. This repository does not currently provide a dedicated ten-run Guard/Judge timing harness. Do not add automatic query rewrites until synthetic equivalence cases and dev result comparisons show the rewrite preserves query meaning, including duplicates, grouping, optional patterns, and nested queries.
 
