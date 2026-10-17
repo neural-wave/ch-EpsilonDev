@@ -158,7 +158,7 @@ def time_pairs(candidates: list[dict], client, runs: int, known: dict | None = N
                      "dev_outcome": item.get("outcome"), "reference": reference, "generated": generated, "ratio": ratio})
         fmt = lambda r: ("error" if r["error"] else "timeout" if not r["complete"] else f"{r['seconds']:.2f}s")
         print(f"{item['id']:12} reference {fmt(reference):>8}  generated {fmt(generated):>8}  "
-              f"ratio {ratio if ratio is not None else '-':>6}  {item['question'][:55]}")
+              f"ratio {ratio if ratio is not None else '-':>6}  {item['question'][:55]}", flush=True)  # a run takes an hour: show progress
     return rows, restarts
 
 
