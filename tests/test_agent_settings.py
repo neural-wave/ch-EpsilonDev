@@ -50,10 +50,12 @@ def test_factory_builds_one_client_per_agent(env):
     assert pipeline.intent_agent.client.base_url == "http://intent:18001/v1"
     assert pipeline.query_agent.client.base_url == "http://shared:18000/v1"
     assert pipeline.intent_agent.max_tokens == 200 and pipeline.query_agent.max_tokens == 900
+    assert type(pipeline.intent_agent.fallback).__name__ == "HeuristicIntentAgent"
 
 
 def test_prompt_versions_are_selectable_and_checked():
     assert intent_prompt("v1") is INTENT_PROMPTS["v1"]
+    assert {"v1", "v2", "v3"} <= set(INTENT_PROMPTS)
     assert query_prompt("v1") is QUERY_PROMPTS["v1"]
     with pytest.raises(ValueError, match="Available: v1"):
         query_prompt("v9")

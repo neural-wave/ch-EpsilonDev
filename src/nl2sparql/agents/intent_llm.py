@@ -2,12 +2,16 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from dataclasses import dataclass
 
+from nl2sparql.agents.base import IntentAgent
 from nl2sparql.agents.prompts import INTENT_SYSTEM
-from nl2sparql.llm import LLMClient
+from nl2sparql.llm import LLMClient, LLMError
 from nl2sparql.models import FLAG_NAMES, IntentFlags
+
+logger = logging.getLogger(__name__)
 
 JSON_OBJECT_RE = re.compile(r"\{.*\}", re.DOTALL)
 
@@ -19,8 +23,9 @@ class IntentReply:
     flags: IntentFlags
     tokens: int
     raw: str
-    valid_json: bool
+    valid_json: bool | None  # None: the model gave no answer at all
     finish_reason: str | None = None
+    fallback: str | None = None  # why the keyword rules answered instead: "error", "invalid_json", "cut_off"
 
     @property
     def truncated(self) -> bool:
@@ -49,19 +54,33 @@ def parse_flags(text: str) -> IntentFlags:
 
 
 class LLMIntentAgent:
-    def __init__(self, client: LLMClient, model: str, max_tokens: int = 200, system_prompt: str = INTENT_SYSTEM):
+    def __init__(self, client: LLMClient, model: str, max_tokens: int = 200, system_prompt: str = INTENT_SYSTEM,
+                 fallback: IntentAgent | None = None):
         self.client = client
         self.model = model
         self.max_tokens = max_tokens
         self.system_prompt = system_prompt
+        # Answers when the model fails or its answer is unusable, so the request still gets flags.
+        self.fallback = fallback
 
     def messages(self, text: str) -> list[dict]:
         return [{"role": "system", "content": self.system_prompt}, {"role": "user", "content": text}]
 
     async def classify_detailed(self, text: str) -> IntentReply:
-        reply = await self.client.chat(self.model, self.messages(text), max_tokens=self.max_tokens, json_mode=True)
+        try:
+            reply = await self.client.chat(self.model, self.messages(text), max_tokens=self.max_tokens, json_mode=True)
+        except LLMError as error:
+            if self.fallback is None:
+                raise
+            logger.warning("intent model failed, the keyword rules answer instead: %s", error)
+            flags, _ = await self.fallback.classify(text)
+            return IntentReply(flags, 0, "", None, fallback="error")
         flags, valid = parse_flags_checked(reply.text)
-        return IntentReply(flags, reply.tokens, reply.text, valid, reply.finish_reason)
+        fallback = None
+        if not valid and self.fallback is not None:
+            flags, _ = await self.fallback.classify(text)
+            fallback = "cut_off" if reply.finish_reason == "length" else "invalid_json"
+        return IntentReply(flags, reply.tokens, reply.text, valid, reply.finish_reason, fallback)
 
     async def classify(self, text: str) -> tuple[IntentFlags, int]:
         result = await self.classify_detailed(text)

@@ -142,10 +142,12 @@ class Pipeline:
             else:
                 reply = await detailed(text)
                 flags, used = reply.flags, reply.tokens
-                if not reply.valid_json:
+                if reply.valid_json is False:
                     run.diagnostics["intent_invalid_json"] = True
                 if reply.truncated:
                     run.note_cut_off("intent")
+                if reply.fallback:
+                    run.diagnostics["intent_fallback"] = reply.fallback
             run.add_tokens("intent", used)
             return flags
         except Exception as error:  # the verdict needs the intent flags: the request fails (HTTP 503)

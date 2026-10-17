@@ -25,14 +25,14 @@ from nl2sparql.guard.decision import FLAG_RULES
 RULE_FLAGS = {rule: flag for flag, rule in FLAG_RULES.items()}
 
 
-async def classify(agent, text: str) -> tuple[list[str], int, bool | None, bool]:
-    """Raised flags, tokens, whether the answer was valid JSON (None for the keyword stand-in),
-    and whether it was cut off at max_tokens."""
+async def classify(agent, text: str) -> tuple[list[str], int, bool | None, bool, str | None]:
+    """Raised flags, tokens, whether the answer was valid JSON (None without a model answer), whether it
+    was cut off at max_tokens, and why the keyword rules answered instead of the model (if they did)."""
     if hasattr(agent, "classify_detailed"):
         reply = await agent.classify_detailed(text)
-        return reply.flags.raised(), reply.tokens, reply.valid_json, reply.truncated
+        return reply.flags.raised(), reply.tokens, reply.valid_json, reply.truncated, reply.fallback
     flags, tokens = await agent.classify(text)
-    return flags.raised(), tokens, None, False
+    return flags.raised(), tokens, None, False, None
 
 
 def by_group(rows: list[dict]) -> dict:
@@ -55,10 +55,10 @@ async def main_async(args) -> None:
     for item in load_questions(settings, intent_cases=not args.shared_only)[: args.limit or None]:
         started = time.perf_counter()
         try:
-            raised, tokens, valid, cut_off = await classify(agent, item["question"])
+            raised, tokens, valid, cut_off, fallback = await classify(agent, item["question"])
             error = None
         except Exception as exc:  # report and keep going
-            raised, tokens, valid, cut_off, error = [], 0, None, False, str(exc)[:200]
+            raised, tokens, valid, cut_off, fallback, error = [], 0, None, False, None, str(exc)[:200]
         latency = (time.perf_counter() - started) * 1000
         should_flag = not item["expected_compliant"]
         outcome = {(True, True): "caught", (True, False): "missed",
@@ -66,7 +66,7 @@ async def main_async(args) -> None:
         rule = item.get("category", "").split(" ")[0]
         expected_flag = RULE_FLAGS.get(rule)
         rows.append({**item, "raised": raised, "outcome": outcome, "tokens": tokens, "valid_json": valid,
-                     "cut_off": cut_off, "latency_ms": round(latency, 1), "error": error,
+                     "cut_off": cut_off, "fallback": fallback, "latency_ms": round(latency, 1), "error": error,
                      "right_flag": (expected_flag in raised) if expected_flag else None})
         print(f"{outcome:12} {item['id']:12} {latency:6.0f} ms {tokens:5d} tok  {','.join(raised) or '-':40} {item['question'][:60]}")
 
@@ -87,6 +87,7 @@ async def main_async(args) -> None:
         "right_flag_rate": round(sum(bool(r["right_flag"]) for r in with_rule) / max(len(with_rule), 1), 3),
         "invalid_json": [r["id"] for r in rows if r["valid_json"] is False],
         "cut_off": [r["id"] for r in rows if r["cut_off"]],
+        "keyword_fallback": [r["id"] for r in rows if r["fallback"]],
         "errors": [r["id"] for r in rows if r["error"]],
         "median_tokens": median([r["tokens"] for r in rows if not r["error"]]),
         "latency_ms_p50": median([r["latency_ms"] for r in rows if not r["error"]]),

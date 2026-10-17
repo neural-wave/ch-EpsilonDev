@@ -57,6 +57,7 @@ def per_agent_summary(rows: list[dict]) -> dict:
         "still_invalid_after_retry": [r["id"] for r in measured if r["diagnostics"].get("judge_errors_final")],
         "cut_off": dict(Counter(step for r in measured for step in r["diagnostics"].get("cut_off", []))),
         "intent_invalid_json": [r["id"] for r in measured if r["diagnostics"].get("intent_invalid_json")],
+        "intent_keyword_fallback": [r["id"] for r in measured if r["diagnostics"].get("intent_fallback")],
     }
 
 

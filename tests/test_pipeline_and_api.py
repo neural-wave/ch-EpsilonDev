@@ -190,6 +190,19 @@ def test_unusable_intent_answer_is_recorded():
     assert result.tokens_by_step["intent"] == 10
 
 
+def test_keyword_fallback_keeps_the_request_alive_when_the_intent_model_fails():
+    import httpx
+    from nl2sparql.agents import HeuristicIntentAgent, LLMIntentAgent
+    from nl2sparql.llm import LLMClient
+
+    down = LLMClient("http://gpu/v1", transport=httpx.MockTransport(lambda request: httpx.Response(503)))
+    intent_agent = LLMIntentAgent(down, "m", fallback=HeuristicIntentAgent())
+    agent = ScriptedQueryAgent(EXAMPLES["official-15"])
+    result = asyncio.run(pipeline_with(agent, intent_agent).run("How many patients have cholera, and which ones are they?"))
+    assert not result.is_compliant and result.intent.asks_for_identifiers
+    assert result.diagnostics["intent_fallback"] == "error" and "intent_invalid_json" not in result.diagnostics
+
+
 def test_guard_retry_failure_keeps_the_first_query_and_verdict():
     agent = ScriptedQueryAgent(EXAMPLES["official-12"], EXAMPLES["official-03"])
     pipeline = pipeline_with(agent)

@@ -2,12 +2,13 @@ import asyncio
 import json
 
 import httpx
+import pytest
 
 from conftest import DATA_DIR
 from nl2sparql.agents import ExampleQueryAgent, HeuristicIntentAgent, LLMIntentAgent, LLMQueryAgent
 from nl2sparql.context import SchemaCards
 from nl2sparql.judge import Judge
-from nl2sparql.llm import LLMClient
+from nl2sparql.llm import LLMClient, LLMError
 from nl2sparql.models import Context, Example
 
 
@@ -73,6 +74,30 @@ def test_agents_report_answers_cut_off_at_max_tokens():
     intent_agent = LLMIntentAgent(LLMClient("http://gpu/v1", transport=fake_server('{"asks_for_identi', seen, "length")), "m")
     intent = run(intent_agent.classify_detailed("Which patients?"))
     assert intent.truncated and not intent.valid_json and not intent.flags.flagged
+
+
+def failing_server():
+    return httpx.MockTransport(lambda request: httpx.Response(500, json={"error": "model server down"}))
+
+
+def test_intent_agent_falls_back_to_keyword_rules_when_the_model_fails():
+    agent = LLMIntentAgent(LLMClient("http://gpu/v1", transport=failing_server()), "m", fallback=HeuristicIntentAgent())
+    reply = run(agent.classify_detailed("How many patients have cholera, and which ones are they?"))
+    assert reply.fallback == "error" and reply.flags.asks_for_identifiers
+    assert reply.tokens == 0 and reply.valid_json is None
+
+
+def test_intent_agent_falls_back_on_an_unusable_answer_but_counts_its_tokens():
+    seen = []
+    client = LLMClient("http://gpu/v1", transport=fake_server('{"asks_for_identi', seen, "length"))
+    reply = run(LLMIntentAgent(client, "m", fallback=HeuristicIntentAgent()).classify_detailed("Which patients have cholera?"))
+    assert reply.fallback == "cut_off" and reply.flags.asks_for_identifiers and reply.tokens == 120
+
+
+def test_intent_agent_without_fallback_still_raises():
+    agent = LLMIntentAgent(LLMClient("http://gpu/v1", transport=failing_server()), "m")
+    with pytest.raises(LLMError):
+        run(agent.classify("Which patients have cholera?"))
 
 
 def test_judge_fixes_prefixes_and_flags_terms_missing_from_the_data():

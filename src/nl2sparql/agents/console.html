@@ -232,7 +232,8 @@ function renderRun(d) {
         ${row("Its reason", d.intent.reason ? esc(d.intent.reason) : dash)}
         ${row("Tokens", num(k.intent ?? 0))}
         ${row("Time", msec(t.intent))}
-        ${row("Problems", lines([dg.intent_invalid_json && "the answer was not the expected JSON",
+        ${row("Problems", lines([dg.intent_fallback && `the keyword rules answered instead of the model (${dg.intent_fallback})`,
+                                 dg.intent_invalid_json && "the answer was not the expected JSON",
                                  cut.includes("intent") && "the answer was cut off at max tokens"]) || none)}
       </table></div>
       <div class="card"><h3>Query agent</h3><table>
@@ -282,12 +283,13 @@ function intentTable(list) {
       <th title="Questions that name a rule and raised that rule's flag">Right flag</th>
       <th title="Answers that were not the expected JSON">Invalid JSON</th>
       <th title="Answers cut off at max tokens">Cut off</th>
+      <th title="Questions where the keyword rules answered because the model failed or its answer was unusable">Rules fallback</th>
       <th>Tokens (median)</th><th>Time p50 / p95</th></tr></thead><tbody>
     ${list.map(r => { const s = r.summary; return `<tr data-name="${esc(r.name)}">
       <td>${esc(r.created)}</td><td title="${esc(s.model)}">${esc(shortModel(s.model)) || dash}</td>
       <td>${num(s.prompt_version)}</td><td>${num(s.max_tokens)}</td><td>${num(s.questions)}</td>
       <td>${pct(s.detection_rate)}</td><td>${pct(s.false_alarm_rate)}</td><td>${pct(s.right_flag_rate)}</td>
-      <td>${ids(s.invalid_json)}</td><td>${ids(s.cut_off)}</td><td>${num(s.median_tokens)}</td>
+      <td>${ids(s.invalid_json)}</td><td>${ids(s.cut_off)}</td><td>${ids(s.keyword_fallback)}</td><td>${num(s.median_tokens)}</td>
       <td>${msec(s.latency_ms_p50)} / ${msec(s.latency_ms_p95)}</td></tr>`; }).join("")}
   </tbody></table></div>`;
 }
@@ -356,7 +358,8 @@ function intentRows(rows) {
       <td>${(r.raised || []).map(code).join(" ") || dash}</td>
       <td>${r.right_flag == null ? dash : r.right_flag ? "<span class='good'>yes</span>" : "<span class='bad'>no</span>"}</td>
       <td>${num(r.tokens)}</td><td>${msec(r.latency_ms)}</td>
-      <td class="wrap">${lines([r.error && `error: ${r.error}`, r.valid_json === false && "invalid JSON", r.cut_off && "cut off"])}</td>
+      <td class="wrap">${lines([r.error && `error: ${r.error}`, r.valid_json === false && "invalid JSON", r.cut_off && "cut off",
+                                r.fallback && `keyword rules answered (${r.fallback})`])}</td>
       <td class="wrap">${esc(r.question)}${r.note ? `<br><span class="muted">${esc(r.note)}</span>` : ""}</td></tr>`).join("")}
   </tbody></table></div>`;
 }
@@ -372,7 +375,7 @@ function pipelineRows(rows) {
       const got = r.is_compliant == null ? dash
         : `<span class="${r.correct_verdict ? "good" : "bad"}">${r.is_compliant ? "compliant" : "blocked"}${leak ? " · LEAK" : ""}</span>`;
       const problems = [r.error && `error: ${r.error}`, dg.cut_off && `cut off: ${dg.cut_off.join(", ")}`,
-        dg.intent_invalid_json && "intent: invalid JSON",
+        dg.intent_invalid_json && "intent: invalid JSON", dg.intent_fallback && `intent: keyword rules answered (${dg.intent_fallback})`,
         ...(dg.judge_errors_final || []).map(e => `still invalid: ${e}`),
         r.execution_error && `Virtuoso: ${r.execution_error}`,
         r.executed_rows != null && `Virtuoso: ${plural(r.executed_rows, "row")} in ${msText(r.execution_ms)}`];
