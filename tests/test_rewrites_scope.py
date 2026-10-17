@@ -345,6 +345,44 @@ def test_bind_inside_optional_that_reads_an_outer_variable_gets_the_guarded_form
     assert hints(check_bind_out_of_scope, year)[0].startswith("BIND(... AS ?year) inside OPTIONAL cannot see ?d (bound outside it): YEAR() fails (DT001).")
 
 
+BIRTHS = ("GRAPH ?g { ?birth a sphn:Birth ; sphn:hasDeliveryModeCode ?code ; sphn:hasGestationalAge ?age . ?code a ?concept . "
+          "?age sphn:hasQuantity ?q . ?q sphn:hasValue ?value } ")
+
+
+def test_the_suggested_bind_keeps_the_filter_of_its_optional_block():
+    # official-10: the FILTER is the condition of the count; the bare BIND(?g AS ?early_patient) counted every birth
+    query = (f"SELECT ?concept (COUNT(DISTINCT ?early_patient) AS ?early) WHERE {{ {BIRTHS} "
+             "OPTIONAL { FILTER (?value < 37) BIND (?g AS ?early_patient) } } GROUP BY ?concept")
+    assert hints(check_bind_out_of_scope, query) == [
+        "BIND(... AS ?early_patient) inside OPTIONAL cannot see ?g (bound outside it): ?early_patient stays empty. "
+        "Compute it after the OPTIONAL: BIND(IF(?value < 37, STR(?g), ?none) AS ?early_patient)"
+    ]
+    # official-07's first try: a record, inside GRAPH ?g, under two conditions
+    query = ("SELECT (COUNT(DISTINCT ?in_stay) AS ?n) WHERE { GRAPH ?g { ?admin a sphn:DrugAdministrationEvent ; "
+             "sphn:hasStartDateTime ?start ; sphn:hasAdministrativeCase ?case . ?case sphn:hasAdmissionDateTime ?admission ; "
+             "sphn:hasDischargeDateTime ?discharge . OPTIONAL { FILTER (?start >= ?admission && ?start <= ?discharge) "
+             "BIND (?admin AS ?in_stay) } } }")
+    assert hints(check_bind_out_of_scope, query) == [
+        "BIND(... AS ?in_stay) inside OPTIONAL cannot see ?admin (bound outside it): ?in_stay stays empty. Compute it "
+        "after the OPTIONAL: BIND(IF(?start >= ?admission && ?start <= ?discharge, ?admin, ?none) AS ?in_stay)"
+    ]
+
+
+def test_the_filter_goes_before_the_bound_guards_and_a_filter_on_the_bind_itself_is_left_out():
+    alternatives = (f"SELECT (AVG(?gap) AS ?avg) WHERE {{ {BIRTHS} OPTIONAL {{ GRAPH ?g {{ ?death a sphn:Death ; "
+                    "sphn:hasDate ?died } FILTER (?value IN (1, 2) || ?value > 300) BIND (?value - ?died AS ?gap) } }")
+    assert hints(check_bind_out_of_scope, alternatives) == [
+        "BIND(... AS ?gap) inside OPTIONAL cannot see ?value (bound outside it): ?gap stays empty. Compute it after the "
+        "OPTIONAL: BIND(IF((?value IN (1, 2) || ?value > 300) && BOUND(?died), ?value - ?died, ?none) AS ?gap)"
+    ]
+    own = (f"SELECT (COUNT(DISTINCT ?early_patient) AS ?early) WHERE {{ {BIRTHS} "
+           "OPTIONAL { BIND (IF(?value < 37, ?g, ?unbound) AS ?early_patient) FILTER (BOUND(?early_patient)) } }")
+    assert hints(check_bind_out_of_scope, own) == [
+        "BIND(... AS ?early_patient) inside OPTIONAL cannot see ?value (bound outside it): ?early_patient stays empty. "
+        "Compute it after the OPTIONAL: BIND(IF(?value < 37, ?g, ?unbound) AS ?early_patient)"
+    ]
+
+
 def test_bind_after_a_sub_select_that_hides_its_variables_is_reported():
     # q-032: the sub-select binds ?start and ?end but projects neither.
     query = ("SELECT ?specialty (AVG(?hours) AS ?avg) WHERE { { SELECT ?g ?specialty (COUNT(DISTINCT ?e) AS ?encounters) WHERE { GRAPH ?g { "

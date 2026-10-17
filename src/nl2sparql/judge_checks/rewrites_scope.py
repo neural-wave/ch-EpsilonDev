@@ -21,8 +21,10 @@ each, so the judge repairs them without a model call:
 Two shapes get a hint that names the query's own variables instead. A BIND that reads a variable
 bound outside its block: Virtuoso evaluates it on NULL, so bif:datediff fails with DT001 and any
 other expression leaves the column empty (official-01, q-032; probed on dev for OPTIONAL, UNION
-branches, sub-selects and later patterns). And COUNT(?guided_proc) where nothing binds the alias and
-it names a typed record: the shipped hint binds the patient (q-074, q-076).
+branches, sub-selects and later patterns); the BIND it suggests keeps the FILTER of the OPTIONAL
+block as an IF condition, which the bare BIND lost (official-07, official-10). And COUNT(?guided_proc)
+where nothing binds the alias and it names a typed record: the shipped hint binds the patient (q-074,
+q-076).
 
 Rewrites take the text and its ParsedQuery and return (text, repairs). Each one re-parses its own
 output and hands the text back untouched unless the result parses and is exactly the intended
@@ -302,10 +304,11 @@ def check_bind_out_of_scope(parsed: ParsedQuery, text: str) -> list[str]:
     bound_anywhere = _bound_anywhere(parsed.algebra)
     hints: list[str] = []
 
-    def visit(node, inside_optional: bool, graphs: frozenset) -> None:
+    def visit(node, optional, graphs: frozenset) -> None:
+        # optional: the LeftJoin of the innermost OPTIONAL block the node stands in, None outside them
         if isinstance(node, (list, tuple)):
             for item in node:
-                visit(item, inside_optional, graphs)
+                visit(item, optional, graphs)
             return
         if not isinstance(node, CompValue):
             return
@@ -316,14 +319,14 @@ def check_bind_out_of_scope(parsed: ParsedQuery, text: str) -> list[str]:
                 if not str(variable).startswith("__agg") and variable not in in_scope and variable in bound_anywhere
             )
             if missing:
-                hints.append(_out_of_scope_hint(node, missing, inside_optional, in_scope, parsed.algebra))
+                hints.append(_out_of_scope_hint(node, missing, optional, in_scope, parsed.algebra))
         if node.name == "Graph" and isinstance(node.term, Variable):
             graphs = graphs | {node.term}
         for key, value in node.items():
             if not key.startswith("_"):
-                visit(value, inside_optional or (node.name == "LeftJoin" and key == "p2"), graphs)
+                visit(value, node if node.name == "LeftJoin" and key == "p2" else optional, graphs)
 
-    visit(parsed.algebra, False, frozenset())
+    visit(parsed.algebra, None, frozenset())
     return list(dict.fromkeys(hints))
 
 
@@ -889,7 +892,11 @@ def _read_variables(expression) -> set[Variable]:
     return found
 
 
-def _out_of_scope_hint(extend, missing: list[Variable], inside_optional: bool, in_scope: set[Variable], algebra) -> str:
+def _out_of_scope_hint(extend, missing: list[Variable], optional, in_scope: set[Variable], algebra) -> str:
+    """The hint for a BIND that cannot see the variables it reads. optional is the LeftJoin of the
+    OPTIONAL block the BIND stands in (None outside one): its FILTER is the condition of a conditional
+    count, so the suggested BIND keeps it as an IF (the bare BIND it suggested for official-07 and
+    official-10 dropped the condition)."""
     named = _join([f"?{variable}" for variable in missing])
     failing = _failing_function(extend.expr, set(missing))
     outcome = f"{failing} fails (DT001)" if failing else f"?{extend.var} stays empty"
@@ -904,13 +911,20 @@ def _out_of_scope_hint(extend, missing: list[Variable], inside_optional: bool, i
             f"but exports only what it projects, so {outcome}. Add {' '.join(f'?{variable}' for variable in missing)} "
             f"to the sub-select's SELECT and GROUP BY, or compute ?{extend.var} inside it."
         )
-    if inside_optional:
+    if optional is not None:
         guards = sorted(
             variable for variable in _read_variables(extend.expr) if variable in in_scope and not str(variable).startswith("__agg")
         )
         expression = _render_expression(extend.expr)
-        bound = " && ".join(f"BOUND(?{variable})" for variable in guards)
-        guarded = f"IF({bound}, {expression}, ?none)" if guards else expression
+        conditions = [f"BOUND(?{variable})" for variable in guards]
+        condition = _block_condition(optional)
+        if condition is not None:
+            rendered = _render_expression(condition)
+            bracket = guards and isinstance(condition, CompValue) and condition.name == "ConditionalOrExpression"
+            conditions.insert(0, f"({rendered})" if bracket else rendered)
+            if isinstance(extend.expr, Variable) and extend.expr in _graph_terms(algebra):
+                expression = f"STR(?{extend.expr})"  # IF(C, ?g, ...) undercounts in Virtuoso after a sub-select (q-071)
+        guarded = f"IF({' && '.join(conditions)}, {expression}, ?none)" if conditions else expression
         return (
             f"BIND(... AS ?{extend.var}) inside OPTIONAL cannot see {named} (bound outside it): {outcome}. "
             f"Compute it after the OPTIONAL: BIND({guarded} AS ?{extend.var})"
@@ -920,6 +934,21 @@ def _out_of_scope_hint(extend, missing: list[Variable], inside_optional: bool, i
         f"pattern or in another block (an OPTIONAL or a UNION branch), and a BIND sees only the patterns before it "
         f"in its own block, so {outcome}. Move the BIND after the pattern that binds {named}."
     )
+
+
+def _block_condition(left_join):
+    """The FILTER of an OPTIONAL block (rdflib keeps it as the LeftJoin's expression), unless it reads a
+    variable the block's own BINDs bind: then it is about their result and cannot move into an IF."""
+    condition = left_join.expr
+    if condition is None or (isinstance(condition, CompValue) and condition.name == "TrueFilter"):
+        return None
+    binds = {node.var for node in _find(left_join.p2, "Extend") if not str(node.var).startswith("__agg")}
+    return None if _expression_variables(condition) & binds else condition
+
+
+def _graph_terms(algebra) -> set[Variable]:
+    """The variables that name a graph, GRAPH ?g { ... }, anywhere in the query."""
+    return {node.term for node in _find(algebra, "Graph") if isinstance(node.term, Variable)}
 
 
 def _failing_function(expression, variables: set[Variable]) -> str | None:
@@ -1055,7 +1084,8 @@ def _render_expression(node) -> str:
         return str(node)
     name = node.name
     if name == "RelationalExpression":
-        return f"{_render_expression(node.expr)} {node.op} {_render_expression(node.other)}"
+        other = _render_expression(node.other)
+        return f"{_render_expression(node.expr)} {node.op} {f'({other})' if isinstance(node.other, list) else other}"  # IN (...)
     if name in ARITHMETIC_NODES:
         operators = list(node.op) if isinstance(node.op, list) else [node.op]
         others = list(node.other) if isinstance(node.other, list) else [node.other]
