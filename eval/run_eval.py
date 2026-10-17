@@ -83,6 +83,7 @@ def agent_setup(settings: Settings) -> dict:
         "prompt_versions": {name: agent.prompt_version for name, agent in agents.items()},
         "max_tokens": {name: agent.max_tokens for name, agent in agents.items()},
         "context": {"examples": settings.context_examples, "cards": settings.context_cards, "codes": settings.context_codes},
+        "query_reorder": settings.query_reorder,
     }
 
 

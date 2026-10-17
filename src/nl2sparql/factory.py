@@ -43,7 +43,8 @@ def build_pipeline(settings: Settings, exclude_exact_examples: bool = False) -> 
             raise ValueError("NL2SPARQL_BACKEND=llm needs LLM_QUERY_MODEL (and optionally LLM_INTENT_MODEL).")
         intent_agent = LLMIntentAgent(llm_client(intent), intent.model, intent.max_tokens, intent_prompt(intent.prompt_version),
                                       fallback=HeuristicIntentAgent())
-        query_agent = LLMQueryAgent(llm_client(query), query.model, query.max_tokens, query_prompt(query.prompt_version))
+        query_agent = LLMQueryAgent(llm_client(query), query.model, query.max_tokens, query_prompt(query.prompt_version),
+                                    reorder_patterns=settings.query_reorder)
     elif settings.backend == "stub":
         intent_agent, query_agent = HeuristicIntentAgent(), ExampleQueryAgent()
     else:

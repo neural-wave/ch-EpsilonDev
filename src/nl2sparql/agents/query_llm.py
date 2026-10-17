@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from nl2sparql.agents.prompts import QUERY_PROMPTS, QueryPrompt
 from nl2sparql.llm import LLMClient
 from nl2sparql.models import Context
+from nl2sparql.sparql.order import reorder
 
 FENCE_RE = re.compile(r"```(?:sparql)?\s*(.*?)```", re.DOTALL | re.IGNORECASE)
 
@@ -31,11 +32,14 @@ class QueryReply:
 
 
 class LLMQueryAgent:
-    def __init__(self, client: LLMClient, model: str, max_tokens: int = 900, prompt: QueryPrompt = QUERY_PROMPTS["v1"]):
+    def __init__(self, client: LLMClient, model: str, max_tokens: int = 900, prompt: QueryPrompt = QUERY_PROMPTS["v1"],
+                 reorder_patterns: bool = False):
         self.client = client
         self.model = model
         self.max_tokens = max_tokens
         self.prompt = prompt
+        # Put the typed code patterns first and lock the join order, as the organizers' queries do.
+        self.reorder_patterns = reorder_patterns
 
     def messages(self, text: str, context: Context, feedback: str | None = None) -> list[dict]:
         return [
@@ -45,7 +49,10 @@ class LLMQueryAgent:
 
     async def generate_detailed(self, text: str, context: Context, feedback: str | None = None) -> QueryReply:
         reply = await self.client.chat(self.model, self.messages(text, context, feedback), max_tokens=self.max_tokens)
-        return QueryReply(extract_sparql(reply.text), reply.tokens, reply.text, reply.finish_reason)
+        sparql = extract_sparql(reply.text)
+        if self.reorder_patterns:
+            sparql = reorder(sparql)
+        return QueryReply(sparql, reply.tokens, reply.text, reply.finish_reason)
 
     async def generate(self, text: str, context: Context, feedback: str | None = None) -> tuple[str, int]:
         reply = await self.generate_detailed(text, context, feedback)

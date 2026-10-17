@@ -101,6 +101,17 @@ def test_intent_agent_without_fallback_still_raises():
         run(agent.classify("Which patients have cholera?"))
 
 
+def test_llm_query_agent_can_reorder_patterns_after_the_model():
+    seen = []
+    answer = ("```sparql\nPREFIX sphn: <https://biomedit.ch/rdf/sphn-schema/sphn#>\nPREFIX icd-10-gm: <https://biomedit.ch/rdf/sphn-resource/icd-10-gm/>\n"
+              "SELECT (COUNT(DISTINCT ?g) AS ?n) WHERE { GRAPH ?g { ?dx a sphn:BilledDiagnosis ; sphn:hasCode ?c . "
+              "?c a icd-10-gm:A00 OPTION (inference \"https://biomedit.ch/rdf/sphn-resource/global\") . } }\n```")
+    agent = LLMQueryAgent(LLMClient("http://gpu/v1", transport=fake_server(answer, seen)), "m", reorder_patterns=True)
+    reply = run(agent.generate_detailed("q", Context()))
+    assert reply.sparql.startswith('DEFINE sql:select-option "order"')
+    assert reply.sparql.index("?c a icd-10-gm:A00") < reply.sparql.index("?dx a sphn:BilledDiagnosis")
+
+
 def test_judge_fixes_prefixes_and_flags_terms_missing_from_the_data():
     judge = Judge(SchemaCards.load(DATA_DIR / "schema_cards.json"))
     ok = judge.check("SELECT (COUNT(DISTINCT ?g) AS ?n) WHERE { GRAPH ?g { ?d a sphn:BilledDiagnosis ; sphn:hasRank ?r } }")

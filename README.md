@@ -294,6 +294,7 @@ All settings come from environment variables; `.env.example` lists them. Load th
 | `LLM_INTENT_EXTRA_BODY` | inherits `LLM_EXTRA_BODY` | Request fields for the intent model only; `'{}'` sends none |
 | `LLM_INTENT_MAX_TOKENS`, `LLM_QUERY_MAX_TOKENS` | `200`, `1500` | Answer length cap per agent. Tokens are spent only when the answer needs them |
 | `INTENT_PROMPT_VERSION`, `QUERY_PROMPT_VERSION` | `v4`, `v4` | Which prompt version each agent uses (see `src/nl2sparql/agents/prompts.py` and docs/LLM_AGENTS.md §6) |
+| `QUERY_REORDER` | `false` | `true` reorders the query agent's patterns in code (typed codes first) and locks the join order with `DEFINE sql:select-option "order"`, like the organizers' queries. Under measurement |
 | `CONTEXT_EXAMPLES`, `CONTEXT_CARDS`, `CONTEXT_CODES` | `3`, `6`, `5` | How many similar examples, schema cards and code candidates the query agent receives per request |
 | `LLM_TIMEOUT_SECONDS` | `30` | Per LLM call |
 | `LLM_VERIFY_TLS` | `true` | `false` for servers with a self-signed certificate |
