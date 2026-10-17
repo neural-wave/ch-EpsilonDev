@@ -62,6 +62,11 @@
   ul.plain { margin: 0; padding-left: 1.1em; font-size: 13.5px; }
   .head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
   .scroll { overflow-x: auto; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
+  .tile { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; display: grid; gap: 4px; align-content: start; min-width: 0; cursor: pointer; }
+  .tile:hover { background: var(--code); }
+  .tile .big { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.2; }
+  .tile .small { font-size: 12.5px; overflow-wrap: anywhere; }
   table.grid { font-size: 13px; }
   table.grid th { text-align: left; font-weight: 600; color: var(--muted); padding: 6px 8px; border-bottom: 1.5px solid var(--line); white-space: nowrap; }
   table.grid td { white-space: nowrap; }
@@ -109,15 +114,19 @@
 
   <section class="card" id="measurements">
     <div class="head"><h2>Measurements</h2><button id="reload-reports" class="secondary">Reload</button></div>
-    <p class="muted">Saved eval reports from <code id="reports-folder">eval/reports</code>, newest first. Click a row to see every question.
-      New reports come from the run machine: <code>python eval/run_intent_eval.py</code> (intent agent alone, cheap) and
-      <code>python eval/run_eval.py</code> (whole pipeline). Hover a header or a count for details.</p>
+    <p class="muted">Saved eval reports from <code id="reports-folder">eval/reports</code>, newest first. Click a tile or a row to see every question.
+      Reports come from the run machine: <code>eval/run_eval.py</code> (whole pipeline), <code>run_intent_eval.py</code>, <code>run_query_eval.py</code>
+      and <code>time_on_perf.py</code>. How to read them: <code>docs/PERFORMANCE.md</code>. Hover a header or a count for details.</p>
+    <h3>Scoreboard · the jury's criteria, latest run of each</h3>
+    <div id="scoreboard"></div>
     <h3>Intent agent alone</h3>
     <div id="intent-reports"></div>
     <h3>Query agent against reference SPARQL</h3>
     <div id="query-reports"></div>
     <h3>Whole pipeline</h3>
     <div id="pipeline-reports"></div>
+    <h3>Query time on 100,000 patients</h3>
+    <div id="perf-reports"></div>
     <div id="report-detail"></div>
   </section>
 
@@ -347,8 +356,10 @@ function modelsCell(models) {
 function pipelineTable(list) {
   if (!list.length) return "<p class='muted'>No pipeline reports yet.</p>";
   return `<div class="scroll"><table class="grid"><thead><tr>
-      <th>Date</th><th>Backend</th><th>Models</th><th title="Prompt versions: intent / query">Prompts</th><th>Questions</th>
+      <th>Date</th><th>Backend</th><th>Models</th><th title="Prompt versions: intent / query">Prompts</th>
+      <th title="Query answer cap (max tokens)">Cap</th><th title="Questions in flight at once">Conc.</th><th>Questions</th>
       <th title="Questions whose verdict (compliant or not) matched the label">Right verdict</th>
+      <th title="Verdict accuracy on the dev split / on the blind holdout split">Dev / Holdout</th>
       <th title="Forbidden questions answered as compliant: must stay 0">Leaks</th>
       <th title="Allowed questions blocked as not compliant">False blocks</th>
       <th>Errors</th><th>Tokens (avg)</th>
@@ -364,10 +375,87 @@ function pipelineTable(list) {
       return `<tr data-name="${esc(r.name)}">
       <td>${esc(r.created)}</td><td>${num(s.backend)}</td><td>${modelsCell(s.models)}</td>
       <td>${s.prompt_versions ? esc(`${s.prompt_versions.intent} / ${s.prompt_versions.query}`) : dash}</td>
-      <td>${num(s.questions)}</td><td>${pct(s.verdict_accuracy)}</td><td>${ids(s.said_compliant_but_forbidden)}</td>
+      <td>${num(s.max_tokens && s.max_tokens.query)}</td><td>${num(s.concurrency)}</td>
+      <td>${num(s.questions)}</td><td>${pct(s.verdict_accuracy)}</td>
+      <td>${s.by_split ? `${pct(s.by_split.dev && s.by_split.dev.verdict_accuracy)} / ${s.by_split.holdout ? pct(s.by_split.holdout.verdict_accuracy) : dash}` : dash}</td>
+      <td>${ids(s.said_compliant_but_forbidden)}</td>
       <td>${ids(s.blocked_but_allowed)}</td><td>${ids(s.errors)}</td><td>${num(s.avg_tokens)}</td>
       <td>${num(steps)}</td><td>${retries}</td><td>${cutOff}</td>
       <td>${msec(s.latency_ms_p50)} / ${msec(s.latency_ms_p95)}</td></tr>`; }).join("")}
+  </tbody></table></div>`;
+}
+
+// Reports arrive newest first, so the first match is the latest run.
+const latest = (reports, kind, ok = () => true) => reports.find(r => r.kind === kind && ok(r.summary));
+const setup = s => {
+  if (!s || !s.models) return "";
+  const cap = typeof s.max_tokens === "number" ? s.max_tokens : s.max_tokens && s.max_tokens.query;
+  const prompts = s.prompt_versions ? `prompts ${s.prompt_versions.intent}/${s.prompt_versions.query}` : "";
+  return [shortModel(s.models.query), prompts, cap ? `cap ${cap}` : ""].filter(Boolean).join(" · ");
+};
+const tile = (label, value, detail, report) => `<div class="tile" data-name="${esc(report.name)}"><span class="muted">${esc(label)}</span>
+  <span class="big">${value}</span><span class="muted small">${detail}</span></div>`;
+
+function scoreboard(reports) {
+  const tiles = [];
+  const labeled = latest(reports, "pipeline", s => s.by_split && s.by_split.holdout);
+  if (labeled) {
+    const s = labeled.summary, h = s.by_split.holdout, d = s.by_split.dev;
+    tiles.push(tile("Verdicts · blind holdout", pct(h.verdict_accuracy),
+      `${h.forbidden_marked_compliant} leaks of ${h.forbidden} · ${h.allowed_blocked} allowed blocked of ${h.allowed} · dev ${pct(d.verdict_accuracy)} · ${esc(labeled.created)} · ${esc(setup(s))}`, labeled));
+  }
+  const pipe = latest(reports, "pipeline");
+  if (pipe) {
+    const s = pipe.summary;
+    tiles.push(tile("Time per request · p50 / p95", `${msec(s.latency_ms_p50)} / ${msec(s.latency_ms_p95)}`,
+      `${s.questions} questions${s.concurrency > 1 ? `, ${s.concurrency} at a time` : ""} · ${esc(pipe.created)} · ${esc(setup(s))}`, pipe));
+    tiles.push(tile("Tokens per request", num(s.avg_tokens), `average over ${s.questions} questions · ${esc(pipe.created)}`, pipe));
+  }
+  const perf = latest(reports, "perf");
+  if (perf) {
+    const s = perf.summary;
+    tiles.push(tile("Query time · 100,000 patients", s.median_generated_seconds != null ? `${s.median_generated_seconds} s` : dash,
+      `median of ${s.both_complete} of ${s.queries} queries that completed on both sides (reference ${num(s.median_reference_seconds)} s) · `
+      + `${(s.generated_timed_out || []).length} generated and ${(s.reference_timed_out || []).length} reference past ${s.timeout_ms / 1000} s · ${esc(perf.created)}`, perf));
+  }
+  const query = latest(reports, "query");
+  if (query) {
+    const s = query.summary, h = s.by_split && s.by_split.holdout;
+    tiles.push(tile("Query agent · exact results", `${s.outcomes ? s.outcomes.exact : "—"} / ${s.questions}`,
+      `${pct(s.executes_rate)} run on Virtuoso${h ? ` (holdout ${pct(h.executes_rate)})` : ""} · ${(s.blocked_allowed || []).length} allowed blocked · ${esc(query.created)} · ${esc(setup(s))}`, query));
+  }
+  const intent = latest(reports, "intent");
+  if (intent) {
+    const s = intent.summary, h = s.by_split && s.by_split.holdout;
+    tiles.push(tile("Intent agent · detected / false alarms", h ? `${pct(h.detection_rate)} / ${pct(h.false_alarm_rate)}` : `${pct(s.detection_rate)} / ${pct(s.false_alarm_rate)}`,
+      `${h ? "blind holdout · " : ""}${s.questions} questions · prompt ${esc(s.prompt_version)} · ${esc(shortModel(s.model))} · ${esc(intent.created)}`, intent));
+  }
+  return tiles.length ? `<div class="tiles">${tiles.join("")}</div>` : "<p class='muted'>No reports yet.</p>";
+}
+
+function perfTable(list) {
+  if (!list.length) return "<p class='muted'>No perf reports yet: <code>python eval/time_on_perf.py eval/reports/query-&lt;date&gt;.json</code>.</p>";
+  return `<div class="scroll"><table class="grid"><thead><tr><th>Date</th><th>From query report</th><th>Queries</th>
+      <th title="Both the generated and the reference query completed within the server limit">Both complete</th>
+      <th title="Median seconds over the queries that completed on both sides">Median generated / reference</th>
+      <th title="Median of generated time divided by reference time">Ratio</th>
+      <th title="Generated queries stopped by the server limit">Generated timeouts</th><th>Reference timeouts</th>
+      <th title="Generated queries more than twice as slow as their reference">Slower ×2</th><th>Limit</th></tr></thead><tbody>
+    ${list.map(r => { const s = r.summary; return `<tr data-name="${esc(r.name)}"><td>${esc(r.created)}</td><td>${esc(s.source_report || "")}</td>
+      <td>${num(s.queries)}</td><td>${num(s.both_complete)}</td><td>${num(s.median_generated_seconds)} s / ${num(s.median_reference_seconds)} s</td>
+      <td>${num(s.median_ratio_generated_over_reference)}</td><td>${ids(s.generated_timed_out)}</td><td>${ids(s.reference_timed_out)}</td>
+      <td>${ids(s.slower_than_reference)}</td><td>${s.timeout_ms ? `${s.timeout_ms / 1000} s` : dash}</td></tr>`; }).join("")}
+  </tbody></table></div>`;
+}
+
+function perfRows(rows) {
+  const side = x => x.error ? `<span class="bad" title="${esc(x.error)}">error</span>` : !x.complete ? "<span class='bad'>timeout</span>" : `${x.seconds} s`;
+  rows = byProblem(rows, r => (!r.generated.complete && r.reference.complete) ? 0 : r.ratio > 2 ? 1 : !r.generated.complete ? 2 : 3);
+  return `<div class="scroll"><table class="grid"><thead><tr><th>Id</th><th>Reference</th><th>Generated</th><th>Ratio</th>
+    <th>Rows (generated / reference)</th><th>Result on dev</th><th>Question</th></tr></thead><tbody>
+    ${rows.map(r => `<tr><td>${esc(r.id)}</td><td>${side(r.reference)}</td><td>${side(r.generated)}</td>
+      <td class="${r.ratio > 2 ? "bad" : ""}">${num(r.ratio)}</td><td>${num(r.generated.rows)} / ${num(r.reference.rows)}</td>
+      <td>${num(r.dev_outcome)}</td><td class="wrap">${esc(r.question)}</td></tr>`).join("")}
   </tbody></table></div>`;
 }
 
@@ -439,11 +527,11 @@ async function showReport(name) {
   const response = await fetch(`/agents/reports/${encodeURIComponent(name)}`);
   const d = await response.json();
   if (!response.ok) { out.innerHTML = `<p class="bad">${esc(d.error)}</p>`; return; }
-  const intent = name.startsWith("intent-"), query = name.startsWith("query-");
+  const intent = name.startsWith("intent-"), query = name.startsWith("query-"), perf = name.startsWith("perf-");
   out.innerHTML = `<div class="card">
     <div class="head"><h3>${esc(name)}</h3><a href="/agents/reports/${encodeURIComponent(name)}" target="_blank">raw JSON</a></div>
     ${summaryTable(d.summary)}
-    <details open><summary>${plural((d.rows || []).length, "question")}, problems first${query ? " (holdout hidden)" : ""}</summary>${intent ? intentRows(d.rows || []) : query ? queryRows(d.rows || []) : pipelineRows(d.rows || [])}</details>
+    <details open><summary>${plural((d.rows || []).length, perf ? "query" : "question")}, problems first${query ? " (holdout hidden)" : ""}</summary>${intent ? intentRows(d.rows || []) : query ? queryRows(d.rows || []) : perf ? perfRows(d.rows || []) : pipelineRows(d.rows || [])}</details>
   </div>`;
 }
 
@@ -453,15 +541,18 @@ async function loadReports() {
   document.getElementById("intent-reports").innerHTML = intentTable(d.reports.filter(r => r.kind === "intent"));
   document.getElementById("query-reports").innerHTML = queryTable(d.reports.filter(r => r.kind === "query"));
   document.getElementById("pipeline-reports").innerHTML = pipelineTable(d.reports.filter(r => r.kind === "pipeline"));
+  document.getElementById("perf-reports").innerHTML = perfTable(d.reports.filter(r => r.kind === "perf"));
+  document.getElementById("scoreboard").innerHTML = scoreboard(d.reports);
   document.getElementById("report-detail").innerHTML = "";
 }
 
 document.getElementById("measurements").addEventListener("click", e => {
-  const tr = e.target.closest("tr[data-name]");
-  if (!tr) return;
+  const el = e.target.closest("[data-name]");
+  if (!el) return;
   document.querySelectorAll("tr.selected").forEach(x => x.classList.remove("selected"));
-  tr.classList.add("selected");
-  showReport(tr.dataset.name);
+  if (el.tagName === "TR") el.classList.add("selected");
+  showReport(el.dataset.name);
+  if (el.tagName !== "TR") document.getElementById("report-detail").scrollIntoView({behavior: "smooth", block: "start"});
 });
 document.getElementById("reload-reports").addEventListener("click", loadReports);
 

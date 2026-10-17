@@ -67,15 +67,17 @@ def reports_client(tmp_path):
     save("20261017-002316.json", {"summary": {"questions": 31, "verdict_accuracy": 0.903}, "rows": []})
     save("intent-20261017-090000.json", {"summary": {"questions": 31, "detection_rate": 1.0}, "rows": [{"id": "x"}]})
     save("pipeline-20261017-100000.json", "not json")
+    save("perf-20261017-110000.json", {"summary": {"queries": 5, "both_complete": 1}, "rows": []})
     save("notes.json", {"summary": {}})
     return TestClient(create_app(settings=Settings(data_dir=DATA_DIR, log_path=None, reports_dir=tmp_path)))
 
 
 def test_reports_lists_eval_reports_newest_first(reports_client):
     listing = reports_client.get("/agents/reports").json()["reports"]
-    assert [(r["name"], r["kind"]) for r in listing] == [("intent-20261017-090000.json", "intent"),
+    assert [(r["name"], r["kind"]) for r in listing] == [("perf-20261017-110000.json", "perf"),
+                                                          ("intent-20261017-090000.json", "intent"),
                                                           ("20261017-002316.json", "pipeline")]
-    assert listing[0]["created"] == "2026-10-17 09:00" and listing[1]["summary"]["verdict_accuracy"] == 0.903
+    assert listing[1]["created"] == "2026-10-17 09:00" and listing[2]["summary"]["verdict_accuracy"] == 0.903
 
 
 def test_report_detail_has_the_rows_and_refuses_other_files(reports_client):

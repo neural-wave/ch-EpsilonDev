@@ -47,8 +47,8 @@ STAND_INS = {
 
 
 # eval/run_eval.py writes pipeline-<date>-<time>.json, eval/run_intent_eval.py intent-…, eval/run_query_eval.py
-# query-…. Pipeline reports from before 2026-10-17 have no prefix.
-REPORT_NAME_RE = re.compile(r"^(?:(pipeline|intent|query)-)?(\d{8})-(\d{6})\.json$")
+# query-…, eval/time_on_perf.py perf-…. Pipeline reports from before 2026-10-17 have no prefix.
+REPORT_NAME_RE = re.compile(r"^(?:(pipeline|intent|query|perf)-)?(\d{8})-(\d{6})\.json$")
 
 
 def read_report(path: Path) -> dict | None:
