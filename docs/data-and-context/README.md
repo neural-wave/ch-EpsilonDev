@@ -1,47 +1,33 @@
-# Data and Context — work status and handoff
+# Data and Context — Santiago handoff
 
-This guide separates completed local work from real-graph validation. The root [README](../../README.md) is the project-wide source of truth; [docs/DATA.md](../DATA.md) describes RDF graph layout and data conventions.
+This guide records what Adrika completed in Module C and the remaining work for Santiago on the configured run machine. The root [README](../../README.md) is the project-wide source of truth; [docs/DATA.md](../DATA.md) describes the RDF graph layout and data conventions.
 
-## Ownership and status
+## Handoff status
 
-| Work | Owner | Status | What the status means |
-| --- | --- | --- | --- |
-| Retrieval, loaders, deterministic behavior, synthetic tests, and local benchmark | You / local contributor | **Complete locally** | Implemented and exercised with synthetic fixtures and checked-in snapshots. |
-| Sanitized RDF profile comparison helper | You / local contributor | **Synthetic tests pass; real profile pending** | The helper is covered with fabricated profile fixtures; it has not been run against an RDF-derived profile. |
-| Final local checks and branch handoff | You / local contributor | **Complete** | The helper’s synthetic tests and full suite pass; the `guardjudge` branch has been pushed. |
-| Dev graph profile, real terminology index, and actual-data evaluation | Santiago | **Blocked in this checkout** | `.env` is absent and dev port 8890 is closed; no real-graph profile or evaluation was performed. |
-| Perf graph measurements | Santiago | **Blocked in this checkout** | Perf port 8891 is closed; no real performance-graph timings have been collected. |
-| Work verified both locally and against real graph data | — | **None yet** | Passing synthetic tests does not establish real-graph compatibility or retrieval quality. |
-
-The existing real-data integration path is offline: `scripts/profile_data.py` produces local RDF-derived snapshots, and `scripts/build_terminology_index.py` builds a local terminology index. The application reads those files at request time. **Do not add a live Virtuoso connection to `ContextBuilder`, pipeline construction, or `POST /nl-to-sparql`.**
-
-## Code implementation status
-
-There are **no known unimplemented Data and Context code items** in the current checklist. The profile generator, sanitized profile comparator, terminology-index builder, local-file loaders, and request-time context integration are already implemented. The unchecked Santiago items below are required runs and evidence collection, not requests to write those tools. Any further code change depends on issues found when Santiago runs them.
-
-| Capability | Code status | Still required |
+| Area | Status | Owner / next action |
 | --- | --- | --- |
-| Generate profile snapshots from dev RDF | Implemented in `scripts/profile_data.py` | Run against Santiago's dev graph; compare output with committed snapshots. |
-| Compare profile snapshots without exposing entries | Implemented and covered by synthetic tests in `scripts/compare_data_profile.py` | Run against the generated real profile; record aggregate result. |
-| Generate restricted terminology index | Implemented in `scripts/build_terminology_index.py` | Build the local ignored asset on Santiago's machine and measure it there. |
-| Load context assets at request time | Implemented in `ContextBuilder` and the factory | Validate with the real generated assets and configured evaluation. |
-| Tune retrieval/performance | No evidence-backed change identified | Measure on dev/perf first; implement a change only if results justify it. |
+| Retrieval, local-file loading, context construction | Implemented and locally verified | Adrika's local work is complete. |
+| RDF snapshot generation and comparison tools | Implemented; synthetic comparison tests pass | Santiago must run the tools against the actual dev graph and review aggregate drift. |
+| Terminology index builder and runtime loader | Implemented; real index not built in this checkout | Santiago must build it locally from the authorized ontology endpoint and evaluate it. |
+| Real dev-graph evaluation | Not verified | Santiago must run LLM evaluation and query execution on dev. |
+| Perf-graph measurement | Not verified | Santiago must run repeated scale measurements on perf after dev validation. |
+| Verified both locally and against real RDF | No | Local synthetic results are not evidence of real-graph behavior. |
 
-## Completed by you locally
+**Access in Adrika's checkout, checked 2026-10-17:** `.env` is absent, and localhost ports 8890 (dev) and 8891 (perf) are closed. No real RDF profile, terminology index, or graph evaluation was performed here. The `guardjudge` branch was pushed at `7a7713698af27ff043c574dc611decddc9bb903c`.
 
-- [x] Confirmed `ExampleBank`, `SchemaCards`, `TerminologyIndex`, and `ContextBuilder` work from local files.
-- [x] Corrected retrieval behavior for empty/stopword queries, nonpositive and oversized `k`, normalized exact-question exclusion, and deterministic tie ordering.
-- [x] Added clear path- and line-specific validation errors for malformed examples, schema cards, and terminology index entries; pipeline loader errors include the file path.
-- [x] Added tests for malformed/missing optional inputs, synthetic terminology lookup, ranking, ordering, custom top-k settings, large synthetic files, and operation without `VIRTUOSO_ENDPOINT` or a Virtuoso import.
-- [x] Kept BM25 defaults: the synthetic benchmark did not meet the threshold for changing them.
-- [x] Measured prompt sizes for typical and expanded synthetic context. These are measurements, not an enforced context budget.
-- [x] Preserved the factory-owned fail-closed validation for required profile snapshots; coordinate with teammate A before changing it.
-- [x] Added `scripts/compare_data_profile.py` for numeric-only snapshot comparison. It reports aggregate additions/removals/changes without printing schema terms, properties, or profile entries.
-- [x] Added synthetic tests for identical profiles, aggregate-only differences, and empty-profile rejection.
+## What Adrika completed
+
+- Refined example, schema-card, and terminology retrieval: empty/stopword queries and nonpositive `k` return no candidates; exact-example exclusion normalizes case, accents, and whitespace; ties are deterministic.
+- Added clear validation errors for malformed examples, schema cards, and terminology-index rows. Pipeline loader errors identify the failing file path.
+- Preserved fail-closed validation for required profile snapshots in `factory.py`; coordinate with teammate A before changing that factory-owned code.
+- Confirmed the request path reads local snapshots/assets only. It does not query Virtuoso. Do not add graph access to `ContextBuilder`, pipeline construction, or `POST /nl-to-sparql`.
+- Added `scripts/compare_data_profile.py`. It compares committed snapshots with a candidate profile and prints aggregate additions/removals/changes only, without printing class/property names or profile entries. It rejects missing, malformed, or empty profiles.
+- Added synthetic comparator cases for equal profiles, aggregate differences, and empty-profile rejection.
+- Kept BM25 defaults because the synthetic benchmark did not justify a change.
 
 ### Local evidence
 
-**Profile comparison code:** `51b817f77c66bf27c9f54fe12324f1e1a25154d4`. **Synthetic regression tests:** `471054aef4847b94e210bc31ed07a487c136cfbe`. The test and full-suite results below were run on these code changes before their commits. Real RDF profile comparison has not been run.
+The profile-comparison helper is in commit `51b817f77c66bf27c9f54fe12324f1e1a25154d4`; its synthetic tests are in `471054aef4847b94e210bc31ed07a487c136cfbe`.
 
 ```text
 PYTHONPATH=src .venv311/bin/python -m pytest -q tests/test_context.py
@@ -52,74 +38,114 @@ PYTHONPATH=src .venv311/bin/python -m pytest -q tests/test_profile_comparison.py
 
 PYTHONPATH=src .venv311/bin/python -m pytest -q
 171 passed, 1 existing Starlette/anyio deprecation warning
-
-PYTHONPATH=src .venv311/bin/python scripts/retrieval_benchmark.py
-14 synthetic cases; 92.9% top-1; 100% top-3 for each of three settings
 ```
 
-The numeric-only synthetic benchmark used 14 fabricated cases. Default and candidate BM25 settings each scored **92.9% top-1** and **100% top-3**; their p50 retrieval latency was **0.0041 ms**, **0.0042 ms**, and **0.0041 ms**. No candidate improved top-1 by the required 5 percentage points, so defaults remain unchanged. Typical and expanded synthetic rendered prompts were **668** and **37,624 characters**. These are local synthetic measurements, not an LLM or real-graph evaluation.
+The synthetic retrieval benchmark used 14 fabricated cases. Default and both candidate BM25 settings scored **92.9% top-1** and **100% top-3**; p50 retrieval latency was **0.0041 ms**, **0.0042 ms**, and **0.0041 ms**. No candidate met the 5-point top-1 improvement threshold. Typical and expanded synthetic rendered prompts were 668 and 37,624 characters. These are synthetic measurements, not real-graph or LLM results. The benchmark was run before the profile-comparison helper was added; that helper does not alter retrieval.
 
-The retrieval benchmark was last run before the profile comparison helper was added; the helper does not change retrieval behavior. Its comparison logic was exercised by the three synthetic tests above. **Santiago must still run the CLI against a profile generated from the actual dev graph** as described below.
+## Existing code Santiago can use
 
-## Your local work — complete; no RDF graph required
+| Task | Existing tool / code | Real-data result still needed |
+| --- | --- | --- |
+| Profile dev RDF | `scripts/profile_data.py` | Generate candidate `property_kinds.json` and `schema_cards.json` in a temporary directory. |
+| Compare snapshots | `scripts/compare_data_profile.py` | Run it on the generated profile and record its sanitized aggregate output. |
+| Build terminology index | `scripts/build_terminology_index.py` | Generate the ignored local `assets/terminology_index.jsonl` from the authorized endpoint. |
+| Load context | `src/nl2sparql/context/` and `factory.py` | Evaluate with the generated local assets; no request-time database calls. |
+| Evaluate system | `eval/run_eval.py`, `scripts/runbox.sh` | Run the configured LLM and optional dev execution; review raw reports only on the run machine. |
 
-There are no outstanding local implementation tasks in the current checklist. The profile-comparison helper now has synthetic test coverage; running it against Santiago's generated profile remains part of the graph workflow below. The commands used for local verification are:
+There is no known unimplemented Data and Context tool that blocks these run-machine checks. If real results reveal a retrieval or compatibility issue, make a targeted code change then add synthetic regression coverage.
+
+## Santiago's required run-machine work
+
+Run this on Santiago's configured run machine, where Virtuoso, the LLM tunnel, and `.env` are configured. Use the branch above. Keep `assets/`, `.env`, raw requests, SPARQL, terminology labels, patient-level results, and evaluation reports on that machine; share sanitized summaries only.
+
+### 1. Check out the branch and confirm services
+
+From the repository root:
 
 ```bash
-PYTHONPATH=src .venv311/bin/python -m pytest -q tests/test_context.py
-PYTHONPATH=src .venv311/bin/python -m pytest -q tests/test_profile_comparison.py
-PYTHONPATH=src .venv311/bin/python -m pytest -q
-PYTHONPATH=src .venv311/bin/python scripts/retrieval_benchmark.py
-git diff --check
+git fetch origin guardjudge
+scripts/runbox.sh status
+scripts/runbox.sh test --branch guardjudge
 ```
 
-- [x] Ran the profile-comparison focused tests and full suite; results are recorded above.
-- [x] Pushed the helper and synthetic tests on `guardjudge`; this guide records the handoff requirements.
-- [x] Confirmed the helper and fixtures contain only aggregate-reporting logic and synthetic profile data; no `.env`, generated `assets/` terminology files, graph data, patient-level results, or raw evaluation reports were added.
+The test command runs the full unit suite in the branch worktree. This is a local synthetic/code check, not real-graph validation.
 
-## Remaining execution and validation for Santiago — actual dev RDF graph required
+### 2. Profile the dev graph and compare snapshots
 
-**Current access check (2026-10-17):** `.env` is absent; localhost ports **8890** (dev) and **8891** (perf) are closed. No graph query, profile generation, terminology-index build, or real-data evaluation was run. Continue these steps on Santiago's configured run machine using the endpoint/IRIs documented in the root README and [docs/DATA.md](../DATA.md).
+Generate into a temporary directory. Do not let the profile script overwrite committed snapshots before the comparison is reviewed.
 
-The tools and commands in this section already exist. The open boxes track running them against the real environment, reviewing the results, and making evidence-driven follow-up changes if needed.
+```bash
+repo_root="$PWD"
+worktree="$(dirname "$repo_root")/nl2sparql-worktrees/guardjudge"
+profile_dir="$(mktemp -d)"
 
-**Required real-data test for the new helper:** the three passing unit tests use fabricated profile files only. They do not validate the CLI with Santiago's RDF-derived snapshots. Santiago must run the workflow below on the configured dev graph and record the sanitized aggregate result before marking profile freshness complete.
+(cd "$worktree" && \
+  PYTHONPATH="$worktree/src" "$repo_root/.venv/bin/python" \
+  scripts/profile_data.py \
+  --endpoint http://localhost:8890/sparql \
+  --data-dir "$profile_dir")
 
-### Dev graph and metadata
+(cd "$worktree" && \
+  PYTHONPATH="$worktree/src" "$repo_root/.venv/bin/python" \
+  scripts/compare_data_profile.py \
+  --profile-dir "$profile_dir")
+```
 
-- [ ] Confirm the configured dev endpoint and documented patient/ontology graph IRIs.
-- [ ] Profile into a temporary directory; compare both generated snapshots with the committed ones before considering a refresh:
+Comparator exit codes:
 
-  ```bash
-  profile_dir="$(mktemp -d)"
-  python scripts/profile_data.py --endpoint http://localhost:8890/sparql --data-dir "$profile_dir"
-  python scripts/compare_data_profile.py --profile-dir "$profile_dir"
-  ```
+- `0`: candidate and committed snapshots match.
+- `1`: profile drift exists; review it locally before deciding whether snapshots should change.
+- `2`: a profile file is missing, malformed, or empty.
 
-- [ ] Confirm the CLI outcome: exit code **0** means the snapshots match; **1** means profile drift was found; **2** means a file is missing, malformed, or empty. Investigate exit code 1 on the run machine before refreshing snapshots.
-- [ ] Review aggregate additions/removals/changes for properties, classes, class-property pairs, and schema terms. Do not paste raw profile files or entry-level diffs into shared reports.
-- [ ] Run `PYTHONPATH=src python -m pytest -q tests/test_profile_comparison.py` on the pushed branch to confirm its synthetic tests still pass in the run-machine environment. This complements the real-profile CLI run; neither substitutes for the other.
-- [ ] Refresh committed snapshots only when the graph profile supports the change, then rerun focused and full local tests.
-- [ ] Keep profiling an offline maintenance action; never call it from the API request path.
+Review the numeric additions/removals/changes for properties, classes, class-property pairs, and schema terms. Do not paste raw profiles or entry-level diffs into shared reports. Refresh committed snapshots only when the real graph supports the change. After a refresh, rerun focused and full tests in the branch worktree. Profiling remains a maintenance action, never part of the API request path.
 
-### Terminology index and actual dev evaluation
+### 3. Build the terminology index in the evaluation worktree
 
-- [ ] Build `assets/terminology_index.jsonl` with `scripts/build_terminology_index.py` using authorized local access. Keep this generated, restricted-terminology-derived file ignored and local.
-- [ ] Measure build duration, aggregate entry count, memory, and request-time candidate lookup latency. Share aggregate numbers only.
-- [ ] Run configured LLM evaluation with the dev-derived snapshots/index. Compare answer quality, empty-result rate, retries, latency, and tokens with the root README baseline.
-- [ ] Check representative successful dev cases for useful schema/code retrieval. Keep raw requests, SPARQL, terminology labels, and patient-level results on the run machine.
-- [ ] Review false retrievals and missed candidates; make retrieval changes only when repeatable evidence supports them, and add synthetic regression tests for each change.
-- [ ] Verify real-data configuration preserves API fields, literal translation, privacy decisions, and the database-independent request path.
+The ignored asset must be built in the same worktree used for evaluation; ignored `assets/` files are not shared between worktrees.
 
-### Perf graph measurements
+```bash
+(cd "$worktree" && \
+  PYTHONPATH="$worktree/src" "$repo_root/.venv/bin/python" \
+  scripts/build_terminology_index.py \
+  --endpoint http://localhost:8890/sparql)
 
-- [ ] Use repeated isolated runs on the perf graph for scale-sensitive evaluation only. Keep correctness and profile comparison on dev.
-- [ ] Compare context/retrieval candidates for quality, model tokens, latency, memory, and query execution time where relevant; report medians and spread.
-- [ ] Adopt larger context or more expensive retrieval only when repeatable gains justify the operational cost. Keep BM25 as default absent that evidence.
+git -C "$worktree" check-ignore assets/terminology_index.jsonl
+```
 
-## Constraints for all contributors
+The generated file is derived from restricted terminologies. Keep it ignored and local. Record build duration, aggregate entry count, memory use, and lookup latency without sharing file contents or labels. If the script or data fails, keep the error details local and report a sanitized error category.
 
-- Keep RDF access in profiling/evaluation scripts only. No database call may be reachable from `POST /nl-to-sparql`.
-- Keep restricted terminology and generated terminology-derived assets out of Git and public documentation. Never add patient data, secrets, or run-machine credentials.
-- Do not change API fields or shared interfaces without team agreement. Coordinate with teammate A before changing factory-owned snapshot validation.
-- Local synthetic tests and benchmarks are not real-graph verification. Add sanitized snapshot and aggregate run-machine results only after Santiago completes those checks.
+### 4. Evaluate context and query behavior on dev
+
+Run the LLM evaluation and compliant-query execution for the branch worktree:
+
+```bash
+scripts/runbox.sh eval --execute --branch guardjudge
+```
+
+Review the generated report locally. Compare verdict accuracy, false positives/negatives, forbidden requests marked compliant, empty-result rate, execution errors, retries, latency, and token counts against the baseline in the root README. Check whether representative successful queries retrieved useful schema and code candidates. Do not copy raw questions, SPARQL, terminology labels, patient results, or reports into Git or this guide.
+
+If evaluation exposes a repeatable context or retrieval defect, implement a narrow fix and add synthetic trigger/near-miss tests. Confirm that literal translation, privacy decisions, API fields, and database independence are preserved. Do not refresh snapshots or change defaults based on a single unexplained result.
+
+### 5. Measure on perf after dev checks
+
+Use the 100,000-patient perf graph only after dev correctness is reviewed. Run isolated repeated measurements for scale-sensitive candidates and report medians/spread for quality, model tokens, latency, memory, and query execution time where available. Keep raw evaluation output and graph results local. Retain BM25 and current context sizes unless repeatable measurements show a useful gain; only implement retrieval changes supported by the measurements.
+
+## What to report back
+
+Share only a sanitized summary:
+
+- whether the dev service and expected graph IRIs were confirmed;
+- whether the profile snapshots matched, or aggregate counts of additions/removals/changes;
+- terminology-index build duration, aggregate entry count, and resource/lookup measurements;
+- evaluation accuracy, false positive/negative counts, forbidden-compliance count, empty-result/error counts, retries, latency, and tokens versus the root README baseline;
+- perf medians/spread and any evidence-backed follow-up change;
+- remaining blockers.
+
+Do not share patient-level results, raw questions or SPARQL, terminology entries/labels, `.env`, credentials, generated `assets/`, or raw reports.
+
+## Constraints
+
+- RDF access belongs in profiling and evaluation scripts only. No database call may be reachable from `POST /nl-to-sparql`.
+- Do not change API fields, shared interfaces, or factory-owned snapshot validation without team agreement.
+- Do not commit patient data, restricted terminology or derived assets, `.env`, secrets, or run-machine details.
+- Keep the module guide's local synthetic evidence and real-graph evidence separate.
