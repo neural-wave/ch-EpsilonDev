@@ -211,6 +211,30 @@ Speed:""",
 assert "GROUP BY\n  ?concept" in QUERY_SYSTEM_V4 and "Shape:" in QUERY_SYSTEM_V4  # both edits applied
 
 
+# v5 (2026-10-17): v4 plus speed rules from timing the generated queries on 100,000 patients
+# (eval/time_on_perf.py): a plain query took 142x the reference, which starts with DEFINE
+# sql:select-option "order" and puts the code pattern first; OPTION (inference) on a variable class
+# and joins the question never asked for made two queries pass 60 s where the reference takes seconds.
+QUERY_SYSTEM_V5 = QUERY_SYSTEM_V4.replace(
+    """Speed:
+- Put the most selective pattern first (a code or a rare class), leave out OPTIONAL you do not
+  need, and use ORDER BY only when the question asks for a ranking.""",
+    """Speed (Virtuoso joins in the order written when the query starts with DEFINE sql:select-option "order"):
+- Start every query with the line: DEFINE sql:select-option "order"
+- Write the most selective pattern first: the typed code pattern (?c a icd-10-gm:E11 OPTION (...)),
+  then ?record sphn:hasCode ?c, then the record's type, then the rest. A rare class before a common one.
+- Use only the patterns the question needs. No joins (cases, dates, identifiers) or filters the
+  question does not ask for: each one multiplies the work on 100,000 patients.
+- OPTION (inference ...) only on a pattern with a concrete code, never on ?code a ?concept. To group
+  by the kind of code, write ?code a ?concept without inference.
+- Use ORDER BY only when the question asks for a ranking.""",
+).replace(
+    """Never group by or return ?c, ?g or any identifier.""",
+    """Never group by or return ?c, ?g, a variable bound from ?g, or any identifier.""",
+)
+assert "DEFINE sql:select-option" in QUERY_SYSTEM_V5 and "a variable bound from ?g" in QUERY_SYSTEM_V5  # both edits applied
+
+
 def render_query_user_v1(text: str, context: Context, feedback: str | None) -> str:
     parts = []
     if context.schema_cards:
@@ -237,7 +261,8 @@ INTENT_PROMPTS: dict[str, str] = {"v1": INTENT_SYSTEM_V1, "v2": INTENT_SYSTEM_V2
 QUERY_PROMPTS: dict[str, QueryPrompt] = {"v1": QueryPrompt(QUERY_SYSTEM_V1, render_query_user_v1),
                                          "v2": QueryPrompt(QUERY_SYSTEM_V2, render_query_user_v1),
                                          "v3": QueryPrompt(QUERY_SYSTEM_V3, render_query_user_v1),
-                                         "v4": QueryPrompt(QUERY_SYSTEM_V4, render_query_user_v1)}
+                                         "v4": QueryPrompt(QUERY_SYSTEM_V4, render_query_user_v1),
+                                         "v5": QueryPrompt(QUERY_SYSTEM_V5, render_query_user_v1)}
 
 
 def intent_prompt(version: str) -> str:
