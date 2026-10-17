@@ -21,6 +21,7 @@ The jury scores three things: **time per request**, **verdict correctness** agai
 - **One change per run.** Prompt version, context size, model, answer cap: change one, measure, commit with the numbers.
 - **Reports** land in `eval/reports/` (git-ignored) and show up in the agents console, <http://localhost:8080/agents>, under **Measurements**.
 - Latency is comparable only between runs at the same concurrency. Concurrency 4 adds queueing on an 8-sequence vLLM.
+- With `CONTEXT_DEV_REFERENCES=true` only the holdout numbers are meaningful: dev questions retrieve their neighbours' reference queries (same author, often the same topic family), so dev rates go up without saying anything about new questions; compare holdout with holdout and note the flag with every run. Offline, leave-one-out on the 45 dev questions (top 3, no model): an example that uses the reference's main class 15 → 29 of 45, one with its shape 32 → 38, both in one example 10 → 16; allowed questions shown a forbidden official example 22 → 5; query-agent user message median 2,426 → 2,220 tokens.
 
 ## 2. Scoreboard
 

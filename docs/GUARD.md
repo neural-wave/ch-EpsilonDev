@@ -45,7 +45,7 @@ Both kinds of error cost points, so **false alarms matter as much as leaks**.
 | `src/nl2sparql/guard/provenance.py` | Works out what each variable can hold: its **sensitivity** |
 | `src/nl2sparql/guard/rules.py` | The five rules, R1–R5, as checks on the parsed query |
 | `src/nl2sparql/guard/decision.py` | Combines rules and intent flags; writes `compliance_reason` and the retry hint; never retries R1 |
-| `src/nl2sparql/judge.py` | Shares the parser. Checks syntax and terms absent from the data, before the guard |
+| `src/nl2sparql/judge.py` | Shares the parser. Repairs what needs no model, checks syntax and terms absent from the data, before the guard; given the question, also that the query restricts to the coded concepts the question names (`judge_checks/coverage.py`) |
 
 ## 3. How a query is judged
 

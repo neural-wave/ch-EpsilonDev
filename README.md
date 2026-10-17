@@ -200,7 +200,7 @@ nl2sparql/
 │   ├── judge.py                  repairs, syntax, terms absent from the data, then the    (D)
 │   │                             checks below
 │   ├── judge_checks/             one module per family: syntax (explains and repairs what
-│   │                             rdflib rejects), scope, semantics, schema                (D)
+│   │                             rdflib rejects), scope, semantics, schema, coverage      (D)
 │   ├── sparql/                   Virtuoso-aware parsing and prefix fixes, shared by guard and judge (D)
 │   ├── virtuoso.py               small client (scripts, eval, demo only)                  (C)
 │   └── demo/index.html           demo page                                                (E)
@@ -300,6 +300,7 @@ All settings come from environment variables; `.env.example` lists them. Load th
 | `INTENT_PROMPT_VERSION`, `QUERY_PROMPT_VERSION` | `v4`, `v4` | Which prompt version each agent uses (see `src/nl2sparql/agents/prompts.py` and docs/LLM_AGENTS.md §6) |
 | `QUERY_REORDER` | `true` | `true` runs `nl2sparql.sparql.order` after the query agent: when the query has exactly one typed code pattern, inside the first `GRAPH ?g` block, and no UNION, MINUS or sub-select, the pass puts that pattern first, rotates the statement that links to it so `sphn:hasCode ?c` is its first triple, and prepends `DEFINE sql:select-option "order"`; every other query is returned untouched (a forced order is only as good as the whole written query: q-015 went from 0.19 s to 9 s when a `;` chain started with the class pattern). On by default since 17 Oct: on 100,000 patients the four run-1 queries it rewrites gave identical rows on dev and q-021 went from 0.44 s to 0.06 s, the others within 0.1 s |
 | `CONTEXT_EXAMPLES`, `CONTEXT_CARDS`, `CONTEXT_CODES` | `3`, `8`, `5` | How many similar examples, schema cards and code candidates the query agent receives per request |
+| `CONTEXT_DEV_REFERENCES` | `false` | `true` also loads the dev rows of `eval/query_questions.jsonl` (question + reference SPARQL, 45 today) into the example bank, after the official and team examples so an official example wins a tie; holdout rows are never read. Their shape tag is read from the SPARQL. With it on, only the holdout numbers of the eval are meaningful: a dev question no longer finds its own reference (excluded by text) but retrieves its neighbours'. Does nothing where `eval/` is absent |
 | `LLM_TIMEOUT_SECONDS` | `30` | Per LLM call |
 | `LLM_VERIFY_TLS` | `true` | `false` for servers with a self-signed certificate |
 | `LLM_EXTRA_BODY` | empty | JSON merged into every LLM request. For Qwen3.x: `'{"chat_template_kwargs": {"enable_thinking": false}}'` (keep the single quotes) |
@@ -524,6 +525,7 @@ Query performance is a major lever: even the organizers' own queries can take mi
 18. **The mock data is thin outside cholera.** Billed ICD codes are almost all cholera (778 patients) plus the chapter code (189); other codes have fewer than 10 patients; CHOP is almost all `00.0x`; many SNOMED value sets are random. Questions about other diagnoses return tiny or empty results on both databases.
 19. **rdflib's syntax message names the wrong token.** "Expected SelectQuery, found 'GRAPH'" for a missing parenthesis three lines later, and the model repeats the error on its retry. The judge now rewrites a standard prefix declared with another namespace (`fix_standard_prefixes`), repairs three mistakes with exactly one meaning without a model call (`GROUP BY true`, `GROUP BY` inside the WHERE braces, a UNION branch that is a bare `GRAPH` block) and replaces rdflib's message with hints that name the real error and say what to write instead (`judge_checks/syntax.py`). On the 17 October dev run: 13 of 52 unparseable answers repaired, 36 explained; 0 hints on the examples and the dev references.
 20. **The anytime `timeout` parameter changes Virtuoso's plan.** With it, an OPTIONAL + inference query that answers in 84 ms runs to the deadline and returns HTTP 206 with wrong partial aggregates. Time plain runs.
+21. **The query agent can drop the concept the question names.** "How many patients have cholera on a hospital bill, by sex?" came back as all patients by sex, and no check compared the question with the query. The judge now takes the codes the question names strongly and asks for the missing pattern when the query uses neither the code nor a subcode or parent code (`judge_checks/coverage.py`). A code counts when the question writes the ICD code out, or when all the words of an ICD-10-GM or CHOP label stand side by side in the question; SNOMED CT categories never count, nor does a word that only implies its label. With the real index: 0 hits on the 16 official examples, the 3 team examples and the 45 dev references; over all 2,202 dev queries of the 29 saved reports, 40 hits, none on a right answer.
 
 ## 13. Next steps per module
 
