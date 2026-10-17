@@ -2,7 +2,8 @@
 
 First the repairs that need no model: a standard prefix declared with another namespace, the
 inference option on a variable class, a date plus a duration string, three syntax mistakes with
-exactly one meaning (judge_checks.syntax.normalize) and a typed value-set entry. Then the checks:
+exactly one meaning (judge_checks.syntax.normalize), a typed value-set entry and a GROUP BY key that
+is the year-versioned class of an ICD-10-GM or CHOP code (judge_checks/schema.py). Then the checks:
 syntax, with hints that name the real error when rdflib still rejects the text (rdflib's own
 message points at the wrong token); SPHN terms against the data snapshot; the inference option on
 code patterns; distinct patient counts; and the three families in judge_checks/: variable scope,
