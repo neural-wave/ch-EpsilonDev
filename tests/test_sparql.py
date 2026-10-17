@@ -71,3 +71,17 @@ def test_collects_iris_including_paths():
     iris = collect_iris(parsed.algebra)
     assert URIRef(SPHN + "Age") in iris
     assert URIRef(SPHN + "hasQuantity") in iris and URIRef(SPHN + "hasValue") in iris
+
+
+def test_parsing_from_many_threads_at_once_stays_correct():
+    # Regression: rdflib's parser is not thread-safe and the orchestrator parses in worker threads.
+    # Without the lock in parse_sparql, concurrent parses corrupt the grammar and every later parse fails.
+    from concurrent.futures import ThreadPoolExecutor
+
+    from conftest import load_examples
+
+    queries = [example["sparql"] for example in load_examples() if example["compliant"]] * 10
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        kinds = list(pool.map(lambda query: parse_sparql(query).kind, queries))
+    assert set(kinds) == {"SelectQuery"}
+    assert parse_sparql("SELECT ?x WHERE { ?x ?p ?o }").kind == "SelectQuery"

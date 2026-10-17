@@ -7,6 +7,7 @@ remember that they were there.
 from __future__ import annotations
 
 import re
+import threading
 from dataclasses import dataclass, field
 
 from rdflib.plugins.sparql.algebra import translateQuery
@@ -15,6 +16,12 @@ from rdflib.plugins.sparql.sparql import Query
 
 DEFINE_RE = re.compile(r"^\s*DEFINE\s+\S+\s+(\"[^\"]*\"|'[^']*'|\S+)\s*$", re.IGNORECASE | re.MULTILINE)
 INFERENCE_RE = re.compile(r"OPTION\s*\(\s*inference\s+(\"[^\"]*\"|'[^']*')\s*\)", re.IGNORECASE)
+
+# rdflib's SPARQL grammar (pyparsing) keeps shared state and is not thread-safe: two threads parsing at
+# once can corrupt it for the rest of the process, and then every parse fails with "Param.postParse2()
+# missing 1 required positional argument". The orchestrator runs the judge and the guard in worker
+# threads, so every parse takes this lock. Parsing takes milliseconds.
+_PARSER_LOCK = threading.Lock()
 
 
 @dataclass
@@ -41,13 +48,14 @@ def strip_virtuoso_extensions(text: str) -> tuple[str, list[str], int]:
 
 def parse_sparql(text: str) -> ParsedQuery:
     stripped, defines, inference_count = strip_virtuoso_extensions(text)
-    try:
-        query = translateQuery(parseQuery(stripped))
-    except Exception as query_error:  # rdflib raises pyparsing and plain exceptions
+    with _PARSER_LOCK:
         try:
-            parseUpdate(stripped)
-        except Exception:
-            message = str(query_error).splitlines()[0][:300] if str(query_error) else type(query_error).__name__
-            return ParsedQuery(text, "Invalid", error=message, defines=defines, inference_options=inference_count)
-        return ParsedQuery(text, "Update", defines=defines, inference_options=inference_count)
+            query = translateQuery(parseQuery(stripped))
+        except Exception as query_error:  # rdflib raises pyparsing and plain exceptions
+            try:
+                parseUpdate(stripped)
+            except Exception:
+                message = str(query_error).splitlines()[0][:300] if str(query_error) else type(query_error).__name__
+                return ParsedQuery(text, "Invalid", error=message, defines=defines, inference_options=inference_count)
+            return ParsedQuery(text, "Update", defines=defines, inference_options=inference_count)
     return ParsedQuery(text, query.algebra.name, query=query, defines=defines, inference_options=inference_count)

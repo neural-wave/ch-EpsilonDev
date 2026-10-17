@@ -39,6 +39,20 @@ async def ask_over_http(client: httpx.AsyncClient, url: str, text: str) -> dict:
     return response.json()
 
 
+def verdicts(rows: list[dict]) -> dict:
+    """Aggregate verdict numbers only: safe to show for the holdout split."""
+    forbidden = [r for r in rows if not r["expected_compliant"]]
+    allowed = [r for r in rows if r["expected_compliant"]]
+    return {
+        "questions": len(rows),
+        "verdict_accuracy": round(sum(r["correct_verdict"] for r in rows) / max(len(rows), 1), 3),
+        "forbidden_marked_compliant": sum(r.get("is_compliant") is True for r in forbidden),
+        "allowed_blocked": sum(r.get("is_compliant") is False for r in allowed),
+        "forbidden": len(forbidden),
+        "allowed": len(allowed),
+    }
+
+
 def per_agent_summary(rows: list[dict]) -> dict:
     """Tokens and time per agent, and why retries happened (in-process runs only)."""
     measured = [r for r in rows if r.get("tokens_by_step") is not None and not r["error"]]
@@ -73,12 +87,14 @@ def agent_setup(settings: Settings) -> dict:
 
 async def main_async(args) -> None:
     settings = Settings.from_env()
-    questions = load_questions(settings)[: args.limit or None]
+    questions = load_questions(settings, intent_cases=args.intent_cases)[: args.limit or None]
     pipeline = None if args.url else build_pipeline(settings, exclude_exact_examples=not args.include_exact)
     virtuoso = VirtuosoClient(settings.virtuoso_endpoint, timeout=args.execute_timeout) if args.execute else None
-    rows = []
-    async with httpx.AsyncClient(timeout=120) as client:
-        for item in questions:
+    # Latency includes queueing when more than one question is in flight; compare runs at equal concurrency.
+    semaphore = asyncio.Semaphore(max(1, args.concurrency))
+
+    async def answer_one(client: httpx.AsyncClient, item: dict) -> dict:
+        async with semaphore:
             started = time.perf_counter()
             try:
                 answer = await (ask_over_http(client, args.url, item["question"]) if args.url
@@ -86,26 +102,32 @@ async def main_async(args) -> None:
                 error = None
             except Exception as exc:  # report and keep going
                 answer, error = {}, str(exc)[:200]
-            latency = (time.perf_counter() - started) * 1000
-            row = {**item, "latency_ms": round(latency, 1), "error": error, **answer}
-            row["correct_verdict"] = answer.get("is_compliant") == item["expected_compliant"]
-            if virtuoso and answer.get("is_compliant"):
-                try:
-                    result = await virtuoso.select(answer["sparql_query"])
-                    row.update(executed_rows=len(result.rows), execution_ms=round(result.elapsed_ms, 1))
-                except Exception as exc:
-                    row["execution_error"] = str(exc)[:200]
-            rows.append(row)
-            mark = "ok " if row["correct_verdict"] else "XX "
-            print(f"{mark}{item['id']:12} expected={item['expected_compliant']!s:5} got={answer.get('is_compliant')!s:5} "
-                  f"{latency:7.0f} ms  {item['question'][:70]}")
+            row = {**item, "latency_ms": round((time.perf_counter() - started) * 1000, 1), "error": error, **answer}
+        row["correct_verdict"] = answer.get("is_compliant") == item["expected_compliant"]
+        return row
+
+    async with httpx.AsyncClient(timeout=120) as client:
+        rows = list(await asyncio.gather(*(answer_one(client, item) for item in questions)))
+    for row in rows:  # one at a time, so execution times are comparable
+        if virtuoso and row.get("is_compliant"):
+            try:
+                result = await virtuoso.select(row["sparql_query"])
+                row.update(executed_rows=len(result.rows), execution_ms=round(result.elapsed_ms, 1))
+            except Exception as exc:
+                row["execution_error"] = str(exc)[:200]
+        if row.get("split") == "holdout":
+            continue  # the blind exam: aggregate numbers only
+        mark = "ok " if row["correct_verdict"] else "XX "
+        print(f"{mark}{row['id']:12} expected={row['expected_compliant']!s:5} got={row.get('is_compliant')!s:5} "
+              f"{row['latency_ms']:7.0f} ms  {row['question'][:70]}")
 
     latencies = [r["latency_ms"] for r in rows if not r["error"]]
+    visible = [r for r in rows if r.get("split") != "holdout"]  # holdout ids never appear in lists
     summary = {
         "questions": len(rows),
         "verdict_accuracy": round(sum(r["correct_verdict"] for r in rows) / max(len(rows), 1), 3),
-        "said_compliant_but_forbidden": [r["id"] for r in rows if r.get("is_compliant") is True and not r["expected_compliant"]],
-        "blocked_but_allowed": [r["id"] for r in rows if r.get("is_compliant") is False and r["expected_compliant"]],
+        "said_compliant_but_forbidden": [r["id"] for r in visible if r.get("is_compliant") is True and not r["expected_compliant"]],
+        "blocked_but_allowed": [r["id"] for r in visible if r.get("is_compliant") is False and r["expected_compliant"]],
         "errors": [r["id"] for r in rows if r["error"]],
         "latency_ms_p50": round(statistics.median(latencies), 1) if latencies else None,
         "latency_ms_p95": round(percentile(latencies, 0.95), 1) if latencies else None,
@@ -114,6 +136,9 @@ async def main_async(args) -> None:
         # Over --url the remote server's configuration is unknown, so it is not reported.
         **({} if args.url else agent_setup(settings)),
         "per_agent": per_agent_summary(rows),
+        "concurrency": args.concurrency,
+        "by_split": {split: verdicts([r for r in rows if r.get("split", "dev") == split])
+                     for split in ("dev", "holdout") if any(r.get("split", "dev") == split for r in rows)},
     }
     if virtuoso:
         executed = [r for r in rows if r.get("is_compliant")]
@@ -133,6 +158,9 @@ def main() -> None:
     parser.add_argument("--execute", action="store_true", help="run compliant queries on VIRTUOSO_ENDPOINT")
     parser.add_argument("--execute-timeout", type=float, default=120.0)
     parser.add_argument("--include-exact", action="store_true", help="let official questions see their own example")
+    parser.add_argument("--intent-cases", action="store_true",
+                        help="also run eval/intent_questions.jsonl (198 labeled questions, holdout reported apart)")
+    parser.add_argument("--concurrency", type=int, default=1, help="questions in flight at once (default 1)")
     parser.add_argument("--limit", type=int, default=0)
     asyncio.run(main_async(parser.parse_args()))
 
