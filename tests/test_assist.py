@@ -1,10 +1,13 @@
+import pytest
 from fastapi.testclient import TestClient
 
-from conftest import load_examples
+from conftest import DATA_DIR, load_examples
 from nl2sparql.api import create_app
-from nl2sparql.assist import clarify
+from nl2sparql.assist import clarify, follow_ups, single_count
+from nl2sparql.context.schema import SchemaCards
 from nl2sparql.context.terminology import TerminologyIndex
 from nl2sparql.models import CodeEntry
+from nl2sparql.virtuoso import SelectResult
 from test_pipeline_and_api import ScriptedQueryAgent, pipeline_with, settings
 
 EXAMPLES = {e["id"]: e for e in load_examples()}
@@ -85,3 +88,89 @@ def test_demo_clarify_endpoint():
 def test_the_judged_endpoint_is_unchanged():
     body = demo_client(EXAMPLES["spec-01"]["sparql"]).post("/nl-to-sparql", json={"text": "How many patients have diabetes?"}).json()
     assert set(body) == {"sparql_query", "tokens_consumed", "is_compliant"}
+
+
+SCHEMA = SchemaCards.load(DATA_DIR / "schema_cards.json")
+
+
+def labels(found):
+    return [follow_up.label for follow_up in found]
+
+
+def test_follow_ups_for_a_single_count_above_zero():
+    found = follow_ups("How many patients have cholera?", [{"n": "767"}], SCHEMA)
+    assert labels(found) == ["By sex", "By age group", "By year", "Only since 2020", "By insurance type"]
+    by_sex = found[0]
+    assert by_sex.question == "How many patients have cholera, split by sex (male, female, indeterminate)?"
+    assert by_sex.intro == "The patients having cholera, split by sex, are:"
+    assert found[3].intro is None  # a filter: its answer is one number
+
+
+def test_no_follow_ups_for_zero_one_empty_or_split_answers():
+    assert follow_ups("How many patients have cholera?", [{"n": "0"}], SCHEMA) == []
+    assert follow_ups("How many patients have cholera?", [{"n": "1"}], SCHEMA) == []  # would describe one patient
+    assert follow_ups("How many patients have cholera?", [{"n": "2"}], SCHEMA) != []
+    assert follow_ups("How many patients have cholera?", [], SCHEMA) == []
+    assert follow_ups("Cholera by sex?", [{"sex": "male", "n": "3"}, {"sex": "female", "n": "2"}], SCHEMA) == []
+    assert single_count([{"n": "1,024"}]) == 1024 and single_count([{"sex": "male", "n": "3"}]) is None
+
+
+def test_follow_ups_skip_what_the_question_already_has():
+    assert labels(follow_ups("How many men have cholera?", [{"n": "5"}], SCHEMA)) == [
+        "By age group", "By year", "Only since 2020", "By insurance type"]
+    assert labels(follow_ups("How many patients had cholera since 2021?", [{"n": "5"}], SCHEMA)) == [
+        "By sex", "By age group", "By insurance type"]
+
+
+def test_follow_ups_only_when_the_data_has_the_information():
+    classes = {name: card for name, card in SCHEMA.classes.items() if name not in ("AdministrativeSex", "InsuranceStatus")}
+    without = SchemaCards(classes, list(SCHEMA.schema_terms))
+    assert labels(follow_ups("How many patients have cholera?", [{"n": "767"}], without)) == [
+        "By age group", "By year", "Only since 2020"]
+
+
+def test_other_wordings_get_a_neutral_sentence():
+    found = follow_ups("What is the average age of cholera patients?", [{"avg": "54"}], SCHEMA)
+    assert found[0].intro == 'Split by sex, the answer to "What is the average age of cholera patients" is:'
+
+
+class FakeVirtuoso:
+    """Stands in for the demo's optional database check, so tests never depend on a local Virtuoso."""
+    rows: list[dict] | None = None  # None: the database is unreachable
+
+    def __init__(self, endpoint):
+        pass
+
+    async def select(self, query):
+        if FakeVirtuoso.rows is None:
+            raise ConnectionError("no database")
+        return SelectResult(list(FakeVirtuoso.rows[0]) if FakeVirtuoso.rows else [], FakeVirtuoso.rows, 1.0)
+
+
+@pytest.fixture
+def database(monkeypatch):
+    monkeypatch.setattr("nl2sparql.api.VirtuosoClient", FakeVirtuoso)
+    FakeVirtuoso.rows = None
+    return FakeVirtuoso
+
+
+def test_demo_answers_carry_follow_ups_after_a_result(database):
+    question = {"text": "How many patients have cholera?"}
+    database.rows = [{"countResult": "767"}]
+    found = demo_client(EXAMPLES["spec-01"]["sparql"]).post("/demo/ask", json=question).json()
+    assert found["follow_ups"][0] == {
+        "label": "By sex",
+        "question": "How many patients have cholera, split by sex (male, female, indeterminate)?",
+        "intro": "The patients having cholera, split by sex, are:",
+    }
+    database.rows = [{"countResult": "0"}]
+    assert demo_client(EXAMPLES["spec-01"]["sparql"]).post("/demo/ask", json=question).json()["follow_ups"] == []
+    database.rows = None  # no database: no result, so nothing to break down
+    assert demo_client(EXAMPLES["spec-01"]["sparql"]).post("/demo/ask", json=question).json()["follow_ups"] == []
+
+
+def test_blocked_answers_have_no_follow_ups(database):
+    database.rows = [{"countResult": "767"}]
+    blocked = demo_client(EXAMPLES["official-15"]["sparql"]).post(
+        "/demo/ask", json={"text": "How many patients have cholera, and which ones are they?"}).json()
+    assert not blocked["is_compliant"] and blocked["follow_ups"] == []
