@@ -10,7 +10,7 @@ import json
 import re
 from pathlib import Path
 
-from nl2sparql.context.bm25 import fold
+from nl2sparql.context.bm25 import fold, tokenize
 
 CAMEL_RE = re.compile(r"[A-Z]+(?=[A-Z][a-z])|[A-Z]?[a-z]+|[A-Z]+|\d+")
 SPHN_TERM_RE = re.compile(r"sphn:([A-Za-z]+)")
@@ -33,11 +33,41 @@ class SchemaCards:
         path = Path(path)
         if not path.exists():
             return cls({}, [])
-        payload = json.loads(path.read_text(encoding="utf-8"))
-        value_sets = {}
-        if value_sets_path is not None and Path(value_sets_path).exists():
-            value_sets = json.loads(Path(value_sets_path).read_text(encoding="utf-8")).get("classes", {})
-        return cls(payload.get("classes", {}), payload.get("schema_terms", []), value_sets)
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as error:
+            raise ValueError(f"Invalid schema cards file {path}: {error}") from error
+        if not isinstance(payload, dict):
+            raise ValueError(f"Invalid schema cards file {path}: root must be a JSON object")
+        for field in ("classes", "schema_terms"):
+            if field not in payload:
+                raise ValueError(f"Invalid schema cards file {path}: missing required field {field!r}")
+        classes, schema_terms = payload.get("classes", {}), payload.get("schema_terms", [])
+        if not isinstance(classes, dict):
+            raise ValueError(f"Invalid schema cards file {path}: 'classes' must be an object")
+        if not isinstance(schema_terms, list) or any(not isinstance(term, str) for term in schema_terms):
+            raise ValueError(f"Invalid schema cards file {path}: 'schema_terms' must be a list of strings")
+        for name, card in classes.items():
+            if not isinstance(name, str) or not isinstance(card, dict):
+                raise ValueError(f"Invalid schema cards file {path}: each class must map a string name to an object")
+            if not isinstance(card.get("instances"), int) or isinstance(card.get("instances"), bool):
+                raise ValueError(f"Invalid schema cards file {path}: class {name!r} needs integer 'instances'")
+            if not isinstance(card.get("patients"), int) or isinstance(card.get("patients"), bool):
+                raise ValueError(f"Invalid schema cards file {path}: class {name!r} needs integer 'patients'")
+            properties = card.get("properties")
+            if not isinstance(properties, dict):
+                raise ValueError(f"Invalid schema cards file {path}: class {name!r} needs object 'properties'")
+            for prop, info in properties.items():
+                if not isinstance(prop, str) or not isinstance(info, dict):
+                    raise ValueError(f"Invalid schema cards file {path}: properties must map string names to objects")
+                if "kind" in info and not isinstance(info["kind"], str):
+                    raise ValueError(f"Invalid schema cards file {path}: property {prop!r} has invalid 'kind'")
+                if "count" in info and (not isinstance(info["count"], int) or isinstance(info["count"], bool)):
+                    raise ValueError(f"Invalid schema cards file {path}: property {prop!r} has invalid 'count'")
+                for field in ("target", "datatype"):
+                    if field in info and not isinstance(info[field], str):
+                        raise ValueError(f"Invalid schema cards file {path}: property {prop!r} has invalid {field!r}")
+        return cls(classes, schema_terms, _load_value_sets(value_sets_path))
 
     @property
     def empty(self) -> bool:
@@ -48,8 +78,13 @@ class SchemaCards:
         return self.empty or term in self.data_terms
 
     def closest(self, term: str) -> str | None:
-        matches = difflib.get_close_matches(term, sorted(self.data_terms), n=1, cutoff=0.6)
-        return matches[0] if matches else None
+        scored = [
+            (difflib.SequenceMatcher(None, term, candidate).ratio(), candidate)
+            for candidate in self.data_terms
+        ]
+        matches = [(score, candidate) for score, candidate in scored if score > 0.6]
+        # Match get_close_matches' existing tie choice for the sorted candidate set.
+        return max(matches, key=lambda item: (item[0], item[1]))[1] if matches else None
 
     def render(self, name: str) -> str:
         card = self.classes[name]
@@ -71,7 +106,7 @@ class SchemaCards:
     def cards_for(self, text: str, k: int = 6, examples_sparql: str = "") -> list[str]:
         """Cards for the classes the question names (as words or as sphn:Name) first, then the classes
         the retrieved examples use."""
-        if self.empty:
+        if k <= 0 or self.empty or not tokenize(text):
             return []
         folded = fold(text)
         named = {term for term in SPHN_TERM_RE.findall(text) if term in self.classes}
@@ -86,6 +121,20 @@ class SchemaCards:
             score = (1 + hits / len(parts) if in_question else 0) + (2 if name in named else 0) \
                 + (0.5 if name in used_by_examples else 0)
             if score > 0:
-                scored.append((score, hits, name))  # ties: the class matching more words wins
-        scored.sort(reverse=True)
+                scored.append((score, hits, name))
+        scored.sort(key=lambda item: (-item[0], -item[1], item[2]))  # ties: more words, then name
         return [self.render(name) for _, _, name in scored[:k]]
+
+
+def _load_value_sets(path: str | Path | None) -> dict:
+    """Coded values per class property (assets/value_sets.json); empty when the file is absent."""
+    if path is None or not Path(path).exists():
+        return {}
+    try:
+        payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise ValueError(f"Invalid value sets file {path}: {error}") from error
+    classes = payload.get("classes") if isinstance(payload, dict) else None
+    if not isinstance(classes, dict):
+        raise ValueError(f"Invalid value sets file {path}: 'classes' must be an object")
+    return classes

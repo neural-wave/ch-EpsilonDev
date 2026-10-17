@@ -36,6 +36,7 @@ This README is the single source of truth for the team. Read it once end to end 
 **Context.** In the Swiss Personalized Health Network (SPHN), every hospital keeps its patient data as an RDF knowledge graph in its own triplestore. Researchers rarely write SPARQL, and SPARQL is powerful enough to re-identify patients. Only pre-approved query shapes should ever reach a hospital database.
 
 **What we build.** Two components behind one API:
+
 1. a **translator**: natural-language request → SPARQL query;
 2. a **compliance checker**: does that query respect the privacy rules?
 
@@ -71,11 +72,13 @@ POST /nl-to-sparql        {"text": "How many patients have ... ?"}
 | Minor | Tokens per request, smaller models preferred, RAM usage |
 
 **Hard constraints.**
+
 - Every tool and **every model** must have an open-source license. The organizers encourage Apertus. No Claude, no GPT inside the system.
 - Installs with `pip install -r requirements.txt` and works out of the box: the jury will not debug.
 - **The repo becomes public after the event.** Restricted terminologies (SNOMED CT, ICD-10-GM, CHOP, LOINC, UCUM), anything derived from them, patient data and secrets must never be committed.
 
 **Source material** (not in this repo, ask Santiago):
+
 - The challenge brief (PDF).
 - The organizers' release `hackathon-virtuoso-release.zip`: Virtuoso scripts, ontologies, SHACL shapes, the 15 example queries, the API spec and the rules.
 - The 100,000-patient dataset `gen_mock_data-1_1000001-1100000.tar.zst`.
@@ -156,6 +159,7 @@ A visual version with module letters and a "who works where" panel lives on the 
 | OK | broken | The query agent made a mistake on an allowed request | 1 retry naming the broken rule; still broken means non-compliant |
 
 `compliance_reason` is built from three parts:
+
 1. A fixed template per broken rule, naming the offending part of the query.
 2. The intent agent's reason.
 3. A rephrase suggestion: the intent agent's `suggested_rephrase`, or a fixed hint per rule.
@@ -214,6 +218,7 @@ nl2sparql/
 
 **Guides per topic:**
 - [docs/DATA.md](docs/DATA.md): how the patient graphs look, with examples. For everyone.
+- [docs/data-and-context/README.md](docs/data-and-context/README.md): context module checklist, split between local tests and real-graph validation.
 - [docs/GUARD.md](docs/GUARD.md): how the compliance guard works, its tools and its backlog. For module D.
 - [docs/LLM_AGENTS.md](docs/LLM_AGENTS.md): the two LLM agents, their configuration, how to measure them, how to change a prompt or a model, and their backlog. For module B.
 
@@ -292,16 +297,19 @@ All settings come from environment variables; `.env.example` lists them. Load th
 **Turn thinking off.** Qwen3.5 thinks by default. In our first test it spent its whole 600-token budget reasoning and returned nothing (7 s). With thinking off it answered in 1.2 s with 47 tokens. Always set `LLM_EXTRA_BODY='{"chat_template_kwargs": {"enable_thinking": false}}'`.
 
 **How to reach it.**
+
 - **SSH tunnel** (what the run machine uses): `ssh -N -p <port> -L 18000:127.0.0.1:18000 root@<host>`, then `LLM_BASE_URL=http://localhost:18000/v1` with no token. Santiago adds your SSH public key to the instance first.
 - **Public endpoint:** `http://<host>:<external port>/v1` with `LLM_API_KEY=<instance token>`. Ask Santiago for both. Never commit them.
 
 **Changing the model** is done on the instance by its owner. Per the instance's own guide (`/etc/vast-agents-guide.md`, which AI agents must read before acting on the instance):
+
 1. Set both `VLLM_MODEL` and `MODEL_NAME` in `/etc/environment`.
 2. Run `supervisorctl restart vllm model-ui`.
 
 vLLM listens on `127.0.0.1:18000`; Caddy in front adds token auth. Do not add `--api-key` to vLLM.
 
 **Candidates to compare later** (all Apache-2.0, not gated):
+
 - `Qwen/Qwen2.5-Coder-14B-Instruct-AWQ` or `-GPTQ-Int8`: stronger at code, fits in 32 GB when quantized.
 - `swiss-ai/Apertus-8B-Instruct-2509`: the model the organizers encourage, a good fit for the intent agent.
 - `Qwen/Qwen3-Coder-30B-A3B-Instruct`: needs a bigger GPU.
@@ -338,11 +346,13 @@ scripts/runbox.sh eval --execute --branch guard/my-fix     # eval with the LLM +
 ## 10. The knowledge base and the data files
 
 **How the data is organized in Virtuoso:**
+
 - **One patient = one named graph**, e.g. `http://example.org/graph/gen_mock_data-1_1012502`. Count patients with `COUNT(DISTINCT ?g)`. Exposing `?g` exposes the patient.
 - **The ontologies** (the SPHN schema plus ICD-10-GM, CHOP, SNOMED CT, LOINC, UCUM, ORDO, GENO, SO and OBI, 13.0M triples) are loaded into one graph, `https://biomedit.ch/rdf/sphn-resource/global`, which is also the RDFS inference rule set.
 - **A code is a node typed with a terminology class**: `?dx sphn:hasCode ?code . ?code a icd-10-gm:E11`. Codes in the data carry a year (`icd-10-gm/2022/A00.1`), so matching them needs `OPTION (inference "https://biomedit.ch/rdf/sphn-resource/global")` on that pattern.
 
 **The two databases:**
+
 - **Dev:** 10.8M patient triples. Ontologies load in about 4 minutes; patients in 14 s.
 - **Perf:** 611.7M patient triples. Loading took 79 minutes.
 - Setup is in [infra/virtuoso/README.md](infra/virtuoso/README.md). Always query over HTTP: the release's `query.sh` (isql) rejects some valid SPARQL.
@@ -392,6 +402,7 @@ These appear in `per_agent` in the summary and in `diagnostics` in each row. The
 | `llm`, Qwen3.5-9B | **90%** | **0** | 2.8 s / 16.6 s | ~3,000 |
 
 **Where the LLM run still fails:**
+
 - **Wrong verdicts:** #01 and #08 (the model wrote invalid SPARQL, even after the retry) and #07.
 - **Compliant queries executed on dev:** 9 of 13 return data, #06 and #09 return no rows, and #05 and #10 fail in Virtuoso.
 
@@ -452,11 +463,13 @@ Query performance is a major lever: even the organizers' own queries can take mi
 - Measure the intent agent's false alarms and its resistance to prompt injection.
 
 **C · Data and context**
+
 - Build the terminology index and add English names for ICD-10-GM and CHOP codes.
 - Better example retrieval, e.g. embeddings.
 - Write and validate more SPHN examples in the SIB `sparql-examples` format.
 
 **D · Guard and judge**
+
 - Encode the gray zones once the organizers answer.
 - Add judge style rules: inference on code patterns, `COUNT(DISTINCT ?g)`, pattern order.
 - Prevent Virtuoso-only errors without querying the database.
@@ -464,6 +477,7 @@ Query performance is a major lever: even the organizers' own queries can take mi
 - Add more trap tests.
 
 **E · Eval and demo**
+
 - Grow to 80+ labeled questions: paraphrases, prompt-injection attempts, gray zones.
 - Run eval questions in parallel.
 - Store reference results to check correctness.
@@ -475,6 +489,7 @@ Query performance is a major lever: even the organizers' own queries can take mi
 **Answered:** database-agnostic, execution optional, return the query of forbidden requests for judging (see [section 2](#2-what-the-jury-told-us)).
 
 **Still open** (most important first):
+
 1. How will they run our system: from the repo on their hardware (which one?), or by calling an endpoint we host? How do we keep GPU access during judging?
 2. Do they check that the query returns the *correct* result, or only the verdict and the timings?
 3. Only `SELECT`? The API spec and the rules disagree; we assume `SELECT` only.
