@@ -1,6 +1,9 @@
+from dataclasses import replace
+
 import pytest
 
 from conftest import DATA_DIR
+from nl2sparql import factory
 from nl2sparql.agents.prompts import INTENT_PROMPTS, QUERY_PROMPTS, intent_prompt, query_prompt
 from nl2sparql.config import Settings
 from nl2sparql.factory import build_pipeline
@@ -17,7 +20,7 @@ SHARED = {
 @pytest.fixture()
 def env(monkeypatch):
     for name in ("LLM_INTENT_MODEL", "LLM_INTENT_BASE_URL", "LLM_INTENT_API_KEY", "LLM_INTENT_EXTRA_BODY",
-                 "LLM_INTENT_MAX_TOKENS", "INTENT_PROMPT_VERSION", "QUERY_PROMPT_VERSION"):
+                 "LLM_INTENT_MAX_TOKENS", "INTENT_PROMPT_VERSION", "QUERY_PROMPT_VERSION", "CONTEXT_DEV_REFERENCES"):
         monkeypatch.delenv(name, raising=False)
     for name, value in SHARED.items():
         monkeypatch.setenv(name, value)
@@ -67,6 +70,39 @@ def test_context_sizes_come_from_the_environment(env):
     settings = Settings.from_env()
     pipeline = build_pipeline(Settings(**{**settings.__dict__, "data_dir": DATA_DIR, "log_path": None}))
     assert (pipeline.context_builder.k_examples, pipeline.context_builder.k_cards, pipeline.context_builder.k_codes) == (2, 4, 5)
+
+
+@pytest.mark.parametrize("value,expected", [
+    (None, False), ("", False), ("  ", False), ("true", True), ("1", True), ("YES", True),
+    ("false", False), ("0", False), ("no", False), ("off", False),
+])
+def test_dev_references_flag_comes_from_the_environment(env, value, expected):
+    if value is not None:
+        env.setenv("CONTEXT_DEV_REFERENCES", value)
+    assert Settings.from_env().context_dev_references is expected
+
+
+def test_a_blank_flag_keeps_its_default(env):
+    """An empty NAME= line in .env used to switch any flag on, even one that is off by default."""
+    for name in ("RETRY_WITH_PREVIOUS_QUERY", "QUERY_REORDER", "LLM_VERIFY_TLS", "RETURN_NONCOMPLIANT_QUERY"):
+        env.setenv(name, "")
+    settings = Settings.from_env()
+    assert (settings.retry_with_previous_query, settings.query_reorder, settings.llm_verify_tls,
+            settings.return_noncompliant_query) == (False, True, True, True)
+
+
+def test_dev_references_reach_the_example_bank_only_with_the_flag(env, tmp_path):
+    def bank_ids() -> list[str]:
+        settings = replace(Settings.from_env(), data_dir=DATA_DIR, log_path=None)
+        return [item.id for item in build_pipeline(settings).context_builder.examples.examples]
+
+    official_and_team = bank_ids()
+    assert len(official_and_team) == 19  # off by default
+    env.setenv("CONTEXT_DEV_REFERENCES", "true")
+    with_references = bank_ids()
+    assert with_references[:19] == official_and_team and len(with_references) == 64
+    env.setattr(factory, "DEV_REFERENCES_PATH", tmp_path / "missing.jsonl")  # a machine without eval/
+    assert bank_ids() == official_and_team
 
 
 def test_retry_budget_per_checker_comes_from_the_environment(env):

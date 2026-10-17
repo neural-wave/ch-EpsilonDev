@@ -404,3 +404,16 @@ def test_judge_ignores_terms_that_only_appear_inside_values(judge_schema_cards=N
     assert judge.check(listed).errors == []  # official-08 lists variant classes the data does not have
     used = "SELECT (COUNT(DISTINCT ?g) AS ?n) WHERE { GRAPH ?g { ?v a sphn:GenomicInversion } }"
     assert any("sphn:GenomicInversion does not occur" in error for error in judge.check(used).errors)
+
+
+def test_judge_asks_for_the_coded_concept_the_question_names():
+    from nl2sparql.context import TerminologyIndex
+    from nl2sparql.models import CodeEntry
+
+    index = TerminologyIndex([CodeEntry("https://biomedit.ch/rdf/sphn-resource/icd-10-gm/A00", "A00", "ICD-10-GM", ("Cholera", "Choléra"))])
+    judge = Judge(SchemaCards.load(DATA_DIR / "schema_cards.json"), index)
+    query = ("SELECT ?concept (COUNT(DISTINCT ?g) AS ?patients) WHERE { GRAPH ?g { ?r a sphn:AdministrativeSex ; "
+             "sphn:hasCode ?c . ?c a ?concept . } } GROUP BY ?concept")
+    assert judge.check(query).ok  # without the question, as before
+    errors = judge.check(query, "How many patients have cholera on a hospital bill, by sex?").errors
+    assert [error.split(",")[0] for error in errors] == ["The question asks about cholera (icd-10-gm:A00)"]

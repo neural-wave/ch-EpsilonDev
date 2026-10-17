@@ -29,7 +29,10 @@ def _json_object(name: str) -> dict | None:
 
 
 def _flag(name: str, default: bool) -> bool:
-    return os.environ.get(name, str(default)).strip().lower() not in ("0", "false", "no")
+    """True unless the value is 0, false, no or off. Unset or blank keeps the default, so an empty
+    NAME= line in .env never turns on a flag that is off by default (CONTEXT_DEV_REFERENCES)."""
+    value = os.environ.get(name, "").strip().lower()
+    return default if not value else value not in ("0", "false", "no", "off")
 
 
 @dataclass(frozen=True)
@@ -74,6 +77,9 @@ class Settings:
     context_examples: int = 3
     context_cards: int = 8  # the picker now follows one link from a named class; two more slots keep that from pushing out named classes
     context_codes: int = 5
+    # Also retrieve from the dev rows of eval/query_questions.jsonl (question + reference SPARQL). Off by
+    # default: dev questions then retrieve their neighbours' references, so only holdout numbers stay fair.
+    context_dev_references: bool = False
     # Pipeline.
     virtuoso_endpoint: str = "http://localhost:8890/sparql"
     max_input_chars: int = 2000
@@ -141,6 +147,7 @@ class Settings:
             context_examples=int(env.get("CONTEXT_EXAMPLES", cls.context_examples)),
             context_cards=int(env.get("CONTEXT_CARDS", cls.context_cards)),
             context_codes=int(env.get("CONTEXT_CODES", cls.context_codes)),
+            context_dev_references=_flag("CONTEXT_DEV_REFERENCES", False),
             virtuoso_endpoint=env.get("VIRTUOSO_ENDPOINT", cls.virtuoso_endpoint),
             max_input_chars=int(env.get("MAX_INPUT_CHARS", cls.max_input_chars)),
             max_retries=int(env.get("MAX_RETRIES", cls.max_retries)),

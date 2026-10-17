@@ -187,14 +187,14 @@ class Pipeline:
         started = time.perf_counter()
         step = "query" if feedback is None else "query_retry"
         sparql, cut_off = await self._ask_query_agent(text, context, feedback, step, run)
-        verdict = await asyncio.to_thread(self.judge.check, sparql)
+        verdict = await asyncio.to_thread(self.judge.check, sparql, text)
         run.note_repairs(verdict.repairs)
         # The first generation runs alongside the intent agent, but a forbidden request is never retried.
         if verdict.errors and run.can_retry("judge") and not (await intent_task).flagged and run.take_retry("judge"):
             run.note_rejected("judge_errors_first_try", verdict.errors, verdict.sparql)
             retry_feedback = self._feedback(" ".join(([CUT_OFF_FEEDBACK] if cut_off else []) + verdict.errors), verdict.sparql)
             retry_sparql, _ = await self._ask_query_agent(text, context, retry_feedback, "query_retry", run)
-            retry_verdict = await asyncio.to_thread(self.judge.check, retry_sparql)
+            retry_verdict = await asyncio.to_thread(self.judge.check, retry_sparql, text)
             run.note_repairs(retry_verdict.repairs)
             # A retry that is still not clean is a fresh query, not a repaired one: keep the less bad attempt.
             if retry_verdict.errors and severity(verdict) < severity(retry_verdict):

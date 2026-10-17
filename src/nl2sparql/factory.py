@@ -3,12 +3,16 @@ from __future__ import annotations
 
 from nl2sparql.agents import ExampleQueryAgent, HeuristicIntentAgent, LLMIntentAgent, LLMQueryAgent
 from nl2sparql.agents.prompts import intent_prompt, query_prompt
-from nl2sparql.config import AgentSettings, Settings
+from nl2sparql.config import REPO_ROOT, AgentSettings, Settings
 from nl2sparql.context import ContextBuilder, ExampleBank, SchemaCards, TerminologyIndex
 from nl2sparql.guard import ComplianceGuard, PropertyKinds
 from nl2sparql.judge import Judge
 from nl2sparql.llm import LLMClient
 from nl2sparql.orchestrator import Pipeline
+
+# The dev rows of the query eval (question + reference SPARQL), retrieval examples with
+# CONTEXT_DEV_REFERENCES=true. A machine without eval/ has no such file, and the flag does nothing there.
+DEV_REFERENCES_PATH = REPO_ROOT / "eval" / "query_questions.jsonl"
 
 
 def llm_client(agent: AgentSettings) -> LLMClient:
@@ -21,7 +25,7 @@ def build_pipeline(settings: Settings, exclude_exact_examples: bool = False) -> 
     examples_path = settings.data_dir / "examples.jsonl"
     terminology_path = settings.assets_dir / "terminology_index.jsonl"
     try:
-        examples = ExampleBank.load(examples_path)
+        examples = ExampleBank.load(examples_path, DEV_REFERENCES_PATH if settings.context_dev_references else None)
     except (OSError, TypeError, ValueError) as error:
         raise ValueError(f"Could not load context file {examples_path}: {error}") from error
     try:
@@ -53,7 +57,7 @@ def build_pipeline(settings: Settings, exclude_exact_examples: bool = False) -> 
         intent_agent=intent_agent,
         query_agent=query_agent,
         context_builder=context_builder,
-        judge=Judge(schema),
+        judge=Judge(schema, terminology),
         guard=ComplianceGuard(property_kinds),
         max_input_chars=settings.max_input_chars,
         max_retries=settings.max_retries,

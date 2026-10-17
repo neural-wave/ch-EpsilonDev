@@ -6,7 +6,8 @@ exactly one meaning (judge_checks.syntax.normalize) and a typed value-set entry.
 syntax, with hints that name the real error when rdflib still rejects the text (rdflib's own
 message points at the wrong token); SPHN terms against the data snapshot; the inference option on
 code patterns; distinct patient counts; and the three families in judge_checks/: variable scope,
-semantics and schema. Every error becomes the retry feedback, so a check that fires on a correct
+semantics and schema; given the question, also that the query restricts to the coded concepts the
+question names (judge_checks/coverage.py). Every error becomes the retry feedback, so a check that fires on a correct
 query costs the request its retry: each one was measured at zero hits on the reference queries.
 The repairs are reported so the pipeline can log them.
 
@@ -22,7 +23,9 @@ from rdflib.namespace import RDF
 from rdflib.plugins.sparql.parserutils import CompValue
 
 from nl2sparql.context.schema import SchemaCards
+from nl2sparql.context.terminology import TerminologyIndex
 from nl2sparql.judge_checks import schema as schema_checks, scope as scope_checks, semantics as semantic_checks
+from nl2sparql.judge_checks.coverage import check_question_coverage
 from nl2sparql.judge_checks.syntax import diagnose, normalize
 from nl2sparql.models import JudgeResult
 from nl2sparql.sparql.parse import parse_sparql
@@ -58,10 +61,11 @@ def severity(result: JudgeResult) -> tuple[int, int]:
 
 
 class Judge:
-    def __init__(self, schema: SchemaCards):
+    def __init__(self, schema: SchemaCards, terminology: TerminologyIndex | None = None):
         self.schema = schema
+        self.terminology = terminology  # the codes a question names, for judge_checks/coverage.py
 
-    def check(self, sparql: str) -> JudgeResult:
+    def check(self, sparql: str, question: str | None = None) -> JudgeResult:
         repairs: list[str] = []
         text = fix_standard_prefixes(sparql.strip() + "\n")
         for rewrite in semantic_checks.REWRITES:
@@ -111,6 +115,8 @@ class Judge:
             errors += check(parsed, fixed, self.schema)
         for check in SEMANTIC_CHECKS:
             errors += check(parsed, fixed)
+        if question:  # the query must restrict to the coded concepts the question names
+            errors = check_question_coverage(question, parsed, fixed, self.schema, self.terminology) + errors
         return JudgeResult(fixed, _first_unique(errors), repairs)
 
 
