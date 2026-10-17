@@ -8,17 +8,23 @@ from pathlib import Path
 from nl2sparql.config import REPO_ROOT, Settings
 
 
-def load_questions(settings: Settings) -> list[dict]:
-    """Official examples (data/examples.jsonl) plus team questions (eval/questions.jsonl)."""
+def load_questions(settings: Settings, intent_cases: bool = False) -> list[dict]:
+    """Official examples (data/examples.jsonl) plus team questions (eval/questions.jsonl).
+
+    intent_cases adds eval/intent_questions.jsonl: extra cases for the intent agent alone
+    (paraphrases, traps, prompt injection, allowed look-alikes, gray zones). They have no reference SPARQL.
+    """
     questions = []
     for line in (settings.data_dir / "examples.jsonl").read_text(encoding="utf-8").splitlines():
         if line.strip():
             row = json.loads(line)
             questions.append({"id": row["id"], "question": row["question"], "expected_compliant": row["compliant"],
-                              "category": "official", "reference_sparql": row["sparql"]})
-    for line in (REPO_ROOT / "eval" / "questions.jsonl").read_text(encoding="utf-8").splitlines():
-        if line.strip():
-            questions.append(json.loads(line))
+                              "category": "official", "group": "official", "reference_sparql": row["sparql"]})
+    files = [("questions.jsonl", "team")] + ([("intent_questions.jsonl", "intent")] if intent_cases else [])
+    for name, default_group in files:
+        for line in (REPO_ROOT / "eval" / name).read_text(encoding="utf-8").splitlines():
+            if line.strip():
+                questions.append({"group": default_group, **json.loads(line)})
     return questions
 
 

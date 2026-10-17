@@ -351,14 +351,14 @@ const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 function intentRows(rows) {
   rows = byProblem(rows, r => ({missed: 0, false_alarm: 1}[r.outcome] ?? (r.error || r.valid_json === false || r.cut_off ? 2 : 3)));
-  return `<div class="scroll"><table class="grid"><thead><tr><th>Id</th><th>Outcome</th><th>Flags raised</th><th>Right flag</th>
+  return `<div class="scroll"><table class="grid"><thead><tr><th>Id</th><th>Group</th><th>Outcome</th><th>Flags raised</th><th>Right flag</th>
     <th>Tokens</th><th>Time</th><th>Problems</th><th>Question</th></tr></thead><tbody>
-    ${rows.map(r => `<tr><td>${esc(r.id)}</td><td class="${OUTCOME_CLASS[r.outcome] || ""}">${esc(r.outcome)}</td>
+    ${rows.map(r => `<tr><td>${esc(r.id)}</td><td>${num(r.group)}</td><td class="${OUTCOME_CLASS[r.outcome] || ""}">${esc(r.outcome)}</td>
       <td>${(r.raised || []).map(code).join(" ") || dash}</td>
       <td>${r.right_flag == null ? dash : r.right_flag ? "<span class='good'>yes</span>" : "<span class='bad'>no</span>"}</td>
       <td>${num(r.tokens)}</td><td>${msec(r.latency_ms)}</td>
       <td class="wrap">${lines([r.error && `error: ${r.error}`, r.valid_json === false && "invalid JSON", r.cut_off && "cut off"])}</td>
-      <td class="wrap">${esc(r.question)}</td></tr>`).join("")}
+      <td class="wrap">${esc(r.question)}${r.note ? `<br><span class="muted">${esc(r.note)}</span>` : ""}</td></tr>`).join("")}
   </tbody></table></div>`;
 }
 
