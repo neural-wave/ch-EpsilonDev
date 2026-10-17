@@ -4,6 +4,8 @@
 
 A researcher asks a question in English. We translate it into a SPARQL query over SPHN clinical data and decide whether that query respects the privacy rules. Everything sits behind one endpoint, `POST /nl-to-sparql`, uses only open-source models, and never touches a database at request time.
 
+> **Santiago: demo/results handoff (17 October 2026).** See [what Adrika implemented and what remains to configure and verify](docs/features/README.md), including reproducibility, privacy, comparisons, exports, sharing, exact run commands, and test evidence. Live model/dev-database checks are still pending.
+
 This README is the single source of truth for the team. Read it once end to end before you start, then use the contents to jump around. If you work with an AI coding assistant, it also reads [AGENTS.md](AGENTS.md).
 
 *Last updated: Saturday 17 October 2026, 05:15, after merging modules A, B, C and D. Deadline: **Sunday 18 October, 11:00**.*

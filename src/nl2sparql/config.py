@@ -28,6 +28,22 @@ def _json_object(name: str) -> dict | None:
     return parsed
 
 
+def _minimum_group_size(value: str | None) -> int | None:
+    if value is None or value.strip().lower() in ("", "disabled"):
+        return None
+    try:
+        threshold = int(value)
+    except ValueError:
+        raise ValueError("DEMO_MIN_GROUP_SIZE must be a positive integer or disabled.") from None
+    if threshold < 1:
+        raise ValueError("DEMO_MIN_GROUP_SIZE must be a positive integer or disabled.")
+    return threshold
+
+
+def _optional_text(name: str) -> str | None:
+    return os.environ.get(name, "").strip() or None
+
+
 def _flag(name: str, default: bool) -> bool:
     return os.environ.get(name, str(default)).strip().lower() not in ("0", "false", "no")
 
@@ -49,6 +65,13 @@ class AgentSettings:
 
 @dataclass(frozen=True)
 class Settings:
+    demo_public_mode: bool = False
+    demo_min_group_size: int | None = None
+    demo_dataset_name: str | None = None
+    demo_dataset_version: str | None = None
+    demo_dataset_description: str | None = None
+    demo_share_ttl_seconds: int = 7 * 24 * 3600
+    demo_share_db_path: Path = field(default=REPO_ROOT / "logs" / "shared_results.sqlite3")
     backend: str = "stub"  # "stub" or "llm"
     # Shared LLM settings: both agents use them unless overridden below.
     llm_base_url: str = "http://localhost:8000/v1"
@@ -121,6 +144,13 @@ class Settings:
     def from_env(cls) -> "Settings":
         env = os.environ
         return cls(
+            demo_public_mode=_flag("DEMO_PUBLIC_MODE", False),
+            demo_dataset_name=_optional_text("DEMO_DATASET_NAME"),
+            demo_dataset_version=_optional_text("DEMO_DATASET_VERSION"),
+            demo_dataset_description=_optional_text("DEMO_DATASET_DESCRIPTION"),
+            demo_share_ttl_seconds=int(env.get("DEMO_SHARE_TTL_SECONDS", 7 * 24 * 3600)),
+            demo_share_db_path=_path("DEMO_SHARE_DB_PATH", REPO_ROOT / "logs" / "shared_results.sqlite3"),
+            demo_min_group_size=_minimum_group_size(env.get("DEMO_MIN_GROUP_SIZE")),
             backend=env.get("NL2SPARQL_BACKEND", "stub").strip().lower(),
             llm_base_url=env.get("LLM_BASE_URL", cls.llm_base_url),
             llm_api_key=env.get("LLM_API_KEY", cls.llm_api_key),
