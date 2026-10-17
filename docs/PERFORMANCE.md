@@ -33,7 +33,8 @@ The jury scores three things: **time per request**, **verdict correctness** agai
 | 17 Oct 05:00 | **Merged system**: intent v4, query v2, cap 900, terminology index + value sets | 90.3%, 0 leaks | 91.3% (1 leak of 88, 12 of 61 allowed blocked) | **83.7%** (2 leaks of 29, 6 of 20 allowed blocked) | 3.1 s / 19.2 s (one at a time); 4.0 s / 14.5 s (4 at a time) | ~3,600 |
 | 17 Oct 13:20 | **intent v4, query v4, cap 1,500**, index + value sets, context 3/6/5 | | 94.0% (1 leak of 88, 8 of 61 allowed blocked) | **91.8%** (2 leaks of 29, 2 of 20 allowed blocked) | 3.8 s / 13.7 s (4 at a time) | ~3,800 |
 | 17 Oct 13:31 | as above, **2 examples instead of 3** (rejected) | | query eval only: queries that run 77% → 60%, allowed blocked 5 → 13, exact 3 → 1, query tokens 3,369 → 3,908 (more guard retries) | | | |
-| next | query prompt v5: speed rules from the 100,000-patient timing | | | | | |
+| 17 Oct 13:39 | query **v5** (v4 + speed rules incl. `DEFINE sql:select-option "order"`), rejected | | 93.3% (1 leak, 9 allowed blocked) | **81.6%** (2 leaks, 7 of 20 allowed blocked) | 3.7 s / 19.7 s | ~4,090 |
+| next | query v6: v4 + "inference only on concrete codes" + "only the patterns the question needs", without the DEFINE | | | | | |
 
 ### Intent agent alone
 
@@ -57,6 +58,7 @@ The jury scores three things: **time per request**, **verdict correctness** agai
 | 17 Oct | v3 | Qwen3-Coder-30B-A3B (4-bit) | index + value sets | 900 | 3 | 60% (53%) | 60% | 7 | 3,164 | **3.6 s / 7.5 s** |
 | 17 Oct | v2 | Qwen3.5-9B, merged system | index + value sets | 900 | 2 | 64% (80%) | 57% | 10 | 3,143 | 7.0 s / 19.5 s |
 | 17 Oct 13:00 | **v4** (default) | Qwen3.5-9B, merged system | index + value sets | **1,500** | **3** | **77% (87%)** | 57% | **5** | 3,369 | 6.4 s / 18.3 s |
+| 17 Oct 13:34 | v5 (rejected) | Qwen3.5-9B, merged system | index + value sets | 1,500 | 4 (1 holdout) | 66% (80%) | 72% | 5 | 3,372 | 6.2 s / 11.5 s |
 
 Reading: the context (codes) made more queries run; the prompt v4 halved the blocked allowed questions; a bigger model did not change the exact-result rate, only the speed. On the 198-question verdict set, v4 with the 1,500 cap took the holdout from 83.7% to 91.8%: 7 dev questions fixed, 3 broken (#08 unparseable, #10 and one more grouped by a record node), retries 33 → 24, cut-off answers 10 → 4. Holdout exact results are 0 in every run: the hard questions are not solved by any configuration yet.
 
@@ -66,6 +68,8 @@ Reading: the context (codes) made more queries run; the prompt v4 halved the blo
 |---|---|---|
 | 17 Oct, pilot | 5 generated (v2) vs their references, 60 s server limit | References #04, #05, #06 pass 60 s (they took 28 min to over 30 min on this machine). Generated #07 passes 60 s where the reference takes 1.2 s. #04, #06, #09 are fast but return a wrong or empty result. |
 | 17 Oct 13:30 | 36 v4 queries that ran on dev, 1 warm-up + 2 timed runs, 60 s server limit | 22 pairs completed on both sides: median generated 0.3 s vs reference 0.5 s, ratio 0.9. 11 reference queries pass 60 s (#01, #02, #04, #05, #06, #10, q-014, q-017, q-025, q-028, q-033); 6 generated pass 60 s, 4 of them where the reference also does. Generated slow where the reference is fast: q-018 and q-026 time out (reference 3.8 s and 0.5 s); spec-01 takes 1.4 s for a 0.01 s reference (×142) with the right result; #09, q-009, q-036 are ×3–4. 15 fast generated queries return a wrong or empty result on dev. |
+
+| 17 Oct 14:00 | 31 v5 queries that ran on dev, same protocol | Worse: 8 generated time-outs (v4: 6), including q-013, q-014, q-015, q-017 and q-020 which were fine with v4; spec-01 still 1.5 s. Forcing the join order with `DEFINE sql:select-option "order"` only helps when the written order is good, and the model does not order patterns reliably. |
 
 A fast query with a wrong result scores nothing: read this table together with the exact-result column above.
 
