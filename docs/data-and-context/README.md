@@ -26,7 +26,7 @@ The existing real-data integration path is offline: `scripts/profile_data.py` pr
 
 ### Local evidence
 
-**Verification state:** uncommitted working tree. The commit SHA will be recorded after the verified changes are committed.
+**Tested code commit:** `7aca015` (`Refine data and context retrieval`). The focused suite, full suite, and benchmark below were run on this code immediately before the commit. The follow-up commit only records this evidence in the guide.
 
 ```text
 PYTHONPATH=src .venv311/bin/python -m pytest -q tests/test_context.py
