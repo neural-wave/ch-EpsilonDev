@@ -28,8 +28,27 @@ def _json_object(name: str) -> dict | None:
     return parsed
 
 
+def _minimum_group_size(value: str | None) -> int | None:
+    if value is None or value.strip().lower() in ("", "disabled"):
+        return None
+    try:
+        threshold = int(value)
+    except ValueError:
+        raise ValueError("DEMO_MIN_GROUP_SIZE must be a positive integer or disabled.") from None
+    if threshold < 1:
+        raise ValueError("DEMO_MIN_GROUP_SIZE must be a positive integer or disabled.")
+    return threshold
+
+
+def _optional_text(name: str) -> str | None:
+    return os.environ.get(name, "").strip() or None
+
+
 def _flag(name: str, default: bool) -> bool:
-    return os.environ.get(name, str(default)).strip().lower() not in ("0", "false", "no")
+    """True unless the value is 0, false, no or off. Unset or blank keeps the default, so an empty
+    NAME= line in .env never turns on a flag that is off by default (CONTEXT_DEV_REFERENCES)."""
+    value = os.environ.get(name, "").strip().lower()
+    return default if not value else value not in ("0", "false", "no", "off")
 
 
 @dataclass(frozen=True)
@@ -49,6 +68,16 @@ class AgentSettings:
 
 @dataclass(frozen=True)
 class Settings:
+    demo_public_mode: bool = False
+    # The team console shows the analyst the generated query, the specific reason of a block, the suggested
+    # rephrase and the retry diagnostics. False (or the public mode) hides them in /demo/ask.
+    demo_show_details: bool = True
+    demo_min_group_size: int | None = None
+    demo_dataset_name: str | None = None
+    demo_dataset_version: str | None = None
+    demo_dataset_description: str | None = None
+    demo_share_ttl_seconds: int = 7 * 24 * 3600
+    demo_share_db_path: Path = field(default=REPO_ROOT / "logs" / "shared_results.sqlite3")
     backend: str = "stub"  # "stub" or "llm"
     # Shared LLM settings: both agents use them unless overridden below.
     llm_base_url: str = "http://localhost:8000/v1"
@@ -66,16 +95,25 @@ class Settings:
     # Per-agent generation limits and prompt versions.
     llm_intent_max_tokens: int = 200
     llm_query_max_tokens: int = 1500  # 900 cut off 6 of 198 answers on 2026-10-17; only used when needed
+    # Code pass after the query agent: typed code patterns first, join order locked (see sparql/order.py).
+    query_reorder: bool = True  # the restricted pass: measured safe on dev, one win on 100k patients (q-021 0.44 -> 0.06 s)
     intent_prompt_version: str = "v4"  # won the intent eval on 2026-10-17 (docs/LLM_AGENTS.md section 6)
     query_prompt_version: str = "v4"  # halves the blocked allowed requests of v2 (2026-10-17)
+    # Best-of-N first generation: the greedy answer plus N-1 sampled ones from a second request sent at the same
+    # time; the judge keeps the least bad (Pipeline._best_candidate). 1 = one greedy request, as before.
+    query_candidates: int = 1
+    query_candidate_temperature: float = 0.7  # sampling temperature of candidates 2..N
     # Context the query agent receives: similar examples, schema cards, code candidates.
     context_examples: int = 3
-    context_cards: int = 6
+    context_cards: int = 8  # the picker now follows one link from a named class; two more slots keep that from pushing out named classes
     context_codes: int = 5
+    # Also retrieve from the dev rows of eval/query_questions.jsonl (question + reference SPARQL). Off by
+    # default: dev questions then retrieve their neighbours' references, so only holdout numbers stay fair.
+    context_dev_references: bool = True  # holdout right numbers 7 -> 10 of 31, queries that run 81% -> 94% (17 Oct)
     # Pipeline.
     virtuoso_endpoint: str = "http://localhost:8890/sparql"
     max_input_chars: int = 2000
-    max_retries: int = 1
+    max_retries: int = 1  # per checker: the judge may ask the model again this often, and so may the guard
     # The retry feedback can include the rejected query. Measured on 2026-10-17 and switched off: the
     # model copies the broken query instead of fixing it (judge retries ending valid 8/18 -> 3/19).
     retry_with_previous_query: bool = False
@@ -119,6 +157,14 @@ class Settings:
     def from_env(cls) -> "Settings":
         env = os.environ
         return cls(
+            demo_public_mode=_flag("DEMO_PUBLIC_MODE", False),
+            demo_show_details=_flag("DEMO_SHOW_DETAILS", True),
+            demo_dataset_name=_optional_text("DEMO_DATASET_NAME"),
+            demo_dataset_version=_optional_text("DEMO_DATASET_VERSION"),
+            demo_dataset_description=_optional_text("DEMO_DATASET_DESCRIPTION"),
+            demo_share_ttl_seconds=int(env.get("DEMO_SHARE_TTL_SECONDS", 7 * 24 * 3600)),
+            demo_share_db_path=_path("DEMO_SHARE_DB_PATH", REPO_ROOT / "logs" / "shared_results.sqlite3"),
+            demo_min_group_size=_minimum_group_size(env.get("DEMO_MIN_GROUP_SIZE")),
             backend=env.get("NL2SPARQL_BACKEND", "stub").strip().lower(),
             llm_base_url=env.get("LLM_BASE_URL", cls.llm_base_url),
             llm_api_key=env.get("LLM_API_KEY", cls.llm_api_key),
@@ -133,11 +179,15 @@ class Settings:
             llm_intent_extra_body=_json_object("LLM_INTENT_EXTRA_BODY"),
             llm_intent_max_tokens=int(env.get("LLM_INTENT_MAX_TOKENS", cls.llm_intent_max_tokens)),
             llm_query_max_tokens=int(env.get("LLM_QUERY_MAX_TOKENS", cls.llm_query_max_tokens)),
+            query_reorder=_flag("QUERY_REORDER", True),
             intent_prompt_version=env.get("INTENT_PROMPT_VERSION", cls.intent_prompt_version).strip(),
             query_prompt_version=env.get("QUERY_PROMPT_VERSION", cls.query_prompt_version).strip(),
+            query_candidates=int(env.get("QUERY_CANDIDATES", cls.query_candidates)),
+            query_candidate_temperature=float(env.get("QUERY_CANDIDATE_TEMPERATURE", cls.query_candidate_temperature)),
             context_examples=int(env.get("CONTEXT_EXAMPLES", cls.context_examples)),
             context_cards=int(env.get("CONTEXT_CARDS", cls.context_cards)),
             context_codes=int(env.get("CONTEXT_CODES", cls.context_codes)),
+            context_dev_references=_flag("CONTEXT_DEV_REFERENCES", True),
             virtuoso_endpoint=env.get("VIRTUOSO_ENDPOINT", cls.virtuoso_endpoint),
             max_input_chars=int(env.get("MAX_INPUT_CHARS", cls.max_input_chars)),
             max_retries=int(env.get("MAX_RETRIES", cls.max_retries)),

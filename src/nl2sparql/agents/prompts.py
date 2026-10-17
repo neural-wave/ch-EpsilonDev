@@ -235,6 +235,19 @@ QUERY_SYSTEM_V5 = QUERY_SYSTEM_V4.replace(
 assert "DEFINE sql:select-option" in QUERY_SYSTEM_V5 and "a variable bound from ?g" in QUERY_SYSTEM_V5  # both edits applied
 
 
+# v6 (2026-10-17): v4 plus the two shape rules of v5 that are about meaning, without the ordering
+# rules the model ignored (pattern order is now a code pass: nl2sparql.sparql.order).
+QUERY_SYSTEM_V6 = QUERY_SYSTEM_V4.replace(
+    """- Durations in days: bif:datediff('day', ?start, ?end).""",
+    """- Durations in days: bif:datediff('day', ?start, ?end).
+- OPTION (inference ...) only on a pattern with a concrete code, never on ?code a ?concept. To group
+  by the kind of code, write ?code a ?concept without inference.
+- Use only the patterns the question needs. No joins (cases, dates, identifiers) or filters the
+  question does not ask for: each one multiplies the work on 100,000 patients.""",
+)
+assert "never on ?code a ?concept" in QUERY_SYSTEM_V6 and "DEFINE" not in QUERY_SYSTEM_V6
+
+
 def render_query_user_v1(text: str, context: Context, feedback: str | None) -> str:
     parts = []
     if context.schema_cards:
@@ -282,7 +295,8 @@ QUERY_PROMPTS: dict[str, QueryPrompt] = {"v1": QueryPrompt(QUERY_SYSTEM_V1, rend
                                          "v2": QueryPrompt(QUERY_SYSTEM_V2, render_query_user_v1),
                                          "v3": QueryPrompt(QUERY_SYSTEM_V3, render_query_user_v1),
                                          "v4": QueryPrompt(QUERY_SYSTEM_V4, render_query_user_v1),
-                                         "v5": QueryPrompt(QUERY_SYSTEM_V5, render_query_user_v1)}
+                                         "v5": QueryPrompt(QUERY_SYSTEM_V5, render_query_user_v1),
+                                         "v6": QueryPrompt(QUERY_SYSTEM_V6, render_query_user_v1)}
 
 
 def intent_prompt(version: str) -> str:

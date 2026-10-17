@@ -57,6 +57,16 @@ def test_llm_client_merges_extra_body():
                        extra_body={"chat_template_kwargs": {"enable_thinking": False}})
     run(LLMIntentAgent(client, "m").classify("hi"))
     assert seen[0]["chat_template_kwargs"] == {"enable_thinking": False} and seen[0]["model"] == "m"
+    assert seen[0]["temperature"] == 0
+
+
+def test_llm_client_extra_body_may_set_the_sampling():
+    # Thinking mode must not decode greedily (Qwen's model card: endless repetitions), so the extra body may override it.
+    seen = []
+    thinking = {"chat_template_kwargs": {"enable_thinking": True}, "temperature": 0.6, "top_p": 0.95}
+    client = LLMClient("http://gpu/v1", transport=fake_server("{}", seen), extra_body=thinking)
+    run(LLMIntentAgent(client, "m").classify("hi"))
+    assert seen[0]["temperature"] == 0.6 and seen[0]["top_p"] == 0.95 and seen[0]["model"] == "m"
 
 
 def test_llm_query_agent_extracts_sparql_from_a_fenced_answer():
@@ -99,6 +109,17 @@ def test_intent_agent_without_fallback_still_raises():
     agent = LLMIntentAgent(LLMClient("http://gpu/v1", transport=failing_server()), "m")
     with pytest.raises(LLMError):
         run(agent.classify("Which patients have cholera?"))
+
+
+def test_llm_query_agent_can_reorder_patterns_after_the_model():
+    seen = []
+    answer = ("```sparql\nPREFIX sphn: <https://biomedit.ch/rdf/sphn-schema/sphn#>\nPREFIX icd-10-gm: <https://biomedit.ch/rdf/sphn-resource/icd-10-gm/>\n"
+              "SELECT (COUNT(DISTINCT ?g) AS ?n) WHERE { GRAPH ?g { ?dx a sphn:BilledDiagnosis ; sphn:hasCode ?c . "
+              "?c a icd-10-gm:A00 OPTION (inference \"https://biomedit.ch/rdf/sphn-resource/global\") . } }\n```")
+    agent = LLMQueryAgent(LLMClient("http://gpu/v1", transport=fake_server(answer, seen)), "m", reorder_patterns=True)
+    reply = run(agent.generate_detailed("q", Context()))
+    assert reply.sparql.startswith('DEFINE sql:select-option "order"')
+    assert reply.sparql.index("?c a icd-10-gm:A00") < reply.sparql.index("?dx sphn:hasCode ?c ;")
 
 
 def test_judge_fixes_prefixes_and_flags_terms_missing_from_the_data():
@@ -380,3 +401,96 @@ def test_guard_and_judge_do_not_access_virtuoso_with_missing_metadata(monkeypatc
     query = "SELECT (COUNT(DISTINCT ?g) AS ?n) WHERE { GRAPH ?g { ?s ?p ?o } }"
     assert Judge(SchemaCards({}, [])).check(query).ok
     assert "R3" in {violation.rule for violation in guard.check_query(query)}
+
+
+def test_judge_ignores_terms_that_only_appear_inside_values(judge_schema_cards=None):
+    from nl2sparql.context.schema import SchemaCards
+    from nl2sparql.judge import Judge
+
+    cards = SchemaCards({"GenomicDeletion": {"instances": 1, "patients": 1, "properties": {"hasCode": {"kind": "resource"}}}}, [])
+    judge = Judge(cards)
+    listed = ("SELECT ?class (COUNT(DISTINCT ?g) AS ?n) WHERE { GRAPH ?g { ?v a ?class } "
+              "VALUES ?class { sphn:GenomicDeletion sphn:GenomicInversion } } GROUP BY ?class")
+    assert judge.check(listed).errors == []  # official-08 lists variant classes the data does not have
+    used = "SELECT (COUNT(DISTINCT ?g) AS ?n) WHERE { GRAPH ?g { ?v a sphn:GenomicInversion } }"
+    assert any("sphn:GenomicInversion does not occur" in error for error in judge.check(used).errors)
+
+
+def test_judge_asks_for_the_coded_concept_the_question_names():
+    from nl2sparql.context import TerminologyIndex
+    from nl2sparql.models import CodeEntry
+
+    index = TerminologyIndex([CodeEntry("https://biomedit.ch/rdf/sphn-resource/icd-10-gm/A00", "A00", "ICD-10-GM", ("Cholera", "Choléra"))])
+    judge = Judge(SchemaCards.load(DATA_DIR / "schema_cards.json"), index)
+    query = ("SELECT ?concept (COUNT(DISTINCT ?g) AS ?patients) WHERE { GRAPH ?g { ?r a sphn:AdministrativeSex ; "
+             "sphn:hasCode ?c . ?c a ?concept . } } GROUP BY ?concept")
+    assert judge.check(query).ok  # without the question, as before
+    errors = judge.check(query, "How many patients have cholera on a hospital bill, by sex?").errors
+    assert [error.split(",")[0] for error in errors] == ["The question asks about cholera (icd-10-gm:A00)"]
+
+
+def test_extract_sparql_strips_an_unclosed_opening_fence():
+    from nl2sparql.agents.query_llm import extract_sparql
+
+    # q-013 and official-08: an answer cut off at max_tokens keeps its opening fence, which rdflib then rejects
+    assert extract_sparql("Here is the query:\n```sparql\nSELECT ?x WHERE { ?x ?p ?o }\n") == "SELECT ?x WHERE { ?x ?p ?o }\n"
+    assert extract_sparql("```\nSELECT ?x WHERE {") == "SELECT ?x WHERE {\n"
+    assert extract_sparql("SELECT ?x WHERE { ?x ?p ?o }\n```") == "SELECT ?x WHERE { ?x ?p ?o }\n"
+    # a closed fence and a plain answer read as before
+    assert extract_sparql("```sparql\nSELECT ?x WHERE { ?x ?p ?o }\n```\nDone.") == "SELECT ?x WHERE { ?x ?p ?o }\n"
+    assert extract_sparql("SELECT ?x WHERE { ?x ?p ?o }") == "SELECT ?x WHERE { ?x ?p ?o }\n"
+
+
+def test_judge_repairs_an_aggregation_mistake_without_the_model():
+    judge = Judge(SchemaCards.load(DATA_DIR / "schema_cards.json"))
+    query = ("SELECT (COUNT(DISTINCT ?procedure) AS ?procedures) (COUNT(DISTINCT ?g) AS ?patients) WHERE { GRAPH ?g { "
+             "?procedure a sphn:ImagingProcedure } } GROUP BY ?g ?procedure")
+    verdict = judge.check(query)
+    assert verdict.ok and "GROUP BY" not in verdict.sparql
+    assert verdict.repairs == [
+        "Dropped GROUP BY ?g ?procedure: every SELECT column is an aggregate, so the groups were unlabeled rows per "
+        "patient; the query now returns one overall row"
+    ]
+
+
+def test_judge_asks_for_the_record_count_the_question_asks_for():
+    judge = Judge(SchemaCards.load(DATA_DIR / "schema_cards.json"))
+    query = ("SELECT ?time_pattern (COUNT(DISTINCT ?g) AS ?patients) WHERE { GRAPH ?g { ?prescription a sphn:DrugPrescription ; "
+             "sphn:hasTimePattern ?pattern . ?pattern sphn:hasTypeCode ?code . ?code a ?concept . } "
+             'VALUES (?concept ?time_pattern) { (snomed:255238004 "Continuous") } } GROUP BY ?time_pattern')
+    assert judge.check(query).ok  # without the question, as before
+    question = "How many drug prescriptions are for continuous dosing? Give the number of patients as well."
+    assert judge.check(query, question).errors == [
+        "The question asks how many drug prescriptions, but the query counts only patients. "
+        "Add (COUNT(DISTINCT ?prescription) AS ?drug_prescriptions) next to (COUNT(DISTINCT ?g) AS ?patients)."
+    ]
+
+
+def test_llm_query_agent_samples_candidates_from_the_first_prompt_in_one_request():
+    seen = []
+
+    def handler(request):
+        seen.append(json.loads(request.content))
+        return httpx.Response(200, json={
+            "choices": [{"index": 0, "message": {"content": "```sparql\nSELECT ?a WHERE { ?a ?p ?o }\n```"}, "finish_reason": "stop"},
+                        {"index": 1, "message": {"content": "```sparql\nSELECT ?b WHERE {"}, "finish_reason": "length"}],
+            "usage": {"prompt_tokens": 100, "completion_tokens": 45},
+        })
+
+    # The candidate temperature wins over one in the extra body; the rest of the extra body is kept.
+    client = LLMClient("http://gpu/v1", transport=httpx.MockTransport(handler), extra_body={"temperature": 0.6, "top_p": 0.95})
+    agent = LLMQueryAgent(client, "coder")
+    replies = run(agent.sample_detailed("q", Context(), 2, 0.7))
+    assert [reply.sparql for reply in replies] == ["SELECT ?a WHERE { ?a ?p ?o }\n", "SELECT ?b WHERE {\n"]
+    assert [reply.tokens for reply in replies] == [145, 0]  # one usage per request, on the first answer
+    assert [reply.truncated for reply in replies] == [False, True]
+    assert seen[0]["n"] == 2 and seen[0]["temperature"] == 0.7 and seen[0]["top_p"] == 0.95
+    assert seen[0]["messages"] == agent.messages("q", Context()) and seen[0]["max_tokens"] == 900
+
+
+def test_llm_client_sample_raises_on_a_failed_or_empty_answer():
+    with pytest.raises(LLMError):
+        run(LLMClient("http://gpu/v1", transport=failing_server()).sample("m", [], 2, 0.7))
+    empty = httpx.MockTransport(lambda request: httpx.Response(200, json={"choices": [], "usage": {}}))
+    with pytest.raises(LLMError, match="no choices"):
+        run(LLMClient("http://gpu/v1", transport=empty).sample("m", [], 2, 0.7))

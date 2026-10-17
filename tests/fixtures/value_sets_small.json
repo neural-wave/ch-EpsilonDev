@@ -1,0 +1,35 @@
+{
+  "classes": {
+    "FollowUp": {
+      "hasCode": [
+        {"value": "snomed:386473003", "label": "Telephone follow-up", "count": 367},
+        {"value": "snomed:281036007", "label": "Follow-up consultation", "count": 319}
+      ]
+    },
+    "VitalStatus": {
+      "hasCode": [
+        {"value": "snomed:399307001", "label": "Lost to follow-up", "count": 377},
+        {"value": "snomed:438949009", "label": "Alive", "count": 357}
+      ]
+    },
+    "BilledDiagnosis": {
+      "hasRank": [
+        {"value": "sphn-individual:Principal", "label": "Principal", "count": 696},
+        {"value": "sphn-individual:Complementary", "label": "Complementary", "count": 682},
+        {"value": "sphn-individual:Secondary", "label": "Secondary", "count": 648}
+      ]
+    },
+    "BilledProcedure": {
+      "hasRank": [
+        {"value": "sphn-individual:Principal", "label": "Principal", "count": 945},
+        {"value": "sphn-individual:Supplementary", "label": "Supplementary", "count": 705}
+      ]
+    },
+    "TumorSpecimen": {
+      "hasFixationType": [
+        {"value": "sphn-individual:NonbufferedFormalin", "label": "NonbufferedFormalin", "count": 60},
+        {"value": "sphn-individual:PAXgeneTissue", "label": "PAXgeneTissue", "count": 50}
+      ]
+    }
+  }
+}

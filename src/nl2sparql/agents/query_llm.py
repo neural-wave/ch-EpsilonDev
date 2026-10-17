@@ -5,15 +5,28 @@ import re
 from dataclasses import dataclass
 
 from nl2sparql.agents.prompts import QUERY_PROMPTS, QueryPrompt
-from nl2sparql.llm import LLMClient
+from nl2sparql.llm import LLMClient, LLMReply
 from nl2sparql.models import Context
+from nl2sparql.sparql.order import reorder
 
 FENCE_RE = re.compile(r"```(?:sparql)?\s*(.*?)```", re.DOTALL | re.IGNORECASE)
+LANGUAGE_TAG_RE = re.compile(r"^sparql(?=\s|$)", re.IGNORECASE)
 
 
 def extract_sparql(text: str) -> str:
+    """The query inside the answer's code fence, or the whole answer without one. An answer cut off at
+    max_tokens keeps its opening fence (q-013, official-08): with a single fence, the query is what follows
+    it, or what precedes a lone closing one."""
     match = FENCE_RE.search(text)
-    return (match.group(1) if match else text).strip() + "\n"
+    if match:
+        sparql = match.group(1)
+    elif text.count("```") == 1:
+        before, _, after = text.partition("```")
+        after = LANGUAGE_TAG_RE.sub("", after.lstrip())
+        sparql = after if after.strip() else before
+    else:
+        sparql = text
+    return sparql.strip() + "\n"
 
 
 @dataclass(frozen=True)
@@ -31,11 +44,14 @@ class QueryReply:
 
 
 class LLMQueryAgent:
-    def __init__(self, client: LLMClient, model: str, max_tokens: int = 900, prompt: QueryPrompt = QUERY_PROMPTS["v1"]):
+    def __init__(self, client: LLMClient, model: str, max_tokens: int = 900, prompt: QueryPrompt = QUERY_PROMPTS["v1"],
+                 reorder_patterns: bool = False):
         self.client = client
         self.model = model
         self.max_tokens = max_tokens
         self.prompt = prompt
+        # Put the typed code patterns first and lock the join order, as the organizers' queries do.
+        self.reorder_patterns = reorder_patterns
 
     def messages(self, text: str, context: Context, feedback: str | None = None) -> list[dict]:
         return [
@@ -45,7 +61,20 @@ class LLMQueryAgent:
 
     async def generate_detailed(self, text: str, context: Context, feedback: str | None = None) -> QueryReply:
         reply = await self.client.chat(self.model, self.messages(text, context, feedback), max_tokens=self.max_tokens)
-        return QueryReply(extract_sparql(reply.text), reply.tokens, reply.text, reply.finish_reason)
+        return self._query_reply(reply)
+
+    async def sample_detailed(self, text: str, context: Context, n: int, temperature: float) -> list[QueryReply]:
+        """n more answers to the first prompt (no feedback) from one request at `temperature`: the best-of-N
+        candidates next to the greedy answer of generate_detailed. The prompt is the same, so vLLM's prefix cache
+        serves it. The request's tokens are on the first reply (LLMClient.sample)."""
+        replies = await self.client.sample(self.model, self.messages(text, context), n, temperature, self.max_tokens)
+        return [self._query_reply(reply) for reply in replies]
+
+    def _query_reply(self, reply: LLMReply) -> QueryReply:
+        sparql = extract_sparql(reply.text)
+        if self.reorder_patterns:
+            sparql = reorder(sparql)
+        return QueryReply(sparql, reply.tokens, reply.text, reply.finish_reason)
 
     async def generate(self, text: str, context: Context, feedback: str | None = None) -> tuple[str, int]:
         reply = await self.generate_detailed(text, context, feedback)

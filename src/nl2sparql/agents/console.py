@@ -40,7 +40,8 @@ ENV_VARS = {
 }
 ROLES = {
     "intent": "Reads only the request text and flags forbidden asks. Runs in parallel with the query agent.",
-    "query": "Translates the request literally into SPARQL, using the context. Gets one retry with feedback.",
+    "query": "Translates the request literally into SPARQL, using the context. Retried with feedback once by the "
+             "judge (twice when the first retry was spent on syntax errors alone) and once by the guard.",
 }
 STAND_INS = {
     "intent": "Keyword rules (HeuristicIntentAgent): no model, 0 tokens.",
@@ -151,6 +152,8 @@ def build_console_router(settings: Settings, pipeline: Pipeline) -> APIRouter:
                 "code_candidates_per_request": builder.k_codes,
                 "hide_exact_example": builder.exclude_exact_examples,
                 "examples_in_bank": len(builder.examples.examples),
+                # CONTEXT_DEV_REFERENCES: the dev reference queries loaded as examples (0 with the flag off)
+                "dev_references_in_bank": sum(e.source == "dev reference" for e in builder.examples.examples),
                 "terminology_entries": len(builder.terminology.entries),
             },
         }

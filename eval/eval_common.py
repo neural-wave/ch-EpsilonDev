@@ -2,10 +2,33 @@
 from __future__ import annotations
 
 import json
+import re
 import statistics
 from pathlib import Path
 
+import httpx
+
 from nl2sparql.config import REPO_ROOT, Settings
+
+VIRTUOSO_ERROR_RE = re.compile(r"Virtuoso \w+ Error \w+:")
+
+
+def virtuoso_error_text(error: Exception, limit: int = 300) -> str:
+    """What went wrong with a query, in Virtuoso's own words when it answered.
+
+    An HTTP error keeps the status line and the body's message (`Virtuoso 37000 Error SP030: ...`)
+    without the query Virtuoso echoes after it, nor the partial result it sometimes writes before it;
+    the status line alone made the error clusters of a report unreadable without re-running every query.
+    """
+    if isinstance(error, httpx.HTTPStatusError):
+        response = error.response
+        body = response.text
+        marker = VIRTUOSO_ERROR_RE.search(body)
+        body = body[marker.start():] if marker else body
+        body = body.split("\nSPARQL query:")[0].strip()
+        return f"HTTP {response.status_code} {response.reason_phrase}: {body}"[:limit]
+    detail = str(error)
+    return f"{type(error).__name__}{f': {detail}' if detail else ''}"[:limit]
 
 
 def load_questions(settings: Settings, intent_cases: bool = False) -> list[dict]:

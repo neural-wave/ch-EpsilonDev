@@ -1,11 +1,17 @@
 import json
+import sys
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 
-from conftest import DATA_DIR
-from nl2sparql.api import create_app
-from nl2sparql.config import Settings
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "eval"))
+from run_eval import agent_setup  # noqa: E402
+from run_query_eval import eval_setup  # noqa: E402
+
+from conftest import DATA_DIR  # noqa: E402
+from nl2sparql.api import create_app  # noqa: E402
+from nl2sparql.config import Settings  # noqa: E402
 
 
 @pytest.fixture()
@@ -27,7 +33,26 @@ def test_config_shows_both_agents_and_hides_secrets(client):
     assert intent["json_mode"] is True and query["json_mode"] is False
     assert intent["max_answer_tokens"] == 200 and query["max_answer_tokens"] == 1500
     assert "secret-token-123" not in str(config) and intent["api_key"].startswith("set (")
-    assert config["context"]["examples_in_bank"] == 16 and config["pipeline"]["schema_classes_loaded"] == 164
+    assert config["context"]["examples_in_bank"] == 64 and config["pipeline"]["schema_classes_loaded"] == 164
+
+
+def test_config_counts_the_dev_references_in_the_bank(client):
+    assert client.get("/agents/config").json()["context"]["dev_references_in_bank"] == 45  # on by default
+    without = TestClient(create_app(settings=Settings(data_dir=DATA_DIR, log_path=None, context_dev_references=False)))
+    assert without.get("/agents/config").json()["context"]["dev_references_in_bank"] == 0
+    with_references = TestClient(create_app(settings=Settings(data_dir=DATA_DIR, log_path=None, context_dev_references=True)))
+    context = with_references.get("/agents/config").json()["context"]
+    assert context["dev_references_in_bank"] == 45 and context["examples_in_bank"] == 19 + 45
+
+
+@pytest.mark.parametrize("flag", [False, True])
+def test_eval_reports_record_the_dev_references_flag(flag):
+    # The runs page compares reports by their setup: with the flag on, only the holdout numbers are comparable.
+    configured = Settings(data_dir=DATA_DIR, log_path=None, context_dev_references=flag)
+    expected = {"examples": 3, "cards": 8, "codes": 5, "dev_references": flag}
+    assert agent_setup(configured)["context"] == expected
+    setup = eval_setup(configured, concurrency=4)
+    assert setup["context"] == expected and setup["concurrency"] == 4 and setup["backend"] == "stub"
 
 
 def test_preview_builds_the_real_prompts_without_calling_a_model(client):
@@ -66,6 +91,8 @@ def reports_client(tmp_path):
         (tmp_path / name).write_text(content if isinstance(content, str) else json.dumps(content))
     save("20261017-002316.json", {"summary": {"questions": 31, "verdict_accuracy": 0.903}, "rows": []})
     save("intent-20261017-090000.json", {"summary": {"questions": 31, "detection_rate": 1.0}, "rows": [{"id": "x"}]})
+    save("query-20261017-093000.json", {"summary": {"questions": 56, "exact_rate": 0.054, "exact_numbers_rate": 0.107,
+                                                     "outcomes": {"exact": 3, "exact_numbers": 3}}, "rows": []})
     save("pipeline-20261017-100000.json", "not json")
     save("perf-20261017-110000.json", {"summary": {"queries": 5, "both_complete": 1}, "rows": []})
     save("notes.json", {"summary": {}})
@@ -75,9 +102,18 @@ def reports_client(tmp_path):
 def test_reports_lists_eval_reports_newest_first(reports_client):
     listing = reports_client.get("/agents/reports").json()["reports"]
     assert [(r["name"], r["kind"]) for r in listing] == [("perf-20261017-110000.json", "perf"),
+                                                          ("query-20261017-093000.json", "query"),
                                                           ("intent-20261017-090000.json", "intent"),
                                                           ("20261017-002316.json", "pipeline")]
-    assert listing[1]["created"] == "2026-10-17 09:00" and listing[2]["summary"]["verdict_accuracy"] == 0.903
+    assert listing[2]["created"] == "2026-10-17 09:00" and listing[3]["summary"]["verdict_accuracy"] == 0.903
+    assert listing[1]["summary"]["exact_numbers_rate"] == 0.107
+
+
+def test_console_pages_show_exact_and_right_numbers(reports_client):
+    console = reports_client.get("/agents").text
+    assert "Right numbers" in console and "exact_numbers_rate" in console and "with the right numbers" in console
+    runs = reports_client.get("/agents/runs").text
+    assert "Right numbers" in runs and "exact_numbers_rate" in runs and '["exact", "exact_numbers"].includes' in runs
 
 
 def test_report_detail_has_the_rows_and_refuses_other_files(reports_client):

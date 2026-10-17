@@ -24,13 +24,20 @@ from nl2sparql.config import REPO_ROOT, Settings
 
 EVAL = REPO_ROOT / "eval"
 REPORT_RE = re.compile(r"^report: (\S+)$", re.MULTILINE)
+SUMMARY_PREFIXES = ("ok ", "XX ", "exact", "same", "empty", "wrong", "error", "caught", "missed", "false_alarm", "holdout")
+
+
+def tail_matching(stdout: str, n: int = 6) -> str:
+    """The last n lines of an eval script's output that are per-question or summary lines."""
+    lines = [line for line in stdout.splitlines(keepends=True) if line.startswith(SUMMARY_PREFIXES)]
+    return "".join(lines[-n:])
 
 
 def run(script: str, args: list[str], label: str) -> Path | None:
     started = time.perf_counter()
     print(f"== {script} {' '.join(args)}", flush=True)
     result = subprocess.run([sys.executable, str(EVAL / script), *args], capture_output=True, text=True)
-    sys.stdout.write("".join(line for line in result.stdout.splitlines(keepends=True) if line.startswith(("ok ", "XX ", "exact", "same", "empty", "wrong", "error", "caught", "missed", "false_alarm", "holdout"))[-6:]))
+    sys.stdout.write(tail_matching(result.stdout))
     match = REPORT_RE.search(result.stdout)
     if result.returncode != 0 or not match:
         print(result.stderr[-2000:] or result.stdout[-2000:])
@@ -72,20 +79,22 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Run every eval for the current configuration and label the run.")
     parser.add_argument("--label", required=True, help="what this run tests, e.g. 'query prompt v6'")
     parser.add_argument("--concurrency", type=int, default=4)
+    parser.add_argument("--skip-intent", action="store_true", help="the change cannot affect the intent agent")
     parser.add_argument("--skip-perf", action="store_true")
     parser.add_argument("--perf-runs", type=int, default=2)
     args = parser.parse_args()
     conc = ["--concurrency", str(args.concurrency)]
     started = time.perf_counter()
-    intent = run("run_intent_eval.py", conc, args.label)
+    intent = None if args.skip_intent else run("run_intent_eval.py", conc, args.label)
     query = run("run_query_eval.py", [*conc, "--execute-timeout", "30"], args.label)
     pipeline = run("run_eval.py", ["--intent-cases", *conc], args.label)
     perf = None
     if query and not args.skip_perf:
         perf = run("time_on_perf.py", [str(query), "--runs", str(args.perf_runs), "--timeout-ms", "60000"], args.label)
+    skipped = {"intent": args.skip_intent, "perf": args.skip_perf}
     print(f"\n== {args.label} ({(time.perf_counter() - started) / 60:.0f} min)")
     for path, kind in ((intent, "intent"), (query, "query"), (pipeline, "pipeline"), (perf, "perf")):
-        if kind != "perf" or not args.skip_perf:
+        if not skipped.get(kind):
             print("   " + summarize(path, kind))
     print("   runs page: http://localhost:8080/agents/runs")
 

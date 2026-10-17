@@ -14,6 +14,8 @@ eval/reports/
 
 # Built from restricted terminologies: rebuild with scripts/, never commit
 assets/
+# ...except the console's logos, which the rule above also matched (they were missing from the frontend commit)
+!frontend/cli/assets/
 
 # Restricted terminologies and patient data must never be committed
 *.ttl
@@ -21,3 +23,11 @@ assets/
 *.zip
 patients/
 ontologies/
+
+# Browser test dependencies and generated synthetic evidence
+node_modules/
+tests/browser/artifacts/
+
+# Local Python packaging output
+build/
+dist/

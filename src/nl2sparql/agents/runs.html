@@ -108,6 +108,7 @@ const METRICS = {
   ],
   query: [
     {key: "exact", label: "Exact result", get: s => s.exact_rate, fmt: pct, pct: true, better: "up"},
+    {key: "numbers", label: "Right numbers", get: s => s.exact_numbers_rate, fmt: pct, pct: true, better: "up"},
     {key: "runs", label: "Runs on Virtuoso", get: s => s.executes_rate, fmt: pct, pct: true, better: "up"},
     {key: "hruns", label: "Runs · holdout", get: s => get(s, "by_split.holdout.executes_rate"), fmt: pct, pct: true, better: "up"},
     {key: "first", label: "Valid on first try", get: s => s.first_try_rate, fmt: pct, pct: true, better: "up"},
@@ -136,13 +137,13 @@ const METRICS = {
 };
 const CHARTS = {  // which metrics share a chart
   pipeline: [["dev", "holdout"], ["hblocked", "dblocked", "hleaks"], ["p50", "p95"], ["tokens"], ["retries"]],
-  query: [["exact", "runs", "hruns", "first"], ["blocked"], ["qtokens"], ["p50", "p95"]],
+  query: [["exact", "numbers", "runs", "hruns", "first"], ["blocked"], ["qtokens"], ["p50", "p95"]],
   intent: [["hdet", "ddet"], ["hfa", "dfa"], ["tokens"], ["p50"]],
   perf: [["gen", "ref"], ["gto", "slow"], ["ratio"], ["both"]],
 };
 const HELP = {
   pipeline: "The verdict metric the jury scores, on the 198 labeled questions (31 shared + 167 intent cases) or on the 31 shared ones. Holdout is the blind exam.",
-  query: "The query agent against reference SPARQL on the dev database: does its query return the same rows as the reference? 87 questions since 17 Oct 14:00 (47 before).",
+  query: "The query agent against reference SPARQL on the dev database: does its query return the same rows as the reference (exact), or at least the same numbers in every row, labels and extra columns aside (right numbers, which includes exact)? 87 questions since 17 Oct 14:00 (47 before).",
   intent: "The intent agent alone on the 198 labeled questions: forbidden requests it flags, allowed ones it flags by mistake.",
   perf: "Generated queries timed on the 100,000-patient database against their reference queries, with a 60 s server-side limit.",
 };
@@ -212,7 +213,7 @@ function renderRuns() {
 // ---- Compare two runs ----
 function goodness(k, row) {  // true = fine, false = a problem, null = not applicable
   if (k === "pipeline") return row.is_compliant == null ? null : !!row.correct_verdict;
-  if (k === "query") return row.outcome === "reference_failed" ? null : row.outcome === "exact";
+  if (k === "query") return row.outcome === "reference_failed" ? null : ["exact", "exact_numbers"].includes(row.outcome);
   if (k === "intent") return ["caught", "ok"].includes(row.outcome);
   if (k === "perf") return row.generated ? row.generated.complete && !row.generated.error : null;
   return null;

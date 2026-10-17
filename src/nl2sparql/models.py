@@ -54,6 +54,7 @@ class Context:
 class JudgeResult:
     sparql: str
     errors: list[str] = field(default_factory=list)
+    repairs: list[str] = field(default_factory=list)  # what the judge fixed without the model (names)
 
     @property
     def ok(self) -> bool:

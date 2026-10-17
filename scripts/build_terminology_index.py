@@ -26,6 +26,28 @@ CONCEPT_SYSTEMS = {
     "LOINC": "https://loinc.org/rdf/",
 }
 DEFAULT_ENGLISH_LABELS = REPO_ROOT / "assets" / "english_terminology_labels.jsonl"
+# English names for the codes the official examples and docs/DATA.md use. ICD-10-GM and CHOP labels
+# are German, French and Italian, so "therapeutic ultrasound" found nothing and q-054 / official-06
+# got no code. A handful of public code titles, not terminology content; the optional local file above
+# extends them.
+ENGLISH_ALIASES: dict[tuple[str, str], tuple[str, ...]] = {
+    ("CHOP", "00.0"): ("Therapeutic ultrasound",),
+    ("ICD-10-GM", "A00"): ("Cholera",),
+    ("ICD-10-GM", "A00.0"): ("Classical cholera", "Cholera due to Vibrio cholerae 01, biovar cholerae"),
+    ("ICD-10-GM", "A00.1"): ("El Tor cholera", "Cholera due to Vibrio cholerae 01, biovar eltor"),
+    ("ICD-10-GM", "A00.9"): ("Cholera, unspecified",),
+    ("ICD-10-GM", "E11"): ("Type 2 diabetes mellitus", "Non-insulin-dependent diabetes mellitus"),
+}
+
+
+def english_labels(path: Path) -> dict[tuple[str, str], set[str]]:
+    """The built-in aliases plus the optional local file, keyed by terminology system and code."""
+    labels: dict[tuple[str, str], set[str]] = defaultdict(set)
+    for key, names in ENGLISH_ALIASES.items():
+        labels[key].update(names)
+    for key, names in load_english_labels(path).items():
+        labels[key].update(names)
+    return labels
 
 
 def load_english_labels(path: Path) -> dict[tuple[str, str], set[str]]:
@@ -86,12 +108,11 @@ def main() -> None:
         system, namespace = next((s, ns) for s, ns in CONCEPT_SYSTEMS.items() if row["concept"].startswith(ns))
         labels[(row["concept"], row["concept"][len(namespace):], system)].add(row["label"])
     print(f"  concepts used in the data: {len(rows)} labels")
-    english_labels = load_english_labels(args.english_labels)
-    for (system, code), names in english_labels.items():
+    english = english_labels(args.english_labels)
+    for (system, code), names in english.items():
         namespace = CLASSIFICATIONS[system]
         labels[(namespace + code, code, system)].update(names)
-    if english_labels:
-        print(f"  English labels: {sum(len(names) for names in english_labels.values())}")
+    print(f"  English labels: {sum(len(names) for names in english.values())}")
     args.out.parent.mkdir(parents=True, exist_ok=True)
     with args.out.open("w", encoding="utf-8") as handle:
         for (iri, code, system), names in sorted(labels.items()):

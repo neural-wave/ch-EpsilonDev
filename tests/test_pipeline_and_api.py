@@ -11,6 +11,8 @@ from nl2sparql.config import Settings
 from nl2sparql.factory import build_pipeline
 from nl2sparql.agents.intent_llm import IntentReply
 from nl2sparql.agents.query_llm import QueryReply
+from nl2sparql.guard.decision import SYNTAX_LEAD
+from nl2sparql.intent_check import confirm_identifier_flag
 from nl2sparql.models import IntentFlags
 from nl2sparql.orchestrator import CUT_OFF_FEEDBACK, PipelineError
 
@@ -209,7 +211,7 @@ def test_forbidden_request_is_never_retried():
     agent = ScriptedQueryAgent(EXAMPLES["official-15"])
     flags = IntentFlags(asks_for_identifiers=True, reason="asks which patients have cholera")
     result = asyncio.run(pipeline_with(agent, FixedIntentAgent(flags)).run("Which patients have cholera?"))
-    assert not result.is_compliant and result.retries == 0
+    assert not result.is_compliant and result.retries == 0 and agent.feedback == [None]
     assert result.compliance_reason.startswith("The request asks which patients have cholera.")
 
 
@@ -274,6 +276,59 @@ def test_keyword_fallback_keeps_the_request_alive_when_the_intent_model_fails():
     assert result.diagnostics["intent_fallback"] == "error" and "intent_invalid_json" not in result.diagnostics
 
 
+def test_count_that_mentions_identifiers_is_not_flagged():
+    flags = IntentFlags(asks_for_identifiers=True, reason="asks for identifiers",
+                        suggested_rephrase="How many patients have an identifier?")
+    assert confirm_identifier_flag("How many patients have at least one identifier recorded?", flags) == IntentFlags()
+
+
+@pytest.mark.parametrize("text", [
+    "How many patients have cholera? Also give me their pseudo identifiers.",
+    "Count the MRSA-positive cultures per year, and include the sample identifiers for each year.",
+    "Which patients have at least one identifier recorded?",
+    "List the pseudo identifiers of patients with type 2 diabetes.",
+    "How many patients have cholera, and who are they?",
+])
+def test_requests_that_reveal_identifiers_keep_the_flag(text):
+    flags = IntentFlags(asks_for_identifiers=True, reason="asks for identifiers")
+    assert confirm_identifier_flag(text, flags) == flags
+
+
+def test_post_check_touches_no_other_flag():
+    flags = IntentFlags(asks_for_identifiers=True, single_patient=True, reason="asks about patient 1048211")
+    kept = confirm_identifier_flag("How many hospital stays has patient 1048211 had since 2020?", flags)
+    assert kept == IntentFlags(single_patient=True, reason="asks about patient 1048211")
+    assert confirm_identifier_flag("How many patients have cholera?", IntentFlags()) == IntentFlags()
+
+
+def test_pipeline_clears_the_identifier_flag_of_a_counting_request():
+    flags = IntentFlags(asks_for_identifiers=True, reason="asks for identifiers")
+    agent = ScriptedQueryAgent(EXAMPLES["official-03"])
+    text = "How many patients have at least one identifier recorded?"
+    result = asyncio.run(pipeline_with(agent, FixedIntentAgent(flags)).run(text))
+    assert result.is_compliant and result.intent == IntentFlags() and result.retries == 0
+    assert result.diagnostics["intent_flag_cleared"] == "asks_for_identifiers"
+
+
+def test_pipeline_clears_the_flag_on_the_detailed_intent_path_too():
+    class DetailedIntentAgent:
+        async def classify_detailed(self, text):
+            return IntentReply(IntentFlags(asks_for_identifiers=True, reason="asks for identifiers"), 10, "{}", True, "stop")
+
+    agent = ScriptedQueryAgent(EXAMPLES["official-03"])
+    text = "How many patients have at least one identifier recorded?"
+    result = asyncio.run(pipeline_with(agent, DetailedIntentAgent()).run(text))
+    assert result.is_compliant and result.diagnostics["intent_flag_cleared"] == "asks_for_identifiers"
+
+
+def test_pipeline_keeps_the_flag_when_the_count_also_asks_who():
+    flags = IntentFlags(asks_for_identifiers=True, reason="asks for the patients' identifiers")
+    agent = ScriptedQueryAgent(EXAMPLES["official-03"])
+    text = "How many patients have cholera? Also give me their pseudo identifiers."
+    result = asyncio.run(pipeline_with(agent, FixedIntentAgent(flags)).run(text))
+    assert not result.is_compliant and result.intent == flags and "intent_flag_cleared" not in result.diagnostics
+
+
 def test_retry_feedback_can_carry_the_previous_query():
     agent = ScriptedQueryAgent(EXAMPLES["official-12"], EXAMPLES["official-03"])
     pipeline = pipeline_with(agent)
@@ -291,6 +346,50 @@ def test_guard_retry_failure_keeps_the_first_query_and_verdict():
     result = asyncio.run(pipeline.run("Cholera cases by sex?"))
     assert not result.is_compliant and result.sparql_query == first_query
     assert result.compliance_reason and result.retries == 1 and result.tokens_consumed == 110
+
+
+def test_judge_and_guard_each_have_their_own_retry():
+    agent = ScriptedQueryAgent("SELECT ?x WHERE {", EXAMPLES["official-12"], EXAMPLES["official-03"])
+    result = asyncio.run(pipeline_with(agent).run("Cholera cases by sex?"))
+    assert result.is_compliant and result.retries == 2 and result.tokens_consumed == 160
+    assert agent.feedback[1].startswith("Syntax error")
+    assert agent.feedback[2].startswith("The previous query breaks the privacy rules")  # the guard's R2 retry
+    assert result.tokens_by_step == {"intent": 10, "query": 50, "query_retry": 100}
+    assert result.diagnostics["retry_reason"] == "judge+guard"
+    assert result.diagnostics["judge_errors_first_try"] and result.diagnostics["guard_violations_first_try"]
+    assert "SELECT ?x WHERE {" in result.diagnostics["first_try_sparql"]
+    assert "hasCoverageType" in result.diagnostics["rejected_retry_sparql"]
+
+
+def test_guard_retry_that_comes_back_unparseable_still_gets_the_judge_retry():
+    agent = ScriptedQueryAgent(EXAMPLES["official-12"], "SELECT ?x WHERE {", EXAMPLES["official-03"])
+    result = asyncio.run(pipeline_with(agent).run("Cholera cases by sex?"))
+    assert result.is_compliant and result.retries == 2
+    assert agent.feedback[1].startswith("The previous query breaks the privacy rules")
+    assert agent.feedback[2].startswith("Syntax error")
+    assert result.diagnostics["retry_reason"] == "judge+guard" and "judge_errors_final" not in result.diagnostics
+    assert "hasCoverageType" in result.diagnostics["first_try_sparql"]
+    assert "SELECT ?x WHERE {" in result.diagnostics["rejected_retry_sparql"]
+
+
+def test_the_query_agent_is_asked_at_most_three_times_when_no_retry_was_spent_on_syntax_alone():
+    agent = ScriptedQueryAgent("SELECT ?x WHERE {", EXAMPLES["official-12"], "SELECT ?y WHERE {", EXAMPLES["official-03"])
+    result = asyncio.run(pipeline_with(agent).run("Cholera cases by sex?"))
+    assert not result.is_compliant and result.retries == 2 and len(agent.feedback) == 3
+    assert agent.queries == [EXAMPLES["official-03"]]
+    # The guard's retry did not parse: the attempt the guard rejected is the less bad one and stays the answer.
+    assert "hasCoverageType" in result.sparql_query and result.violations[0].startswith("R2")
+    assert result.diagnostics["guard_kept_first_try"][0].startswith("Syntax error")
+    assert "?y" in result.diagnostics["guard_worse_retry_sparql"] and "judge_errors_final" not in result.diagnostics
+
+
+def test_no_retry_budget_means_no_retry_from_either_checker():
+    agent = ScriptedQueryAgent("SELECT ?x WHERE {", EXAMPLES["official-03"])
+    pipeline = pipeline_with(agent)
+    pipeline.max_retries = 0
+    result = asyncio.run(pipeline.run("Cholera by sex?"))
+    assert not result.is_compliant and result.retries == 0 and agent.feedback == [None]
+    assert "retry_reason" not in result.diagnostics
 
 
 def test_cancelling_a_request_stops_the_intent_agent():
@@ -516,3 +615,387 @@ def test_demo_never_shows_the_query_of_forbidden_requests(client):
 def test_health_and_demo_page(client):
     assert client.get("/health").json()["status"] == "ok"
     assert "NL-to-SPARQL" in client.get("/").text
+
+
+# Two identical aggregate columns: a semantic hint (severity 1) that no judge rewrite repairs.
+SOFT_HINT_QUERY = "SELECT (COUNT(DISTINCT ?g) AS ?married) (COUNT(DISTINCT ?g) AS ?single) WHERE { GRAPH ?g { ?c a sphn:CivilStatus } }"
+
+
+def test_a_retry_that_is_worse_by_the_judge_is_dropped_for_the_first_try():
+    # First try: runs, one semantic hint (two identical columns). Retry: unparseable. Keep the first.
+    agent = ScriptedQueryAgent(SOFT_HINT_QUERY, "SELECT ?x WHERE {")
+    result = asyncio.run(pipeline_with(agent).run("How are our patients split by civil status?"))
+    assert result.retries == 1 and "?married" in result.sparql_query and result.is_compliant
+    assert result.diagnostics["kept_first_try"][0].startswith("Syntax error")
+    assert result.diagnostics["judge_errors_final"][0].startswith("columns ?married, ?single are all")
+    assert "?x" in result.diagnostics["worse_retry_sparql"]
+
+
+def test_a_retry_that_is_less_bad_than_the_first_try_is_kept():
+    # First try: unparseable. Retry: runs, one semantic hint. The judge's second retry (bought by the syntax-only
+    # first try) is unparseable again, so the first retry stays.
+    agent = ScriptedQueryAgent("SELECT ?x WHERE {", SOFT_HINT_QUERY, "SELECT ?y WHERE {")
+    result = asyncio.run(pipeline_with(agent).run("How are our patients split by civil status?"))
+    assert result.retries == 2 and "?married" in result.sparql_query and "kept_first_try" not in result.diagnostics
+    assert result.diagnostics["kept_first_retry"][0].startswith("Syntax error")
+    assert "?y" in result.diagnostics["worse_retry_sparql"]
+    assert result.diagnostics["judge_errors_final"][0].startswith("columns ?married, ?single are all")
+
+
+# One judge hint (two identical columns) and a guard violation the guard retries (R2: ?g returned per row).
+# The key is projected, so the judge's GROUP BY rewrite leaves it alone.
+LEAKING_HINT_QUERY = ("SELECT ?g (COUNT(DISTINCT ?g) AS ?married) (COUNT(DISTINCT ?g) AS ?single) "
+                      "WHERE { GRAPH ?g { ?c a sphn:CivilStatus } } GROUP BY ?g")
+
+
+def test_a_syntax_only_retry_buys_the_judge_a_second_retry():
+    # The retry is the first answer the semantic checks see: its hints get one more call instead of being final.
+    agent = ScriptedQueryAgent("SELECT ?x WHERE {", SOFT_HINT_QUERY, EXAMPLES["official-03"])
+    result = asyncio.run(pipeline_with(agent).run("How are our patients split by civil status?"))
+    assert result.is_compliant and result.retries == 2 and len(agent.feedback) == 3
+    assert agent.feedback[1].startswith("Syntax error")
+    assert agent.feedback[2].startswith("columns ?married, ?single are all")
+    assert result.diagnostics["retry_reason"] == "judge x2"
+    assert result.tokens_by_step == {"intent": 10, "query": 50, "query_retry": 100} and result.tokens_consumed == 160
+    assert result.diagnostics["judge_errors_first_try"][0].startswith("Syntax error")
+    assert result.diagnostics["judge_errors_first_retry"][0].startswith("columns ?married, ?single are all")
+    assert "SELECT ?x WHERE {" in result.diagnostics["first_try_sparql"]
+    assert "?married" in result.diagnostics["first_retry_sparql"]
+    assert "judge_errors_final" not in result.diagnostics and "rejected_retry_sparql" not in result.diagnostics
+
+
+def test_the_second_judge_retry_needs_a_first_try_rejected_for_syntax_alone():
+    # The first try parsed (one semantic hint): a retry that is still not clean is final, no extra call.
+    agent = ScriptedQueryAgent(SOFT_HINT_QUERY, SOFT_HINT_QUERY, EXAMPLES["official-03"])
+    result = asyncio.run(pipeline_with(agent).run("How are our patients split by civil status?"))
+    assert result.retries == 1 and result.diagnostics["retry_reason"] == "judge"
+    assert agent.queries == [EXAMPLES["official-03"]] and "judge_errors_first_retry" not in result.diagnostics
+    assert result.diagnostics["judge_errors_final"][0].startswith("columns ?married, ?single are all")
+
+
+def test_a_retry_that_is_unparseable_again_gets_no_second_judge_retry():
+    # Neither answer parsed: the guard's own retry follows (PARSE), not a second judge retry.
+    agent = ScriptedQueryAgent("SELECT ?x WHERE {", "SELECT ?y WHERE {", EXAMPLES["official-03"])
+    result = asyncio.run(pipeline_with(agent).run("Cholera by sex?"))
+    assert result.is_compliant and result.retries == 2 and result.diagnostics["retry_reason"] == "judge+guard"
+    assert agent.feedback[2].startswith(SYNTAX_LEAD)  # a parse error's retry carries the judge's diagnosis
+    assert "privacy rules" not in agent.feedback[2]
+
+
+def test_the_second_judge_retry_and_the_guard_retry_make_four_calls():
+    agent = ScriptedQueryAgent("SELECT ?x WHERE {", SOFT_HINT_QUERY, EXAMPLES["official-12"], EXAMPLES["official-03"])
+    result = asyncio.run(pipeline_with(agent).run("How are our patients split by civil status?"))
+    assert result.is_compliant and result.retries == 3 and len(agent.feedback) == 4
+    assert result.diagnostics["retry_reason"] == "judge x2+guard"
+    assert result.tokens_by_step == {"intent": 10, "query": 50, "query_retry": 150}
+    assert "?married" in result.diagnostics["first_retry_sparql"]
+    assert "hasCoverageType" in result.diagnostics["rejected_retry_sparql"]  # the second retry, rejected by the guard
+
+
+def test_the_second_judge_retry_is_skipped_when_it_would_not_fit_the_deadline():
+    class SlowQueryAgent(ScriptedQueryAgent):
+        async def generate(self, text, context, feedback=None):
+            await asyncio.sleep(0.3)
+            return await super().generate(text, context, feedback)
+
+    agent = SlowQueryAgent("SELECT ?x WHERE {", SOFT_HINT_QUERY, EXAMPLES["official-03"])
+    pipeline = pipeline_with(agent)
+    pipeline.request_timeout_seconds = 0.75  # room for two calls of 0.3 s, not for a third
+    result = asyncio.run(pipeline.run("How are our patients split by civil status?"))
+    assert result.retries == 1 and result.diagnostics["judge_retry_skipped"] == "deadline"
+    assert "?married" in result.sparql_query and agent.queries == [EXAMPLES["official-03"]]
+
+
+def test_the_extra_judge_call_is_taken_once_and_only_when_it_fits_the_deadline():
+    from nl2sparql.orchestrator import _Run
+
+    run = _Run(max_retries=1, deadline=100.0)
+    run.note_query_call(6.0)
+    assert not run.take_second_judge_retry(now=95.0) and run.diagnostics["judge_retry_skipped"] == "deadline"
+    assert run.take_second_judge_retry(now=94.0) and run.retries == 1 and run.diagnostics["retry_reason"] == "judge"
+    assert not run.take_second_judge_retry(now=0.0)  # once per request
+    assert not _Run(max_retries=0).take_second_judge_retry(now=0.0)  # no retry budget, no extra call
+
+
+def test_a_guard_retry_that_does_not_parse_is_dropped_for_the_attempt_the_guard_rejected():
+    # First try: judge-clean but leaks rows (R2). The guard's retry fails to parse twice (the judge's retry is
+    # spent inside it), so the leaking first try, the less bad attempt, stays the (non-compliant) answer.
+    agent = ScriptedQueryAgent(EXAMPLES["official-12"], "SELECT ?y WHERE {", "SELECT ?z WHERE {")
+    result = asyncio.run(pipeline_with(agent).run("Cholera cases by sex?"))
+    assert not result.is_compliant and result.retries == 2 and result.diagnostics["retry_reason"] == "judge+guard"
+    assert "hasCoverageType" in result.sparql_query and result.violations[0].startswith("R2")
+    assert result.diagnostics["guard_kept_first_try"][0].startswith("Syntax error")
+    assert "?z" in result.diagnostics["guard_worse_retry_sparql"] and "judge_errors_final" not in result.diagnostics
+
+
+def test_a_guard_retry_that_still_breaks_a_rule_but_is_no_worse_by_the_judge_is_kept():
+    agent = ScriptedQueryAgent(EXAMPLES["official-12"], EXAMPLES["official-13"])
+    result = asyncio.run(pipeline_with(agent).run("How are our patients split by civil status?"))
+    assert not result.is_compliant and result.retries == 1 and result.violations[0].startswith("R3")
+    assert "guard_kept_first_try" not in result.diagnostics and "judge_errors_final" not in result.diagnostics
+
+
+def test_the_guard_retry_is_told_when_the_rejected_answer_was_cut_off():
+    agent = DetailedQueryAgent((EXAMPLES["official-12"], "length"), (EXAMPLES["official-03"], "stop"))
+    result = asyncio.run(pipeline_with(agent).run("Cholera cases by sex?"))
+    assert result.is_compliant and result.retries == 1 and result.diagnostics["cut_off"] == ["query"]
+    assert agent.feedback[1].startswith(CUT_OFF_FEEDBACK)
+    assert "The previous query breaks the privacy rules" in agent.feedback[1]
+
+
+def test_the_cut_off_note_belongs_to_the_attempt_the_guard_rejected():
+    # The cut-off first try was rejected by the judge; the complete retry was rejected by the guard: the
+    # guard's feedback carries no cut-off note.
+    agent = DetailedQueryAgent(("```sparql\nSELECT ?x WHERE {", "length"), (EXAMPLES["official-12"], "stop"),
+                               (EXAMPLES["official-03"], "stop"))
+    result = asyncio.run(pipeline_with(agent).run("Cholera cases by sex?"))
+    assert result.is_compliant and result.retries == 2 and result.diagnostics["cut_off"] == ["query"]
+    assert agent.feedback[1].startswith(CUT_OFF_FEEDBACK)
+    assert agent.feedback[2].startswith("The previous query breaks the privacy rules")  # the guard's R2 retry
+
+
+def test_judge_errors_final_is_cleared_by_a_clean_guard_retry():
+    # First try: one judge hint and a guard violation. The judge's retry is worse (unparseable), so the first try
+    # is kept and the guard rejects it; the guard's retry is clean. judge_errors_final used to keep the hint.
+    agent = ScriptedQueryAgent(LEAKING_HINT_QUERY, "SELECT ?x WHERE {", EXAMPLES["official-03"])
+    result = asyncio.run(pipeline_with(agent).run("How are our patients split by civil status?"))
+    assert result.is_compliant and result.retries == 2 and result.diagnostics["retry_reason"] == "judge+guard"
+    assert result.diagnostics["kept_first_try"][0].startswith("Syntax error")
+    assert result.diagnostics["guard_violations_first_try"][0].startswith("R5")  # ?g, the patient graph, is returned
+    assert "judge_errors_final" not in result.diagnostics
+
+
+def test_judge_errors_final_describes_the_final_answer_after_a_guard_retry():
+    agent = ScriptedQueryAgent(EXAMPLES["official-12"], SOFT_HINT_QUERY, "SELECT ?x WHERE {")
+    result = asyncio.run(pipeline_with(agent).run("How are our patients split by civil status?"))
+    assert result.is_compliant and result.retries == 2 and "?married" in result.sparql_query
+    assert result.diagnostics["judge_errors_final"][0].startswith("columns ?married, ?single are all")
+
+
+def test_the_console_is_served_by_the_api_and_the_root_redirects_to_it():
+    client = TestClient(create_app(pipeline_with(ScriptedQueryAgent(EXAMPLES["official-03"]))))
+    root = client.get("/", follow_redirects=False)
+    assert root.status_code in (302, 307) and root.headers["location"] == "/console/cli/"
+    page = client.get("/console/cli/")
+    assert page.status_code == 200 and "SIB DOC" in page.text and "/demo/ask" not in page.text  # the calls live in api.js
+    assert client.get("/console/js/api.js").status_code == 200 and "/demo/ask" in client.get("/console/js/api.js").text
+    assert client.get("/console/css/tokens.css").status_code == 200
+    for logo in ("sib-emblem.png", "sphn-logo.png"):  # a root .gitignore rule once kept them out of the repository
+        assert client.get(f"/console/cli/assets/{logo}").headers["content-type"] == "image/png"
+
+
+# Best-of-N query candidates (QUERY_CANDIDATES): the real LLM query agent on a fake OpenAI-compatible server.
+import json  # noqa: E402
+import logging  # noqa: E402
+
+import httpx  # noqa: E402
+
+from nl2sparql.agents import LLMQueryAgent  # noqa: E402
+from nl2sparql.judge import severity  # noqa: E402
+from nl2sparql.llm import LLMClient  # noqa: E402
+
+CHOLERA_BY_SEX = "How many patients have cholera, by sex?"
+BROKEN_QUERY = "SELECT ?x WHERE {"
+RENAMED_03 = EXAMPLES["official-03"].replace("?sex", "?gender")  # judge-clean like official-03, told apart by ?gender
+
+
+def fenced(sparql):
+    return f"```sparql\n{sparql}\n```"
+
+
+class FakeLLMServer:
+    """A request without "n" gets the next greedy answer (None: HTTP 500), the request with "n" the sampled answers;
+    answers are (text, finish_reason). Usage as vLLM reports it: the prompt once per request, every answer's
+    completion."""
+
+    def __init__(self, greedy, sampled=(), prompt_tokens=100, completion_tokens=20, sampled_status=200,
+                 sampled_delay=0.0, greedy_waits_for_sampled=False):
+        self.greedy, self.sampled = list(greedy), list(sampled)
+        self.prompt_tokens, self.completion_tokens = prompt_tokens, completion_tokens
+        self.sampled_status, self.sampled_delay = sampled_status, sampled_delay
+        self.greedy_waits_for_sampled = greedy_waits_for_sampled  # the greedy answer comes only once both are in flight
+        self.sampled_arrived = asyncio.Event()
+        self.sampled_cancelled = False
+        self.requests = []
+
+    @property
+    def bodies(self):
+        return [json.loads(request.content) for request in self.requests]
+
+    def client(self):
+        return LLMClient("http://gpu/v1", transport=httpx.MockTransport(self.handle))
+
+    async def handle(self, request):
+        self.requests.append(request)
+        body = json.loads(request.content)
+        if "n" in body:
+            self.sampled_arrived.set()
+            try:
+                await asyncio.sleep(self.sampled_delay)
+            except asyncio.CancelledError:
+                self.sampled_cancelled = True
+                raise
+            if self.sampled_status != 200:
+                return httpx.Response(self.sampled_status, json={"error": "sampling failed"})
+            return self._answer(self.sampled[: body["n"]])
+        if self.greedy_waits_for_sampled:
+            await asyncio.wait_for(self.sampled_arrived.wait(), timeout=2)
+        answer = self.greedy.pop(0)
+        if answer is None:
+            return httpx.Response(500, json={"error": "model server down"})
+        return self._answer([answer])
+
+    def _answer(self, answers):
+        return httpx.Response(200, json={
+            "choices": [{"index": index, "message": {"content": text}, "finish_reason": finish}
+                        for index, (text, finish) in enumerate(answers)],
+            "usage": {"prompt_tokens": self.prompt_tokens, "completion_tokens": self.completion_tokens * len(answers)},
+        })
+
+
+class RecordingJudge:
+    def __init__(self, delegate):
+        self.delegate = delegate
+        self.calls = []
+
+    def check(self, sparql, question=None):
+        self.calls.append((sparql, question))
+        return self.delegate.check(sparql, question)
+
+
+def best_of(candidates, server):
+    """The pipeline built with QUERY_CANDIDATES=candidates, its LLM query agent on the fake server."""
+    pipeline = build_pipeline(settings(query_candidates=candidates))
+    pipeline.query_agent = LLMQueryAgent(server.client(), "coder")
+    pipeline.intent_agent = FixedIntentAgent()
+    return pipeline
+
+
+def test_one_candidate_sends_exactly_the_requests_of_a_single_answer():
+    server = FakeLLMServer([(BROKEN_QUERY, "stop"), (fenced(EXAMPLES["official-03"]), "stop")],
+                           sampled=[(fenced(RENAMED_03), "stop")])
+    pipeline = best_of(1, server)
+    result = asyncio.run(pipeline.run(CHOLERA_BY_SEX))
+    assert result.is_compliant and result.retries == 1 and len(server.requests) == 2
+    assert all(set(body) == {"model", "messages", "temperature", "max_tokens"} and body["temperature"] == 0
+               for body in server.bodies)
+    assert result.tokens_by_step == {"intent": 10, "query": 120, "query_retry": 120}
+    assert "candidates" not in result.diagnostics and "candidate_chosen" not in result.diagnostics
+    # The first request is, byte for byte, the one a plain chat call sends with the first prompt.
+    reference = FakeLLMServer([(fenced(EXAMPLES["official-03"]), "stop")])
+    agent = pipeline.query_agent
+    messages = agent.messages(CHOLERA_BY_SEX, pipeline.context_builder.build(CHOLERA_BY_SEX))
+    asyncio.run(reference.client().chat("coder", messages, max_tokens=agent.max_tokens))
+    assert server.requests[0].content == reference.requests[0].content
+
+
+def test_three_candidates_are_judged_with_the_question_and_the_clean_one_is_kept():
+    server = FakeLLMServer([(BROKEN_QUERY, "stop")], [(fenced(SOFT_HINT_QUERY), "stop"), (fenced(EXAMPLES["official-03"]), "stop")],
+                           greedy_waits_for_sampled=True)
+    pipeline = best_of(3, server)
+    judge = pipeline.judge = RecordingJudge(pipeline.judge)
+    result = asyncio.run(pipeline.run(CHOLERA_BY_SEX))
+    assert result.is_compliant and result.retries == 0 and len(server.requests) == 2
+    greedy, sampling = server.bodies
+    assert "n" not in greedy and greedy["temperature"] == 0
+    assert sampling["n"] == 2 and sampling["temperature"] == 0.7
+    assert sampling["messages"] == greedy["messages"] and sampling["max_tokens"] == greedy["max_tokens"]
+    assert [question for _, question in judge.calls] == [CHOLERA_BY_SEX] * 3
+    candidates = result.diagnostics["candidates"]
+    assert [rank for rank, _ in candidates] == [severity(judge.delegate.check(sparql, CHOLERA_BY_SEX)) for sparql, _ in judge.calls]
+    assert candidates[0][0][0] == 3 and candidates[1][0][0] == 1 and candidates[2] == ((0, 0), False)
+    assert result.diagnostics["candidate_chosen"] == 2 and "?cholera_patient" in result.sparql_query
+
+
+def test_a_tie_keeps_the_greedy_candidate_then_the_lower_index():
+    server = FakeLLMServer([(fenced(EXAMPLES["official-03"]), "stop")], [(fenced(RENAMED_03), "stop")] * 2)
+    result = asyncio.run(best_of(3, server).run(CHOLERA_BY_SEX))
+    assert result.diagnostics["candidates"] == [((0, 0), False)] * 3 and result.diagnostics["candidate_chosen"] == 0
+    assert "?gender" not in result.sparql_query
+    server = FakeLLMServer([(BROKEN_QUERY, "stop")], [(fenced(RENAMED_03), "stop"), (fenced(EXAMPLES["official-03"]), "stop")])
+    result = asyncio.run(best_of(3, server).run(CHOLERA_BY_SEX))
+    assert result.diagnostics["candidate_chosen"] == 1 and "?gender" in result.sparql_query
+
+
+def test_a_cut_off_candidate_is_judged_and_loses_to_a_clean_complete_one():
+    # The greedy answer hit max_tokens after a complete query: clean but cut off, it loses the tie.
+    server = FakeLLMServer([("```sparql\n" + EXAMPLES["official-03"], "length")], [(fenced(RENAMED_03), "stop")])
+    result = asyncio.run(best_of(2, server).run(CHOLERA_BY_SEX))
+    assert result.diagnostics["candidates"] == [((0, 0), True), ((0, 0), False)]
+    assert result.diagnostics["candidate_chosen"] == 1 and "cut_off" not in result.diagnostics
+    # Cut off mid-query, it does not parse and loses by severity.
+    server = FakeLLMServer([("```sparql\n" + BROKEN_QUERY, "length")], [(fenced(RENAMED_03), "stop")])
+    result = asyncio.run(best_of(2, server).run(CHOLERA_BY_SEX))
+    (rank, cut_off), clean = result.diagnostics["candidates"]
+    assert rank[0] == 3 and cut_off and clean == ((0, 0), False)
+    assert result.diagnostics["candidate_chosen"] == 1 and result.retries == 0 and "?gender" in result.sparql_query
+
+
+def test_the_retry_stays_single_and_starts_from_the_kept_candidate():
+    server = FakeLLMServer([("```sparql\n" + BROKEN_QUERY, "length"), (fenced(EXAMPLES["official-03"]), "stop")],
+                           [(fenced(SOFT_HINT_QUERY), "stop"), (BROKEN_QUERY, "stop")])
+    result = asyncio.run(best_of(3, server).run(CHOLERA_BY_SEX))
+    assert result.is_compliant and result.retries == 1 and len(server.requests) == 3
+    retry = server.bodies[2]
+    assert "n" not in retry and retry["temperature"] == 0
+    feedback = retry["messages"][1]["content"]
+    errors = result.diagnostics["judge_errors_first_try"]
+    assert errors and all(error in feedback for error in errors) and CUT_OFF_FEEDBACK not in feedback
+    assert result.diagnostics["candidate_chosen"] == 1 and "?married" in result.diagnostics["first_try_sparql"]
+    assert "cut_off" not in result.diagnostics  # only the dropped greedy answer was cut off
+    assert result.tokens_by_step == {"intent": 10, "query": 120 + 140, "query_retry": 120}
+
+
+def test_the_tokens_of_both_requests_add_up():
+    # The prompt once per request and every answer's completion: (1000 + 50) + (1000 + 2 x 50).
+    server = FakeLLMServer([(fenced(EXAMPLES["official-03"]), "stop")], [(fenced(SOFT_HINT_QUERY), "stop"), (BROKEN_QUERY, "stop")],
+                           prompt_tokens=1000, completion_tokens=50)
+    result = asyncio.run(best_of(3, server).run(CHOLERA_BY_SEX))
+    assert result.tokens_by_step == {"intent": 10, "query": 2150} and result.tokens_consumed == 2160
+
+
+def test_a_failed_sampled_request_leaves_the_greedy_answer_alone(caplog):
+    server = FakeLLMServer([(BROKEN_QUERY, "stop"), (fenced(EXAMPLES["official-03"]), "stop")], sampled_status=500)
+    with caplog.at_level(logging.WARNING, logger="nl2sparql.orchestrator"):
+        result = asyncio.run(best_of(3, server).run(CHOLERA_BY_SEX))
+    assert result.is_compliant and result.retries == 1 and len(server.requests) == 3
+    assert len(result.diagnostics["candidates"]) == 1 and result.diagnostics["candidate_chosen"] == 0
+    assert result.tokens_by_step == {"intent": 10, "query": 120, "query_retry": 120}
+    assert "sampled query candidates failed" in caplog.text
+
+
+def test_a_failed_greedy_request_fails_the_request_and_cancels_the_sampled_one():
+    server = FakeLLMServer([None], [(fenced(RENAMED_03), "stop")] * 2, sampled_delay=5, greedy_waits_for_sampled=True)
+    started = time.perf_counter()
+    with pytest.raises(PipelineError, match="Query generation failed"):
+        asyncio.run(best_of(3, server).run(CHOLERA_BY_SEX))
+    assert server.sampled_cancelled and time.perf_counter() - started < 2
+
+
+def test_agents_that_cannot_sample_answer_once_whatever_the_setting():
+    agent = ScriptedQueryAgent(EXAMPLES["official-03"])
+    pipeline = pipeline_with(agent)
+    pipeline.query_candidates = 3
+    result = asyncio.run(pipeline.run("Cholera by sex?"))
+    assert result.is_compliant and result.diagnostics == {} and agent.feedback == [None]
+
+
+@pytest.mark.parametrize("overrides,setting", [
+    ({"query_candidates": 0}, "QUERY_CANDIDATES"),
+    ({"query_candidates": 3, "query_candidate_temperature": 0}, "QUERY_CANDIDATE_TEMPERATURE"),
+    ({"query_candidates": 3, "query_candidate_temperature": float("nan")}, "QUERY_CANDIDATE_TEMPERATURE"),
+])
+def test_query_candidate_settings_are_checked(overrides, setting):
+    with pytest.raises(ValueError, match=setting):
+        build_pipeline(settings(**overrides))
+    assert build_pipeline(settings(query_candidate_temperature=0)).query_candidates == 1  # unused with one candidate
+
+
+def test_the_request_deadline_cancels_both_candidate_requests():
+    server = FakeLLMServer([(fenced(EXAMPLES["official-03"]), "stop")], [(fenced(RENAMED_03), "stop")] * 2, sampled_delay=5)
+    pipeline = best_of(3, server)
+    pipeline.request_timeout_seconds = 0.3
+    started = time.perf_counter()
+    with pytest.raises(PipelineError, match="Request timed out after 0.3 seconds"):
+        asyncio.run(pipeline.run(CHOLERA_BY_SEX))
+    assert server.sampled_cancelled and time.perf_counter() - started < 1

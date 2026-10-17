@@ -153,7 +153,32 @@ GRAPH <https://biomedit.ch/rdf/sphn-resource/global> { ?concept rdfs:label ?labe
 - **Patient sizes vary** from 31 KB to 506 MB per file. A few huge patients dominate some queries.
 - **Size changes everything.** A query that takes milliseconds on dev can take more than 30 minutes on perf: see the timing table in the README, section 11.
 
-## 8. Exploring the data yourself
+## 8. What a schema card says
+
+`data/schema_cards.json` is measured class by class by `scripts/profile_data.py` (`--cards-only` keeps `property_kinds.json` and rebuilds the cards in about a minute; every query runs under Virtuoso's 30 s anytime timeout and a partial answer is an error). The query agent sees the cards the picker selects, rendered one per line:
+
+```
+sphn:BilledDiagnosis [2026 records, 1008 patients]: hasAdministrativeCase -> sphn:AdministrativeCase; hasCode -> ICD-10-GM code (?c a ?concept; one code from the candidates to match a concept); ...; hasRank = one of sphn-individual:Principal | sphn-individual:Complementary | sphn-individual:Secondary; hasRecordDateTime (dateTime); ...
+```
+
+Per property the card holds, besides `kind` and `count`:
+
+| Field | Meaning | Rendered as |
+|---|---|---|
+| `datatype` | the literal's XSD type | `hasRecordDateTime (dateTime)` |
+| `target`, `targets` | the class a link reaches; `targets` lists every class observed, most frequent first (40 links reach several, e.g. `LabTestEvent.hasSample` -> Sample, Isolate, TumorSpecimen; a card prints at most 12) | `hasSample -> sphn:Sample \| sphn:Isolate \| sphn:TumorSpecimen` |
+| `code_system` | the terminology of the code nodes: `ICD-10-GM` (BilledDiagnosis, OncologyDiagnosis), `CHOP` (BilledProcedure), `SNOMED CT` (38 classes), `GENO`, a namespace, or `generic` when the nodes carry only `sphn:Code` (17 classes: Diagnosis, NursingDiagnosis, MedicalProcedure, AdverseEvent, LabResult, ...). `code_systems` gives the split when a property mixes them (Substance.hasCode: 95% SNOMED CT) | `hasCode -> CHOP code (?c a ?concept; one code from the candidates to match a concept)` / `hasCode -> SNOMED CT code (95%, the rest generic sphn:Code; ?c a ?concept; ...)` / `hasCode -> generic sphn:Code (no terminology type: cannot be matched by ICD/CHOP/SNOMED)` |
+| `values` | the members of an sphn-individual value set with their counts, in full (TherapeuticArea.hasSpecialtyName has 64) | `hasSpecialtyName = one of sphn-individual:Urology \| ...` |
+
+A coded property shows no example code and no inference option: the model copied the former placeholder `?c a snomed:<code> OPTION (inference ...)` as it stood (11 dev answers of the 17 October run 3, all unparseable), so the card names the `?c a ?concept` pattern and points at the code candidates, and the prompt rules say how a concrete code is typed with the inference option. `hasSubjectPseudoIdentifier`, which 79 classes carry, is rendered only on the SubjectPseudoIdentifier card (`... (every record links to it with hasSubjectPseudoIdentifier): hasIdentifier (string); ...`): one patient is one graph, no compliant reference joins through it, and the join was wrong or harmful in three dev answers (official-04, q-029, q-042). The judge still reads the property from `schema_cards.json`, so a query that uses it is checked as before.
+
+A card that uses a prefix the prompt does not declare prints its namespace once: `(geno: <http://purl.obolibrary.org/obo/GENO_>)`. With `assets/value_sets.json` present (built by `scripts/build_value_sets.py`, never committed), coded sets of at most 20 members are rendered with their labels: `hasCode -> code typed as one of Married snomed:... | ...`. The cap of 20 (15 until 17 October) takes in the procedure intents (Intent.hasCode, 17 members) and the tumour grades (18); the next coded sets have 21 members or more.
+
+**How the picker chooses** (`SchemaCards.cards_for`, `CONTEXT_CARDS` = 8): whole-word matches of class names (stemmed, so "stays" meets "stay"; words shared by many names such as "medical" or "event" weigh half), a synonym table for backbone classes (stay/admission/in hospital/inpatient -> AdministrativeCase, citizen -> Nationality, BMI, blood pressure, died/death -> Death, cancer/tumour -> OncologyDiagnosis, ingredient -> Substance, specialty -> TherapeuticArea, follow-up -> FollowUp and VitalStatus, born/baby -> Birth, early/preterm/gestational -> GestationalAgeAtBirth, sex/male/female -> AdministrativeSex, "give drugs"/administered/route/by mouth/IV -> DrugAdministrationEvent, intent/guidance/screening/diagnostic -> Intent, identifier/pseudonym/patient id -> SubjectPseudoIdentifier), property names ("active ingredient" -> Drug), value labels ("alive" -> VitalStatus), the classes the retrieved examples use, and one link from a shown card when the question names the link or its target (FollowUp.hasResult -> VitalStatus), or when a code candidate is a member of the target's value set (the screening-intent code makes ImagingProcedure.hasIntent pull Intent). An explicit `sphn:Name` always ranks first; spare slots go to the classes the best card links to; provenance classes (SourceSystem, DataProvider, SubjectPseudoIdentifier) are never pulled through a link or through an example (official-15 uses SubjectPseudoIdentifier, and it used to reach allowed questions that way): only a question that names identifiers gets that card. On the 16 official and 45 dev reference questions the cards cover 97 of the 98 classes the reference queries use (94 of 98 before the 17 October evening changes; the miss is Age for official-12, a forbidden request); with the 3 team examples, 106 of 107.
+
+**Code candidates** (`TerminologyIndex.candidates`, `CONTEXT_CODES` = 5): a candidate whose label only spells out a class name of two or more words, semantic tag included ("Imaging (procedure)" for sphn:ImagingProcedure), is dropped and the next one takes its slot: no reference uses such a code, and the model typed the intent of an imaging procedure with it twice (q-057, q-074). On the 64 reference questions it drops exactly that one label (q-057, q-062, q-066, q-074) and no code a reference needs.
+
+## 9. Exploring the data yourself
 
 Ask Santiago to run queries on the run machine, or to give you access to it. Always use the HTTP endpoint: the release's `query.sh` (isql) rejects some valid SPARQL. Two useful starting points:
 
