@@ -257,7 +257,9 @@ If module D changes one of them, update both the prompt and the affected labels 
 
 ### The query agent against reference SPARQL
 
-`python eval/run_query_eval.py --concurrency 4` runs 47 compliant questions through the whole pipeline. That is the 11 official examples, each without its own example in the context, plus 36 questions with a reference query verified on the dev database, split 21 dev / 15 holdout. Both the generated and the reference query then run on the dev Virtuoso, and their results are compared.
+`python eval/run_query_eval.py --concurrency 4` runs 47 compliant questions through the whole pipeline. That is the 11 official examples, each without its own example in the context, plus 36 questions with a reference query verified on the dev database, split 21 dev / 15 holdout. Both the generated and the reference query then run on the dev Virtuoso, and their results are compared. (Since 17 October evening the set has 87 questions: 11 official, 45 dev, 31 holdout.)
+
+Outcomes: `exact` (the same rows), `exact_numbers` (the reference's numbers with other labels, rounding or extra columns), `same_rows` (as many rows, other numbers), `wrong`, `empty`, `error` (Virtuoso refused it); "right numbers" = `exact` + `exact_numbers`. Since 18 October each row also has `outcome_as_asked` and `as_asked_reference`, and the summary `right_numbers`, `right_numbers_as_asked`, `as_asked` and `as_asked_overrides`: an official reference that contradicts its own question (official-03 keeps the principal diagnosis although the question says "any diagnosis rank") is scored a second time against the question as written. The strict counts stay the headline; quote the as-asked count only next to them.
 
 **Results (Qwen3.5-9B for both agents, 2026-10-17):**
 
