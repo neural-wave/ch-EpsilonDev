@@ -9,7 +9,8 @@ from nl2sparql.agents import ExampleQueryAgent, HeuristicIntentAgent, LLMIntentA
 from nl2sparql.context import SchemaCards
 from nl2sparql.judge import Judge
 from nl2sparql.llm import LLMClient, LLMError
-from nl2sparql.models import Context, Example
+from nl2sparql.agents.prompts import INTENT_PROMPTS
+from nl2sparql.models import FLAG_NAMES, Context, Example
 
 
 def run(coroutine):
@@ -107,3 +108,10 @@ def test_judge_fixes_prefixes_and_flags_terms_missing_from_the_data():
     wrong = judge.check("SELECT (COUNT(DISTINCT ?g) AS ?n) WHERE { GRAPH ?g { ?d sphn:hasRankCode ?r } }")
     assert wrong.errors == ["sphn:hasRankCode does not occur in the data. Did you mean sphn:hasRank?"]
     assert judge.check("SELECT ?x WHERE {").errors[0].startswith("Syntax error")
+
+
+@pytest.mark.parametrize("version", sorted(INTENT_PROMPTS))
+def test_every_intent_prompt_asks_for_all_flags_and_json_keys(version):
+    prompt = INTENT_PROMPTS[version]
+    for key in (*FLAG_NAMES, "reason", "suggested_rephrase"):
+        assert f'"{key}"' in prompt, f"intent prompt {version} does not name {key}"

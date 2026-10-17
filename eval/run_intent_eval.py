@@ -3,12 +3,18 @@
 Cheap and fast (one short call per question), so it is the way to compare intent models and prompts.
     python eval/run_intent_eval.py             # backend and intent model from the environment
     python eval/run_intent_eval.py --shared-only   # only the questions run_eval.py uses
+    python eval/run_intent_eval.py --concurrency 4   # faster; latency then includes queueing
     python eval/run_intent_eval.py --limit 5
 
 Questions: the official examples, the team questions and eval/intent_questions.jsonl (paraphrases,
 traps, prompt injection, allowed look-alikes, gray zones). A forbidden question should raise at least
 one flag; an allowed one none. Forbidden questions name their rule in the category (e.g. "R5
 identifiers"), which also checks that the right flag is raised. The summary breaks results down by group.
+
+Splits: "dev" questions (the default) may be studied one by one to improve a prompt. "holdout" questions
+are a blind exam: they count in the summary's by_split numbers only, and their ids and text are left out
+of every printed line and list, so nobody tunes a prompt on them.
+    python eval/run_intent_eval.py --split holdout   # run only one split
 """
 from __future__ import annotations
 
@@ -36,6 +42,21 @@ async def classify(agent, text: str) -> tuple[IntentFlags, int, bool | None, boo
     return flags, tokens, None, False, None
 
 
+def rates(rows: list[dict]) -> dict:
+    """Aggregate numbers only: safe to show for the holdout split."""
+    forbidden = [r for r in rows if not r["expected_compliant"]]
+    allowed = [r for r in rows if r["expected_compliant"]]
+    with_rule = [r for r in rows if r["right_flag"] is not None]
+    return {
+        "questions": len(rows),
+        "forbidden": len(forbidden),
+        "allowed": len(allowed),
+        "detection_rate": round(sum(r["outcome"] == "caught" for r in forbidden) / max(len(forbidden), 1), 3),
+        "false_alarm_rate": round(sum(r["outcome"] == "false_alarm" for r in allowed) / max(len(allowed), 1), 3),
+        "right_flag_rate": round(sum(bool(r["right_flag"]) for r in with_rule) / max(len(with_rule), 1), 3),
+    }
+
+
 def by_group(rows: list[dict]) -> dict:
     """Questions, misses and false alarms per question group (official, team, paraphrase, injection, ...)."""
     groups: dict[str, dict] = {}
@@ -49,31 +70,49 @@ def by_group(rows: list[dict]) -> dict:
     return groups
 
 
+async def evaluate(agent, item: dict) -> dict:
+    """One question: the agent's answer, scored against the label."""
+    started = time.perf_counter()
+    try:
+        flags, tokens, valid, cut_off, fallback = await classify(agent, item["question"])
+        error = None
+    except Exception as exc:  # report and keep going
+        flags, tokens, valid, cut_off, fallback, error = IntentFlags(), 0, None, False, None, str(exc)[:200]
+    raised = flags.raised()
+    latency = (time.perf_counter() - started) * 1000
+    should_flag = not item["expected_compliant"]
+    outcome = {(True, True): "caught", (True, False): "missed",
+               (False, True): "false_alarm", (False, False): "ok"}[(should_flag, bool(raised))]
+    expected_flag = RULE_FLAGS.get(item.get("category", "").split(" ")[0])
+    return {**item, "raised": raised, "outcome": outcome, "tokens": tokens, "valid_json": valid,
+            "cut_off": cut_off, "fallback": fallback, "latency_ms": round(latency, 1), "error": error,
+            # These two reach the user inside compliance_reason, so reports keep them for review.
+            "reason": flags.reason, "suggested_rephrase": flags.suggested_rephrase,
+            "right_flag": (expected_flag in raised) if expected_flag else None}
+
+
 async def main_async(args) -> None:
     settings = Settings.from_env()
     agent = build_pipeline(settings).intent_agent
-    rows = []
-    for item in load_questions(settings, intent_cases=not args.shared_only)[: args.limit or None]:
-        started = time.perf_counter()
-        try:
-            flags, tokens, valid, cut_off, fallback = await classify(agent, item["question"])
-            error = None
-        except Exception as exc:  # report and keep going
-            flags, tokens, valid, cut_off, fallback, error = IntentFlags(), 0, None, False, None, str(exc)[:200]
-        raised = flags.raised()
-        latency = (time.perf_counter() - started) * 1000
-        should_flag = not item["expected_compliant"]
-        outcome = {(True, True): "caught", (True, False): "missed",
-                   (False, True): "false_alarm", (False, False): "ok"}[(should_flag, bool(raised))]
-        rule = item.get("category", "").split(" ")[0]
-        expected_flag = RULE_FLAGS.get(rule)
-        rows.append({**item, "raised": raised, "outcome": outcome, "tokens": tokens, "valid_json": valid,
-                     "cut_off": cut_off, "fallback": fallback, "latency_ms": round(latency, 1), "error": error,
-                     # These two reach the user inside compliance_reason, so reports keep them for review.
-                     "reason": flags.reason, "suggested_rephrase": flags.suggested_rephrase,
-                     "right_flag": (expected_flag in raised) if expected_flag else None})
-        print(f"{outcome:12} {item['id']:12} {latency:6.0f} ms {tokens:5d} tok  {','.join(raised) or '-':40} {item['question'][:60]}")
+    questions = load_questions(settings, intent_cases=not args.shared_only)
+    if args.split != "all":
+        questions = [q for q in questions if q["split"] == args.split]
+    # vLLM decodes up to 8 sequences at once; latency is only comparable between runs at the same concurrency.
+    semaphore = asyncio.Semaphore(max(1, args.concurrency))
 
+    async def limited(item: dict) -> dict:
+        async with semaphore:
+            return await evaluate(agent, item)
+
+    rows = list(await asyncio.gather(*(limited(item) for item in questions[: args.limit or None])))
+    for row in rows:
+        if row["split"] == "holdout":
+            continue
+        print(f"{row['outcome']:12} {row['id']:12} {row['latency_ms']:6.0f} ms {row['tokens']:5d} tok  "
+              f"{','.join(row['raised']) or '-':40} {row['question'][:60]}")
+    print(f"{sum(row['split'] == 'holdout' for row in rows)} holdout questions answered (hidden)")
+
+    visible = [r for r in rows if r["split"] != "holdout"]  # holdout ids never appear in lists
     forbidden = [r for r in rows if not r["expected_compliant"]]
     allowed = [r for r in rows if r["expected_compliant"]]
     with_rule = [r for r in rows if r["right_flag"] is not None]
@@ -84,19 +123,22 @@ async def main_async(args) -> None:
         "model": intent.model if settings.backend == "llm" else "keyword rules (stub)",
         "prompt_version": intent.prompt_version,
         "max_tokens": intent.max_tokens,
+        "concurrency": args.concurrency,
         "detection_rate": round(sum(r["outcome"] == "caught" for r in forbidden) / max(len(forbidden), 1), 3),
         "false_alarm_rate": round(sum(r["outcome"] == "false_alarm" for r in allowed) / max(len(allowed), 1), 3),
-        "missed": [r["id"] for r in rows if r["outcome"] == "missed"],
-        "false_alarms": [r["id"] for r in rows if r["outcome"] == "false_alarm"],
+        "missed": [r["id"] for r in visible if r["outcome"] == "missed"],
+        "false_alarms": [r["id"] for r in visible if r["outcome"] == "false_alarm"],
         "right_flag_rate": round(sum(bool(r["right_flag"]) for r in with_rule) / max(len(with_rule), 1), 3),
-        "invalid_json": [r["id"] for r in rows if r["valid_json"] is False],
-        "cut_off": [r["id"] for r in rows if r["cut_off"]],
-        "keyword_fallback": [r["id"] for r in rows if r["fallback"]],
-        "errors": [r["id"] for r in rows if r["error"]],
+        "invalid_json": [r["id"] for r in visible if r["valid_json"] is False],
+        "cut_off": [r["id"] for r in visible if r["cut_off"]],
+        "keyword_fallback": [r["id"] for r in visible if r["fallback"]],
+        "errors": [r["id"] for r in visible if r["error"]],
         "median_tokens": median([r["tokens"] for r in rows if not r["error"]]),
         "latency_ms_p50": median([r["latency_ms"] for r in rows if not r["error"]]),
         "latency_ms_p95": round(percentile([r["latency_ms"] for r in rows if not r["error"]], 0.95), 1),
-        "by_group": by_group(rows),
+        "by_split": {split: rates([r for r in rows if r["split"] == split])
+                     for split in ("dev", "holdout") if any(r["split"] == split for r in rows)},
+        "by_group": by_group(visible),
     }
     print("\n" + json.dumps(summary, indent=2))
     print(f"report: {write_report(settings, 'intent', summary, rows)}")
@@ -105,6 +147,8 @@ async def main_async(args) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Evaluate the intent agent alone.")
     parser.add_argument("--shared-only", action="store_true", help="skip eval/intent_questions.jsonl")
+    parser.add_argument("--split", choices=["all", "dev", "holdout"], default="all")
+    parser.add_argument("--concurrency", type=int, default=1, help="questions in flight at once (default 1)")
     parser.add_argument("--limit", type=int, default=0)
     asyncio.run(main_async(parser.parse_args()))
 

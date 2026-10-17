@@ -16,6 +16,7 @@ def load(name):
 def test_eval_questions_are_well_formed(name):
     for row in load(name):
         assert row["question"].strip() and isinstance(row["expected_compliant"], bool), row["id"]
+        assert row.get("split", "dev") in ("dev", "holdout"), row["id"]
         first_word = row["category"].split(" ")[0]
         # The intent eval reads the rule of a forbidden question from the first word of its category.
         if row["expected_compliant"]:

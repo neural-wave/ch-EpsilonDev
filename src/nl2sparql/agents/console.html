@@ -284,12 +284,15 @@ function intentTable(list) {
       <th title="Answers that were not the expected JSON">Invalid JSON</th>
       <th title="Answers cut off at max tokens">Cut off</th>
       <th title="Questions where the keyword rules answered because the model failed or its answer was unusable">Rules fallback</th>
+      <th title="The blind exam: detection / false alarms on the holdout questions, never studied one by one">Holdout</th>
       <th>Tokens (median)</th><th>Time p50 / p95</th></tr></thead><tbody>
     ${list.map(r => { const s = r.summary; return `<tr data-name="${esc(r.name)}">
       <td>${esc(r.created)}</td><td title="${esc(s.model)}">${esc(shortModel(s.model)) || dash}</td>
       <td>${num(s.prompt_version)}</td><td>${num(s.max_tokens)}</td><td>${num(s.questions)}</td>
       <td>${pct(s.detection_rate)}</td><td>${pct(s.false_alarm_rate)}</td><td>${pct(s.right_flag_rate)}</td>
-      <td>${ids(s.invalid_json)}</td><td>${ids(s.cut_off)}</td><td>${ids(s.keyword_fallback)}</td><td>${num(s.median_tokens)}</td>
+      <td>${ids(s.invalid_json)}</td><td>${ids(s.cut_off)}</td><td>${ids(s.keyword_fallback)}</td>
+      <td>${s.by_split?.holdout ? `${pct(s.by_split.holdout.detection_rate)} / ${pct(s.by_split.holdout.false_alarm_rate)}` : dash}</td>
+      <td>${num(s.median_tokens)}</td>
       <td>${msec(s.latency_ms_p50)} / ${msec(s.latency_ms_p95)}</td></tr>`; }).join("")}
   </tbody></table></div>`;
 }
@@ -360,7 +363,8 @@ function intentRows(rows) {
       <td>${num(r.tokens)}</td><td>${msec(r.latency_ms)}</td>
       <td class="wrap">${lines([r.error && `error: ${r.error}`, r.valid_json === false && "invalid JSON", r.cut_off && "cut off",
                                 r.fallback && `keyword rules answered (${r.fallback})`])}</td>
-      <td class="wrap">${esc(r.question)}${r.note ? `<br><span class="muted">${esc(r.note)}</span>` : ""}</td></tr>`).join("")}
+      <td class="wrap">${esc(r.question)}${r.note ? `<br><span class="muted">${esc(r.note)}</span>` : ""}
+        ${r.reason ? `<br><span class="muted">reason: ${esc(r.reason)}${r.suggested_rephrase ? ` · try: ${esc(r.suggested_rephrase)}` : ""}</span>` : ""}</td></tr>`).join("")}
   </tbody></table></div>`;
 }
 

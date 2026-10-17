@@ -19,12 +19,13 @@ def load_questions(settings: Settings, intent_cases: bool = False) -> list[dict]
         if line.strip():
             row = json.loads(line)
             questions.append({"id": row["id"], "question": row["question"], "expected_compliant": row["compliant"],
-                              "category": "official", "group": "official", "reference_sparql": row["sparql"]})
+                              "category": "official", "group": "official", "split": "dev",
+                              "reference_sparql": row["sparql"]})
     files = [("questions.jsonl", "team")] + ([("intent_questions.jsonl", "intent")] if intent_cases else [])
     for name, default_group in files:
         for line in (REPO_ROOT / "eval" / name).read_text(encoding="utf-8").splitlines():
             if line.strip():
-                questions.append({"group": default_group, **json.loads(line)})
+                questions.append({"group": default_group, "split": "dev", **json.loads(line)})
     return questions
 
 
