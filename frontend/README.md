@@ -20,7 +20,7 @@ Add `?mock=1` to use built-in fixtures without a backend, `?intro=1` to replay t
 
 ## Layout
 
-- `cli/`: the console (`index.html`, `cli.css`, `cli.js`, `intro.js`, `precheck.js`, `assets/`: the SIB and SPHN logos, not in the repository yet; the header shows the name until they are added).
+- `cli/`: the console (`index.html`, `cli.css`, `cli.js`, `intro.js`, `precheck.js`, `assets/`: the SIB and SPHN logos; the root `.gitignore` ignores every `assets/` folder for the restricted terminology files and re-includes this one by name).
 - `js/`: shared config, API client (`api.js`), fixtures for mock mode, UI helpers.
 - `css/tokens.css`: colour and type tokens.
 

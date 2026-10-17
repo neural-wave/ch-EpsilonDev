@@ -640,3 +640,5 @@ def test_the_console_is_served_by_the_api_and_the_root_redirects_to_it():
     assert page.status_code == 200 and "SIB DOC" in page.text and "/demo/ask" not in page.text  # the calls live in api.js
     assert client.get("/console/js/api.js").status_code == 200 and "/demo/ask" in client.get("/console/js/api.js").text
     assert client.get("/console/css/tokens.css").status_code == 200
+    for logo in ("sib-emblem.png", "sphn-logo.png"):  # a root .gitignore rule once kept them out of the repository
+        assert client.get(f"/console/cli/assets/{logo}").headers["content-type"] == "image/png"
