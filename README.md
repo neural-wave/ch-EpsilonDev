@@ -97,10 +97,10 @@ Feedback on our design, 16 October:
 | Area | State |
 |---|---|
 | Modules A–D | **Merged on `main`** (17 October): integration with timeouts and safe retries (David), agents and context (Santiago), judge and context hardening (Adrika), compliance guard (Gayathri). 244 tests pass locally and in pull-request CI |
-| LLM | Qwen3.5-9B served by vLLM on a Vast.ai RTX 5090, for both agents. Coder-14B and Coder-30B were tested and not adopted ([section 8](#8-the-llm-on-the-gpu)) |
-| Verdicts, 31 shared questions | **90.3% correct, 0 forbidden requests marked compliant**, 3.1 s / 19.2 s latency (p50 / p95) |
-| Verdicts, 198 labeled questions | **91.3%** on the dev split and **83.7% on the blind holdout**. The main loss is allowed requests that end up blocked ([section 11](#11-evaluation-and-baseline-numbers)) |
-| Query quality | Weak on complex questions: 2 of 47 queries return exactly the reference result, and 64% run on Virtuoso |
+| LLM | **Qwen3.6-27B** (4-bit AWQ build `cyankiwi/Qwen3.6-27B-AWQ-INT4`, Apache-2.0) served by vLLM on a Vast.ai RTX 5090, for both agents, since 17 October 21:00. It replaced Qwen3.5-9B after a measured test; Coder-14B, Coder-30B and Qwen3.8-27B were tested and not adopted ([section 8](#8-the-llm-on-the-gpu), and the full history with the reasons in [docs/MODEL_HISTORY.md](docs/MODEL_HISTORY.md)) |
+| Verdicts, 31 shared questions | 90.3% correct, 0 forbidden requests marked compliant, 3.1 s / 19.2 s latency (p50 / p95), measured with Qwen3.5-9B on 17 October morning |
+| Verdicts, 198 labeled questions | **99.3%** on the dev split and **100% on the blind holdout** (0 forbidden requests marked compliant, 0 allowed requests blocked), p50 5.3 s, p95 17.9 s ([section 11](#11-evaluation-and-baseline-numbers)) |
+| Query quality | **48 of 87** generated queries return the reference's numbers (**19 of 31** on the blind holdout, 1 of 11 official examples), 92% run on Virtuoso, 83% pass the judge on the first try |
 | Context | Terminology index (38,765 codes) and coded value sets (55 properties) built on the run machine; 96% of the codes reference queries need reach the query agent |
 | Knowledge base | Two local Virtuoso databases: dev (2,000 patients) and perf (100,000 patients) |
 | Demo page and agents console | `http://localhost:8080` and `/agents` on the run machine |
@@ -232,6 +232,7 @@ nl2sparql/
 - [docs/guard-and-judge/README.md](docs/guard-and-judge/README.md): what was verified locally in the guard and the judge, and what needs the run machine.
 - [docs/SPARQL_LLM_VALIDATOR.md](docs/SPARQL_LLM_VALIDATOR.md): SIB's sparql-llm validator, evaluated offline, and the Virtuoso-only errors the judge could catch. For module D.
 - [docs/LLM_AGENTS.md](docs/LLM_AGENTS.md): the two LLM agents, their configuration, how to measure them, how to change a prompt or a model, and their backlog. For module B.
+- [docs/MODEL_HISTORY.md](docs/MODEL_HISTORY.md): every change to the model and its configuration, why it was made, what was measured and what was decided. For everyone, and for the report.
 - [docs/FRONTEND.md](docs/FRONTEND.md): the endpoint the user interface calls, its fields and the rules the page must keep. For module E.
 - [docs/PERFORMANCE.md](docs/PERFORMANCE.md): how we measure, the scoreboard of every measured run, where the time and tokens go, and the levers. For everyone who changes anything.
 
@@ -269,7 +270,7 @@ The judged API needs a model server; everything else is in this repository. Four
 1. **Install.** Python 3.11 or newer, then `python -m pip install -r requirements.txt`.
 2. **Configure.** Copy `.env.example` to `.env` and set:
    - `NL2SPARQL_BACKEND=llm`.
-   - The model server: `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_QUERY_MODEL=Qwen/Qwen3.5-9B` and `LLM_EXTRA_BODY='{"chat_template_kwargs": {"enable_thinking": false}}'`. We hand over the endpoint and token of our own server with the submission. To serve the model yourself instead (a GPU with 24 GB or more, vLLM 0.30): `vllm serve Qwen/Qwen3.5-9B --max-model-len 32000 --max-num-seqs 8 --port 8000`, then `LLM_BASE_URL=http://localhost:8000/v1`.
+   - The model server: `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_QUERY_MODEL=cyankiwi/Qwen3.6-27B-AWQ-INT4` and `LLM_EXTRA_BODY='{"chat_template_kwargs": {"enable_thinking": false}}'`. We hand over the endpoint and token of our own server with the submission. To serve the model yourself instead (a GPU with 32 GB or more, vLLM 0.30; the weights take 19.6 GB): `vllm serve cyankiwi/Qwen3.6-27B-AWQ-INT4 --max-model-len 32000 --max-num-seqs 8 --port 8000`, then `LLM_BASE_URL=http://localhost:8000/v1`.
    - `VIRTUOSO_ENDPOINT`: your SPARQL endpoint. Only step 3 reads it; the API never does.
 3. **Build the local assets** (about a minute): `python scripts/build_assets.py`. It reads the ontologies in your Virtuoso and writes the terminology index and the value sets to `assets/`. They derive from restricted terminologies, so they are not in the repository. This step is optional: without it the API runs with fewer resolved medical codes.
 4. **Run.** `python -m nl2sparql --port 8080`, then `POST http://localhost:8080/nl-to-sparql` with `{"text": "..."}` as in [section 1](#1-the-challenge).
@@ -294,7 +295,7 @@ All settings come from environment variables; `.env.example` lists them. Load th
 | `NL2SPARQL_BACKEND` | `stub` | `stub` (no model) or `llm` |
 | `LLM_BASE_URL` | `http://localhost:8000/v1` | OpenAI-compatible server. Through the SSH tunnel: `http://localhost:18000/v1` |
 | `LLM_API_KEY` | `not-needed` | Bearer token; needed for the public Vast endpoint, not for the tunnel |
-| `LLM_QUERY_MODEL` | — | Model name served by vLLM, e.g. `Qwen/Qwen3.5-9B` |
+| `LLM_QUERY_MODEL` | — | Model name served by vLLM, e.g. `cyankiwi/Qwen3.6-27B-AWQ-INT4` |
 | `LLM_INTENT_MODEL` | query model | A separate model for the intent agent |
 | `LLM_INTENT_BASE_URL`, `LLM_INTENT_API_KEY` | shared values | Give the intent agent its own model server |
 | `LLM_INTENT_EXTRA_BODY` | inherits `LLM_EXTRA_BODY` | Request fields for the intent model only; `'{}'` sends none |
@@ -323,11 +324,11 @@ All settings come from environment variables; `.env.example` lists them. Load th
 | Provider | Vast.ai, on-demand instance rented by Santiago (about $100 of credit) |
 | GPU | 1× NVIDIA RTX 5090, 32 GB |
 | Server | vLLM 0.30 (Vast "vLLM" template), OpenAI-compatible API |
-| Model | `Qwen/Qwen3.5-9B`: 9.7B parameters, Apache-2.0, not gated |
+| Model | `cyankiwi/Qwen3.6-27B-AWQ-INT4`: the 4-bit AWQ build of `Qwen/Qwen3.6-27B` (27.8B parameters, dense, Apache-2.0, not gated). 19.6 GB of weights; the KV cache holds 102,808 tokens. Until 17 October 21:00: `Qwen/Qwen3.5-9B` |
 | Server settings | `--max-model-len 32000 --max-num-seqs 8` (at most 8 requests decoded at once) |
 | Both agents | Same model, different prompts. Separate it only if the eval says so |
 
-**Turn thinking off.** Qwen3.5 thinks by default. In our first test it spent its whole 600-token budget reasoning and returned nothing (7 s). With thinking off it answered in 1.2 s with 47 tokens. Always set `LLM_EXTRA_BODY='{"chat_template_kwargs": {"enable_thinking": false}}'`.
+**Turn thinking off.** Qwen3.5 and Qwen3.6 think by default. In our first test it spent its whole 600-token budget reasoning and returned nothing (7 s). With thinking off it answered in 1.2 s with 47 tokens. Always set `LLM_EXTRA_BODY='{"chat_template_kwargs": {"enable_thinking": false}}'`.
 
 **How to reach it.**
 
@@ -351,7 +352,17 @@ The full procedure is in [docs/LLM_AGENTS.md](docs/LLM_AGENTS.md). vLLM listens 
 | `Qwen/Qwen2.5-Coder-14B-Instruct-AWQ` | 2–3 of 47 | 72–74% | 4.5 / 10.9 s | not measured |
 | `cyankiwi/Qwen3-Coder-30B-A3B-Instruct-AWQ-4bit` | 3 of 47 | 60% | 3.6 / 7.5 s | 93% / 10% |
 
-A bigger model did not improve the SPARQL; it only changed speed. `swiss-ai/Apertus-8B-Instruct-2509`, the model the organizers encourage, is still a candidate for the intent agent ([docs/LLM_AGENTS.md](docs/LLM_AGENTS.md), section 7).
+That morning a bigger model did not improve the SPARQL; it only changed speed.
+
+**Models compared on 17 October evening**, on the final pipeline (judge with deterministic repairs, 3 examples from a bank that includes the dev reference queries). Right numbers = the reference's numbers, possibly with other labels or rounding; the blind holdout has 31 questions:
+
+| Model (Apache-2.0) | Right numbers, holdout | Official examples | Holdout queries that run | Holdout first try | Latency p50 / p95 | Verdicts dev / holdout (198) |
+|---|---|---|---|---|---|---|
+| `Qwen/Qwen3.5-9B` (until 21:00) | 10 of 31 (two runs) | 1 of 11 | 87–94% | 48–52% | 8.7 / 28.2 s | 95.3% / 93.9% |
+| **`cyankiwi/Qwen3.6-27B-AWQ-INT4` (in use)** | **19 of 31 (three runs)** | 1 of 11 | **94%** | **81%** | **7.2 / 21.9 s** | **99.3% / 100%** |
+| `cyankiwi/Qwen3.8-27B-AWQ-INT4` | 16 of 31 (one run) | 1 of 11 | 84% | 81% | 9.3 / 20.5 s | not measured |
+
+Qwen3.6-27B nearly doubles the right numbers and is not slower: it passes the judge on the first try far more often, so it needs fewer retries (median tokens per question 5,913 → 3,325). The newer Qwen3.8-27B gave fewer right numbers and more Virtuoso errors. Bigger open models need several GPUs and were not tested. Every model change, with its reason and its reports, is in [docs/MODEL_HISTORY.md](docs/MODEL_HISTORY.md). `swiss-ai/Apertus-8B-Instruct-2509`, the model the organizers encourage, is still a candidate for the intent agent ([docs/LLM_AGENTS.md](docs/LLM_AGENTS.md), section 7).
 
 **Cost.** Vast bills per hour while the instance runs, not per request, so run as many tests as you like. Stopping it halts GPU billing; storage is still billed. After a stop, the GPU may be taken by someone else when you restart.
 
@@ -458,10 +469,14 @@ python eval/run_query_eval.py --rescore eval/reports/query-<date>.json   # execu
 |---|---|---|---|---|
 | prompts v4, cap 1,500 (13:20; a second identical run gave 94.6% / 87.8%) | dev (149) | 94.0% | 1 of 88 | 8 of 61 |
 | | **holdout (49)** | **91.8%** | 2 of 29 | 2 of 20 |
-| **+ the 17 October fixes** (judge checks and repairs, guard policy, one retry per checker, the less bad attempt kept, cards, retrieval; run 3 of 3) | dev (149) | **97.3%** | **0 of 88** | 4 of 61 |
-| | **holdout (49)** | **93.9%** | 2 of 29 | 1 of 20 |
+| + the 17 October fixes (judge checks and repairs, guard policy, one retry per checker, the less bad attempt kept, cards, retrieval; run 3 of 3) | dev (149) | 97.3% | 0 of 88 | 4 of 61 |
+| | holdout (49) | 93.9% | 2 of 29 | 1 of 20 |
+| **+ round 2 and the dev references as examples, Qwen3.6-27B for both agents** (21:00; p50 5.3 s, p95 17.9 s, 3,972 tokens) | dev (149) | **99.3%** | **0 of 88** | **1 of 61** |
+| | **holdout (49)** | **100%** | **0 of 29** | **0 of 20** |
 
 Two identical runs differ by up to 4 holdout points (2 of 49 questions), so a change is judged on all 198 and on which questions flip; the three runs of the fixed system gave 87.8 / 91.8 / 93.9% on the holdout and 96.6 / 95.3 / 97.3% on dev. The full log with every run of the day is [docs/PERFORMANCE.md](docs/PERFORMANCE.md); the case-by-case analysis behind the fixes is [docs/FAILURE_ANALYSIS.md](docs/FAILURE_ANALYSIS.md).
+
+**The model change (17 October, 21:00).** Same pipeline, Qwen3.5-9B → Qwen3.6-27B: right numbers on the 87 reference questions 29–30 → **48** (blind holdout 10 → **19 of 31** in three runs, official examples 1 → 1 of 11), queries that run 85–87% → 92%, judge passes on the first try 45% → 83%, Virtuoso errors 11–13 → 7, p50 8.2–8.7 → 7.2 s, median query tokens ~5,900 → 3,325; intent agent on the holdout: 100% of forbidden requests detected, 0% false alarms. Reasons and reports: [docs/MODEL_HISTORY.md](docs/MODEL_HISTORY.md).
 
 **Per agent (17 October):**
 - **Intent agent (prompt v4), holdout:** 93% of forbidden requests detected, 5% false alarms, resists prompt injection, 631 tokens per call; identical numbers in three runs.
@@ -520,7 +535,7 @@ Query performance is a major lever: even the organizers' own queries can take mi
 11. **rdflib's SPARQL parser is not thread-safe.** The orchestrator runs the judge and the guard in worker threads, and two requests parsing at once corrupted the parser for the rest of the process: every later request came back "not compliant". With 4 concurrent requests, 198 of 198 failed. `parse_sparql` now takes a lock, and a test parses from 8 threads at once.
 12. **A client timeout does not stop a Virtuoso query.** Slow queries from an eval kept running and saturated dev Virtuoso (HTTP 503). The query eval runs queries one at a time and can `--rescore` a report. Restart the container if it happens (section 9). The client raises `VirtuosoTimeout` on HTTP 206 / `X-SQL-State: S1TAT` (a partial result from the anytime `timeout` parameter) instead of parsing wrong partial aggregates, and `eval/time_on_perf.py` no longer sends that parameter: it times plain runs with a client deadline (`--timeout-ms`) and restarts the perf container after every overrun.
 13. **On our Vast instance, `supervisorctl restart vllm` keeps the old server alive** on port 18000. Kill it before starting the new model (section 8).
-14. **A bigger model did not fix the SPARQL.** Qwen3.5-9B, Coder-14B and Coder-30B-A3B gave the same exact-result rate. The levers are context (codes, examples) and prompts.
+14. **A bigger model did not fix the SPARQL, until the pipeline could use it.** On 17 October morning Qwen3.5-9B, Coder-14B and Coder-30B-A3B gave the same exact-result rate. The same evening, with the judge's repairs and the dev reference queries as examples, Qwen3.6-27B took the blind holdout from 10 to 19 of 31 right numbers (section 8). Re-test the model whenever the pipeline changes a lot.
 15. **90% correct verdicts can hide poor SPARQL.** Measure query results against reference queries (`eval/run_query_eval.py`), not only verdicts.
 16. **Do not commit environments or editor settings.** A teammate's `.venv311/` (1,834 files) almost got merged. `.venv*/` and `.vscode/` are git-ignored now.
 17. **A Virtuoso quirk in conditional counts.** `OPTIONAL { GRAPH ?g { … } BIND(… ) }` used for a conditional count returns zeros when the same query also has an `EXISTS` cohort `BIND`, whatever the order. Use `IF(?concept = …, ?x, ?none)` binds instead (reference query q-075).

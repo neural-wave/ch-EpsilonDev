@@ -74,9 +74,11 @@ Settings come from environment variables (README §7). Each agent has its own:
 | Prompt version | `INTENT_PROMPT_VERSION` (v4) | `QUERY_PROMPT_VERSION` (v4) |
 | JSON mode | on | off |
 
-Both agents also share `LLM_TIMEOUT_SECONDS` and `LLM_VERIFY_TLS`, and the temperature is always 0. The console shows the resolved values, with secrets hidden.
+Both agents also share `LLM_TIMEOUT_SECONDS` and `LLM_VERIFY_TLS`. The temperature is 0 unless the extra request fields set it (`"temperature"`, `"top_p"`, `"top_k"`), which only a thinking-mode experiment does. The console shows the resolved values, with secrets hidden.
 
-**Qwen3.x needs thinking off**: `LLM_EXTRA_BODY='{"chat_template_kwargs": {"enable_thinking": false}}'`. Otherwise it spends its whole answer budget thinking and returns nothing.
+**The model in use** (since 17 October 21:00) is `cyankiwi/Qwen3.6-27B-AWQ-INT4` for both agents; before, `Qwen/Qwen3.5-9B`. Every model change, its reason, its reports and the decision are in [MODEL_HISTORY.md](MODEL_HISTORY.md); add an entry there whenever you change the model or what it sees.
+
+**Qwen3.x needs thinking off**: `LLM_EXTRA_BODY='{"chat_template_kwargs": {"enable_thinking": false}}'`. Otherwise it spends its whole answer budget thinking and returns nothing. To test thinking on, give it room and sampling as Qwen's model card asks (greedy decoding loops): `LLM_EXTRA_BODY='{"chat_template_kwargs": {"enable_thinking": true}, "temperature": 0.6, "top_p": 0.95, "top_k": 20}'`, `LLM_INTENT_EXTRA_BODY='{"chat_template_kwargs": {"enable_thinking": false}}'`, `LLM_QUERY_MAX_TOKENS=8000`, `LLM_TIMEOUT_SECONDS=300`, `REQUEST_TIMEOUT_SECONDS=400`.
 
 ## 4. What every request records
 
