@@ -7,11 +7,17 @@
 Each question runs through the whole pipeline (context, query agent, judge, retry), the way the API
 answers it. An official question never sees its own example. Then the generated query and the reference
 query both run on VIRTUOSO_ENDPOINT (the dev database, 2,000 patients) and their results are compared:
-- "exact": the same rows, whatever the column names or order (numbers rounded to one decimal);
+- "exact": the same rows, whatever the column names or order (numbers rounded to one decimal, labels
+  compared lowercased and stripped);
+- "exact_numbers": the same numbers in every row, label cells ignored (concept IRIs instead of labels),
+  extra generated columns ignored, and a whole number matches the decimal it rounds (ROUND(AVG()) vs
+  ROUND(10 * AVG()) / 10); a one-row answer whose columns are the reference's rows (wide instead of
+  long) counts too. The strict "exact" stays the headline number; exact_numbers_rate counts both;
 - "same_rows": the same number of rows, different values;
 - "empty": no rows where the reference has some;
 - "wrong": a different number of rows;
-- "error": Virtuoso rejected the generated query.
+- "error": Virtuoso rejected the generated query (execution_error keeps its message) or stopped it at
+  its timeout.
 
 Questions: the official compliant examples (data/examples.jsonl) plus eval/query_questions.jsonl.
 Holdout questions are a blind exam: they count in by_split only, never in the printed lines or lists.
@@ -26,12 +32,14 @@ import time
 from collections import Counter
 from pathlib import Path
 
-from eval_common import median, percentile, write_report
+from eval_common import median, percentile, virtuoso_error_text, write_report
 from nl2sparql.config import REPO_ROOT, Settings
 from nl2sparql.factory import build_pipeline
+from nl2sparql.models import PipelineResult
 from nl2sparql.virtuoso import VirtuosoClient
 
-OUTCOMES = ("exact", "same_rows", "empty", "wrong", "error")
+OUTCOMES = ("exact", "exact_numbers", "same_rows", "empty", "wrong", "error")
+RIGHT = ("exact", "exact_numbers")
 
 
 def load_query_questions(settings: Settings) -> list[dict]:
@@ -50,16 +58,79 @@ def load_query_questions(settings: Settings) -> list[dict]:
     return questions
 
 
-def _norm(value) -> str:
+def _number(value) -> float | None:
+    """The cell as a number rounded to one decimal, or None for a label, an IRI or an unbound cell."""
+    if value is None or value == "":
+        return None
     try:
-        return f"{float(value):.1f}"
+        return round(float(value), 1)
     except (TypeError, ValueError):
-        return str(value).strip()
+        return None
+
+
+def _norm(value) -> str:
+    number = _number(value)
+    return f"{number:.1f}" if number is not None else str(value).strip().lower()
 
 
 def signature(rows: list[dict]) -> list[tuple]:
     """The rows' values, independent of column names and order."""
     return sorted(tuple(sorted(_norm(v) for v in row.values())) for row in rows)
+
+
+def _close(a: float, b: float) -> bool:
+    """Equal at one decimal, or one side is a whole number the other rounds to (ROUND(AVG()) vs ROUND(10 * AVG()) / 10)."""
+    return a == b or ((a.is_integer() or b.is_integer()) and abs(a - b) <= 0.5)
+
+
+def _within(needed: list[float], available: list[float]) -> bool:
+    """Every needed number has its own close match among the available ones (both lists sorted)."""
+    free = list(available)
+    for number in needed:
+        match = next((i for i, candidate in enumerate(free) if _close(number, candidate)), None)
+        if match is None:
+            return False
+        del free[match]
+    return True
+
+
+def numeric_columns(rows: list[dict]) -> list[str]:
+    """Columns whose bound cells are all numbers (at least one): counts, averages, shares, years."""
+    columns = sorted({name for row in rows for name in row})
+    return [name for name in columns
+            if any(_number(row.get(name)) is not None for row in rows)
+            and all(_number(row.get(name)) is not None for row in rows if row.get(name) not in (None, ""))]
+
+
+def numbers(rows: list[dict]) -> list[list[float]]:
+    """Per row, its numeric cells sorted; label cells and unbound cells are left out."""
+    columns = numeric_columns(rows)
+    return [sorted(n for name in columns if (n := _number(row.get(name))) is not None) for row in rows]
+
+
+def same_numbers(reference_rows: list[dict], generated_rows: list[dict]) -> bool:
+    """The generated result carries the reference's numbers: per row, the reference's numeric cells are among
+    the generated row's (so an extra generated column is fine, a missing one is not), or one side is a single
+    row holding the one number of every row of the other side (wide instead of long)."""
+    reference, generated = numbers(reference_rows), numbers(generated_rows)
+    if not any(reference) or not any(generated):
+        return False
+    if len(reference) == len(generated):
+        free = list(generated)
+        for needed in sorted(reference, key=len, reverse=True):
+            match = next((i for i, row in enumerate(free) if _within(needed, row)), None)
+            if match is None:
+                return False
+            del free[match]
+        return True
+    wide, long = (generated, reference) if len(generated) == 1 else (reference, generated) if len(reference) == 1 else (None, None)
+    if wide is None or any(len(row) != 1 for row in long):
+        return False
+    flat_reference = sorted(n for row in reference for n in row)
+    flat_generated = sorted(n for row in generated for n in row)
+    if long is generated and len(flat_generated) != len(flat_reference):  # extra columns are tolerated, extra rows are not
+        return False
+    return _within(flat_reference, flat_generated)
 
 
 def compare(reference_rows: list[dict], generated_rows: list[dict] | None) -> str:
@@ -69,6 +140,8 @@ def compare(reference_rows: list[dict], generated_rows: list[dict] | None) -> st
         return "exact"
     if not generated_rows:
         return "empty"
+    if same_numbers(reference_rows, generated_rows):
+        return "exact_numbers"
     return "same_rows" if len(generated_rows) == len(reference_rows) else "wrong"
 
 
@@ -78,21 +151,32 @@ async def execute(client: VirtuosoClient, sparql: str) -> tuple[list[dict] | Non
         result = await client.select(sparql)
         return result.rows, round((time.perf_counter() - started) * 1000, 1), None
     except Exception as error:  # report and keep going
-        return None, round((time.perf_counter() - started) * 1000, 1), str(error)[:200]
+        return None, round((time.perf_counter() - started) * 1000, 1), virtuoso_error_text(error)
 
 
 def rates(rows: list[dict]) -> dict:
-    """Aggregate numbers only: safe to show for the holdout split."""
+    """Aggregate numbers only: safe to show for the holdout split. exact_numbers_rate counts exact results too."""
     n = max(len(rows), 1)
     counts = Counter(r["outcome"] for r in rows)
     return {
         "questions": len(rows),
         "exact_rate": round(counts["exact"] / n, 3),
+        "exact_numbers_rate": round(sum(counts[name] for name in RIGHT) / n, 3),
         "executes_rate": round(sum(r["outcome"] != "error" for r in rows) / n, 3),
         "first_try_rate": round(sum(not r["pipeline_error"] and r["retries"] == 0 and not r["judge_errors_final"]
                                     for r in rows) / n, 3),
         "outcomes": {name: counts[name] for name in OUTCOMES},
     }
+
+
+def generated_row(item: dict, result: PipelineResult, latency_ms: float) -> dict:
+    """What the pipeline answered for one question, with the verdict's reason (the first thing one reads when
+    an allowed question ends blocked)."""
+    return {**item, "pipeline_error": None, "latency_ms": latency_ms,
+            "sparql_query": result.sparql_query, "is_compliant": result.is_compliant,
+            "compliance_reason": result.compliance_reason, "retries": result.retries,
+            "tokens_consumed": result.tokens_consumed, "tokens_by_step": result.tokens_by_step,
+            "timings_ms": result.timings_ms, "diagnostics": result.diagnostics}
 
 
 async def score(rows_in: list[dict], virtuoso: VirtuosoClient) -> list[dict]:
@@ -105,7 +189,8 @@ async def score(rows_in: list[dict], virtuoso: VirtuosoClient) -> list[dict]:
         else:
             generated_rows, generated_ms, generated_error = await execute(virtuoso, item["sparql_query"])
         diagnostics = item.get("diagnostics") or {}
-        row = {**item, "reference_rows": None if reference_rows is None else len(reference_rows),
+        row = {**item, "compliance_reason": item.get("compliance_reason"),
+               "reference_rows": None if reference_rows is None else len(reference_rows),
                "reference_ms": reference_ms, "reference_error": reference_error,
                "generated_rows": None if generated_rows is None else len(generated_rows),
                "execution_ms": generated_ms, "execution_error": generated_error,
@@ -125,7 +210,7 @@ def summarize(rows: list[dict], setup: dict) -> dict:
     ok = [r for r in scored if not r["pipeline_error"]]
     query_tokens = [r["tokens_by_step"].get("query", 0) + r["tokens_by_step"].get("query_retry", 0) for r in ok]
     ratios = [r["execution_ms"] / r["reference_ms"] for r in scored
-              if r["outcome"] in ("exact", "same_rows") and r["reference_ms"] and r["execution_ms"]]
+              if r["outcome"] in (*RIGHT, "same_rows") and r["reference_ms"] and r["execution_ms"]]
     return {
         "questions": len(rows),
         **setup,
@@ -151,11 +236,12 @@ async def main_async(args) -> None:
     virtuoso = VirtuosoClient(settings.virtuoso_endpoint, timeout=args.execute_timeout)
     if args.rescore:  # same generated queries, executed again (e.g. after the database was unavailable)
         old = json.loads(Path(args.rescore).read_text(encoding="utf-8"))
-        keep = ("questions", "outcomes", "exact_rate", "executes_rate", "first_try_rate", "blocked_allowed", "not_exact",
-                "reference_failed", "retry_reasons", "median_query_tokens", "median_tokens", "latency_ms_p50",
-                "latency_ms_p95", "execution_time_ratio_median", "by_split", "by_difficulty")
+        keep = ("questions", "outcomes", "exact_rate", "exact_numbers_rate", "executes_rate", "first_try_rate",
+                "blocked_allowed", "not_exact", "reference_failed", "retry_reasons", "median_query_tokens",
+                "median_tokens", "latency_ms_p50", "latency_ms_p95", "execution_time_ratio_median", "by_split",
+                "by_difficulty")
         setup = {key: value for key, value in old["summary"].items() if key not in keep} | {"rescored_from": Path(args.rescore).name}
-        rows = await score(old["rows"], virtuoso)
+        rows = await score([r for r in old["rows"] if args.split in ("all", r["split"])], virtuoso)
         summary = summarize(rows, setup)
         print("\n" + json.dumps(summary, indent=2))
         print(f"report: {write_report(settings, 'query', summary, rows)}")
@@ -175,11 +261,7 @@ async def main_async(args) -> None:
                 result = await pipeline.run(item["question"])
             except Exception as error:  # report and keep going
                 return {**item, "pipeline_error": str(error)[:200], "latency_ms": round((time.perf_counter() - started) * 1000, 1)}
-            return {**item, "pipeline_error": None, "latency_ms": round((time.perf_counter() - started) * 1000, 1),
-                    "sparql_query": result.sparql_query, "is_compliant": result.is_compliant,
-                    "retries": result.retries, "tokens_consumed": result.tokens_consumed,
-                    "tokens_by_step": result.tokens_by_step, "timings_ms": result.timings_ms,
-                    "diagnostics": result.diagnostics}
+            return generated_row(item, result, round((time.perf_counter() - started) * 1000, 1))
 
     rows = await score(await asyncio.gather(*(generate(item) for item in questions)), virtuoso)
     query_agent = settings.agent("query")
@@ -204,7 +286,8 @@ def main() -> None:
     parser.add_argument("--concurrency", type=int, default=1, help="questions generated at once (default 1)")
     parser.add_argument("--execute-timeout", type=float, default=60.0)
     parser.add_argument("--limit", type=int, default=0)
-    parser.add_argument("--rescore", metavar="REPORT", help="re-execute the queries of an existing report (no model calls)")
+    parser.add_argument("--rescore", metavar="REPORT",
+                        help="re-execute the queries of an existing report, or of its --split (no model calls)")
     asyncio.run(main_async(parser.parse_args()))
 
 

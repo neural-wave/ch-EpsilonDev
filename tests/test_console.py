@@ -27,7 +27,7 @@ def test_config_shows_both_agents_and_hides_secrets(client):
     assert intent["json_mode"] is True and query["json_mode"] is False
     assert intent["max_answer_tokens"] == 200 and query["max_answer_tokens"] == 1500
     assert "secret-token-123" not in str(config) and intent["api_key"].startswith("set (")
-    assert config["context"]["examples_in_bank"] == 16 and config["pipeline"]["schema_classes_loaded"] == 164
+    assert config["context"]["examples_in_bank"] == 19 and config["pipeline"]["schema_classes_loaded"] == 164
 
 
 def test_preview_builds_the_real_prompts_without_calling_a_model(client):
@@ -66,6 +66,8 @@ def reports_client(tmp_path):
         (tmp_path / name).write_text(content if isinstance(content, str) else json.dumps(content))
     save("20261017-002316.json", {"summary": {"questions": 31, "verdict_accuracy": 0.903}, "rows": []})
     save("intent-20261017-090000.json", {"summary": {"questions": 31, "detection_rate": 1.0}, "rows": [{"id": "x"}]})
+    save("query-20261017-093000.json", {"summary": {"questions": 56, "exact_rate": 0.054, "exact_numbers_rate": 0.107,
+                                                     "outcomes": {"exact": 3, "exact_numbers": 3}}, "rows": []})
     save("pipeline-20261017-100000.json", "not json")
     save("perf-20261017-110000.json", {"summary": {"queries": 5, "both_complete": 1}, "rows": []})
     save("notes.json", {"summary": {}})
@@ -75,9 +77,18 @@ def reports_client(tmp_path):
 def test_reports_lists_eval_reports_newest_first(reports_client):
     listing = reports_client.get("/agents/reports").json()["reports"]
     assert [(r["name"], r["kind"]) for r in listing] == [("perf-20261017-110000.json", "perf"),
+                                                          ("query-20261017-093000.json", "query"),
                                                           ("intent-20261017-090000.json", "intent"),
                                                           ("20261017-002316.json", "pipeline")]
-    assert listing[1]["created"] == "2026-10-17 09:00" and listing[2]["summary"]["verdict_accuracy"] == 0.903
+    assert listing[2]["created"] == "2026-10-17 09:00" and listing[3]["summary"]["verdict_accuracy"] == 0.903
+    assert listing[1]["summary"]["exact_numbers_rate"] == 0.107
+
+
+def test_console_pages_show_exact_and_right_numbers(reports_client):
+    console = reports_client.get("/agents").text
+    assert "Right numbers" in console and "exact_numbers_rate" in console and "with the right numbers" in console
+    runs = reports_client.get("/agents/runs").text
+    assert "Right numbers" in runs and "exact_numbers_rate" in runs and '["exact", "exact_numbers"].includes' in runs
 
 
 def test_report_detail_has_the_rows_and_refuses_other_files(reports_client):

@@ -72,12 +72,12 @@ class Settings:
     query_prompt_version: str = "v4"  # halves the blocked allowed requests of v2 (2026-10-17)
     # Context the query agent receives: similar examples, schema cards, code candidates.
     context_examples: int = 3
-    context_cards: int = 6
+    context_cards: int = 8  # the picker now follows one link from a named class; two more slots keep that from pushing out named classes
     context_codes: int = 5
     # Pipeline.
     virtuoso_endpoint: str = "http://localhost:8890/sparql"
     max_input_chars: int = 2000
-    max_retries: int = 1
+    max_retries: int = 1  # per checker: the judge may ask the model again this often, and so may the guard
     # The retry feedback can include the rejected query. Measured on 2026-10-17 and switched off: the
     # model copies the broken query instead of fixing it (judge retries ending valid 8/18 -> 3/19).
     retry_with_previous_query: bool = False

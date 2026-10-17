@@ -57,6 +57,7 @@
   @media (max-width: 860px) { .two { grid-template-columns: minmax(0, 1fr); } }
   .chips { display: flex; flex-wrap: wrap; gap: 6px; }
   .good, .reachable { color: var(--ok); font-weight: 600; }
+  .ok { color: var(--ok); }
   .bad, .unreachable { color: var(--no); font-weight: 600; }
   .verdict { font-size: 18px; font-weight: 700; }
   ul.plain { margin: 0; padding-left: 1.1em; font-size: 13.5px; }
@@ -314,34 +315,37 @@ function queryTable(list) {
   return `<div class="scroll"><table class="grid"><thead><tr>
       <th>Date</th><th>Model</th><th title="Prompt versions: intent / query">Prompts</th><th>Questions</th>
       <th title="Generated query returns the same rows as the reference (dev Virtuoso)">Exact result</th>
+      <th title="Exact results plus answers with the reference's numbers in every row (labels, extra columns and integer rounding ignored)">Right numbers</th>
       <th title="Same number of rows, different values">Same rows</th><th>Empty</th><th>Wrong</th>
-      <th title="Virtuoso rejected the generated query">Error</th>
+      <th title="Virtuoso rejected the generated query or stopped it at its timeout">Error</th>
       <th title="Valid on the first try: no retry and no judge error left">First try</th>
-      <th title="The blind exam: exact-result rate on holdout questions">Holdout exact</th>
+      <th title="The blind exam: exact-result rate / right-numbers rate on holdout questions">Holdout exact / numbers</th>
       <th>Query tokens (median)</th><th title="Generated vs reference execution time, median ratio">Exec time ×</th>
       <th>Time p50 / p95</th></tr></thead><tbody>
-    ${list.map(r => { const s = r.summary; return `<tr data-name="${esc(r.name)}">
+    ${list.map(r => { const s = r.summary, h = s.by_split?.holdout; return `<tr data-name="${esc(r.name)}">
       <td>${esc(r.created)}</td><td title="${esc(s.models?.query)}">${esc(shortModel(s.models?.query)) || dash}</td>
       <td>${s.prompt_versions ? esc(`${s.prompt_versions.intent} / ${s.prompt_versions.query}`) : dash}</td>
-      <td>${num(s.questions)}</td><td>${pct(s.exact_rate)}</td><td>${outcome(s, "same_rows")}</td>
+      <td>${num(s.questions)}</td><td>${pct(s.exact_rate)}</td><td>${pct(s.exact_numbers_rate)}</td><td>${outcome(s, "same_rows")}</td>
       <td>${outcome(s, "empty")}</td><td>${outcome(s, "wrong")}</td><td>${outcome(s, "error")}</td>
-      <td>${pct(s.first_try_rate)}</td><td>${s.by_split?.holdout ? pct(s.by_split.holdout.exact_rate) : dash}</td>
+      <td>${pct(s.first_try_rate)}</td><td>${h ? `${pct(h.exact_rate)} / ${pct(h.exact_numbers_rate)}` : dash}</td>
       <td>${num(s.median_query_tokens)}</td><td>${num(s.execution_time_ratio_median)}</td>
       <td>${msec(s.latency_ms_p50)} / ${msec(s.latency_ms_p95)}</td></tr>`; }).join("")}
   </tbody></table></div>`;
 }
 
 function queryRows(rows) {
-  const rank = {error: 0, empty: 1, wrong: 2, same_rows: 3, reference_failed: 4, exact: 5};
+  const rank = {error: 0, empty: 1, wrong: 2, same_rows: 3, reference_failed: 4, exact_numbers: 5, exact: 6};
   rows = byProblem(rows.filter(r => r.split !== "holdout"), r => rank[r.outcome] ?? 4);
-  return `<div class="scroll"><table class="grid"><thead><tr><th>Id</th><th>Difficulty</th><th>Outcome</th>
+  return `<div class="scroll"><table class="grid"><thead><tr><th>Id</th><th>Difficulty</th>
+    <th title="exact: the reference's rows; exact_numbers: the reference's numbers in every row, labels and extra columns ignored">Outcome</th>
     <th>Rows (model / reference)</th><th>Retry</th><th>Tokens</th><th>Exec time</th><th>Problems</th><th>Question and query</th></tr></thead><tbody>
     ${rows.map(r => { const dg = r.diagnostics || {}; return `<tr><td>${esc(r.id)}</td><td>${num(r.difficulty)}</td>
-      <td class="${r.outcome === "exact" ? "good" : "bad"}">${esc(r.outcome)}</td>
+      <td class="${r.outcome === "exact" ? "good" : r.outcome === "exact_numbers" ? "ok" : "bad"}">${esc(r.outcome)}</td>
       <td>${num(r.generated_rows)} / ${num(r.reference_rows)}</td><td>${r.retries ? esc(dg.retry_reason || "yes") : ""}</td>
       <td>${num(r.tokens_consumed)}</td><td>${msec(r.execution_ms)} <span class="muted">ref ${msec(r.reference_ms)}</span></td>
       <td class="wrap">${lines([r.pipeline_error && `pipeline: ${r.pipeline_error}`, r.execution_error && `Virtuoso: ${r.execution_error}`,
-        ...(dg.judge_errors_final || []).map(e => `still invalid: ${e}`), r.is_compliant === false && "blocked as not compliant"])}</td>
+        ...(dg.judge_errors_final || []).map(e => `still invalid: ${e}`),
+        r.is_compliant === false && `blocked as not compliant${r.compliance_reason ? `: ${r.compliance_reason}` : ""}`])}</td>
       <td class="wrap">${esc(r.question)}${r.sparql_query ? `<details><summary>query</summary><pre>${esc(r.sparql_query)}</pre></details>` : ""}
         <details><summary>reference</summary><pre>${esc(r.reference_sparql)}</pre></details></td></tr>`; }).join("")}
   </tbody></table></div>`;
@@ -422,8 +426,9 @@ function scoreboard(reports) {
   const query = latest(reports, "query");
   if (query) {
     const s = query.summary, h = s.by_split && s.by_split.holdout;
+    const right = s.outcomes && s.outcomes.exact_numbers != null ? ` · ${s.outcomes.exact + s.outcomes.exact_numbers} with the right numbers` : "";
     tiles.push(tile("Query agent · exact results", `${s.outcomes ? s.outcomes.exact : "—"} / ${s.questions}`,
-      `${pct(s.executes_rate)} run on Virtuoso${h ? ` (holdout ${pct(h.executes_rate)})` : ""} · ${(s.blocked_allowed || []).length} allowed blocked · ${esc(query.created)} · ${esc(setup(s))}`, query));
+      `${pct(s.executes_rate)} run on Virtuoso${h ? ` (holdout ${pct(h.executes_rate)})` : ""}${right} · ${(s.blocked_allowed || []).length} allowed blocked · ${esc(query.created)} · ${esc(setup(s))}`, query));
   }
   const intent = latest(reports, "intent");
   if (intent) {
@@ -437,11 +442,12 @@ function scoreboard(reports) {
 function perfTable(list) {
   if (!list.length) return "<p class='muted'>No perf reports yet: <code>python eval/time_on_perf.py eval/reports/query-&lt;date&gt;.json</code>.</p>";
   return `<div class="scroll"><table class="grid"><thead><tr><th>Date</th><th>From query report</th><th>Queries</th>
-      <th title="Both the generated and the reference query completed within the server limit">Both complete</th>
+      <th title="Both the generated and the reference query completed within the deadline">Both complete</th>
       <th title="Median seconds over the queries that completed on both sides">Median generated / reference</th>
       <th title="Median of generated time divided by reference time">Ratio</th>
-      <th title="Generated queries stopped by the server limit">Generated timeouts</th><th>Reference timeouts</th>
-      <th title="Generated queries more than twice as slow as their reference">Slower ×2</th><th>Limit</th></tr></thead><tbody>
+      <th title="Generated queries past the deadline (Virtuoso is restarted after each)">Generated timeouts</th><th>Reference timeouts</th>
+      <th title="Generated queries more than twice as slow as their reference">Slower ×2</th>
+      <th title="Deadline per execution (client-side since the plain-run harness; a server limit in older reports)">Limit</th></tr></thead><tbody>
     ${list.map(r => { const s = r.summary; return `<tr data-name="${esc(r.name)}"><td>${esc(r.created)}</td><td>${esc(s.source_report || "")}</td>
       <td>${num(s.queries)}</td><td>${num(s.both_complete)}</td><td>${num(s.median_generated_seconds)} s / ${num(s.median_reference_seconds)} s</td>
       <td>${num(s.median_ratio_generated_over_reference)}</td><td>${ids(s.generated_timed_out)}</td><td>${ids(s.reference_timed_out)}</td>

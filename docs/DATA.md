@@ -153,7 +153,28 @@ GRAPH <https://biomedit.ch/rdf/sphn-resource/global> { ?concept rdfs:label ?labe
 - **Patient sizes vary** from 31 KB to 506 MB per file. A few huge patients dominate some queries.
 - **Size changes everything.** A query that takes milliseconds on dev can take more than 30 minutes on perf: see the timing table in the README, section 11.
 
-## 8. Exploring the data yourself
+## 8. What a schema card says
+
+`data/schema_cards.json` is measured class by class by `scripts/profile_data.py` (`--cards-only` keeps `property_kinds.json` and rebuilds the cards in about a minute; every query runs under Virtuoso's 30 s anytime timeout and a partial answer is an error). The query agent sees the cards the picker selects, rendered one per line:
+
+```
+sphn:BilledDiagnosis [2026 records, 1008 patients]: hasAdministrativeCase -> sphn:AdministrativeCase; hasCode -> ICD-10-GM code: ?c a icd-10-gm:<code> OPTION (inference "https://biomedit.ch/rdf/sphn-resource/global"); ...; hasRank = one of sphn-individual:Principal | sphn-individual:Complementary | sphn-individual:Secondary; hasRecordDateTime (dateTime); ...
+```
+
+Per property the card holds, besides `kind` and `count`:
+
+| Field | Meaning | Rendered as |
+|---|---|---|
+| `datatype` | the literal's XSD type | `hasRecordDateTime (dateTime)` |
+| `target`, `targets` | the class a link reaches; `targets` lists every class observed, most frequent first (40 links reach several, e.g. `LabTestEvent.hasSample` -> Sample, Isolate, TumorSpecimen; a card prints at most 12) | `hasSample -> sphn:Sample \| sphn:Isolate \| sphn:TumorSpecimen` |
+| `code_system` | the terminology of the code nodes: `ICD-10-GM` (BilledDiagnosis, OncologyDiagnosis), `CHOP` (BilledProcedure), `SNOMED CT` (38 classes), `GENO`, a namespace, or `generic` when the nodes carry only `sphn:Code` (17 classes: Diagnosis, NursingDiagnosis, MedicalProcedure, AdverseEvent, LabResult, ...). `code_systems` gives the split when a property mixes them (Substance.hasCode: 95% SNOMED CT) | `hasCode -> CHOP code: ?c a chop:<code> OPTION (inference ...)` / `hasCode -> generic sphn:Code (no terminology type: cannot be matched by ICD/CHOP/SNOMED)` |
+| `values` | the members of an sphn-individual value set with their counts, in full (TherapeuticArea.hasSpecialtyName has 64) | `hasSpecialtyName = one of sphn-individual:Urology \| ...` |
+
+A card that uses a prefix the prompt does not declare prints its namespace once: `(geno: <http://purl.obolibrary.org/obo/GENO_>)`. With `assets/value_sets.json` present (built by `scripts/build_value_sets.py`, never committed), coded sets of at most 15 members are rendered with their labels: `hasCode -> code typed as one of Married snomed:... | ...`.
+
+**How the picker chooses** (`SchemaCards.cards_for`, `CONTEXT_CARDS` = 8): whole-word matches of class names (stemmed, so "stays" meets "stay"; words shared by many names such as "medical" or "event" weigh half), a synonym table for backbone classes (stay/admission -> AdministrativeCase, citizen -> Nationality, BMI, blood pressure, died/death -> Death, cancer/tumour -> OncologyDiagnosis, ingredient -> Substance, specialty -> TherapeuticArea, follow-up -> FollowUp and VitalStatus, born/baby -> Birth, sex/male/female -> AdministrativeSex), property names ("active ingredient" -> Drug), value labels ("alive" -> VitalStatus), the classes the retrieved examples use, and one link from a shown card when the question names the link or its target (FollowUp.hasResult -> VitalStatus). An explicit `sphn:Name` always ranks first; spare slots go to the classes the best card links to; provenance classes (SourceSystem, DataProvider, SubjectPseudoIdentifier) are never pulled. On the 61 dev and official questions the cards cover 92% of the classes the reference queries use (65% before 17 October).
+
+## 9. Exploring the data yourself
 
 Ask Santiago to run queries on the run machine, or to give you access to it. Always use the HTTP endpoint: the release's `query.sh` (isql) rejects some valid SPARQL. Two useful starting points:
 

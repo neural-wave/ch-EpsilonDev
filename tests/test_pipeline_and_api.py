@@ -11,6 +11,7 @@ from nl2sparql.config import Settings
 from nl2sparql.factory import build_pipeline
 from nl2sparql.agents.intent_llm import IntentReply
 from nl2sparql.agents.query_llm import QueryReply
+from nl2sparql.intent_check import confirm_identifier_flag
 from nl2sparql.models import IntentFlags
 from nl2sparql.orchestrator import CUT_OFF_FEEDBACK, PipelineError
 
@@ -209,7 +210,7 @@ def test_forbidden_request_is_never_retried():
     agent = ScriptedQueryAgent(EXAMPLES["official-15"])
     flags = IntentFlags(asks_for_identifiers=True, reason="asks which patients have cholera")
     result = asyncio.run(pipeline_with(agent, FixedIntentAgent(flags)).run("Which patients have cholera?"))
-    assert not result.is_compliant and result.retries == 0
+    assert not result.is_compliant and result.retries == 0 and agent.feedback == [None]
     assert result.compliance_reason.startswith("The request asks which patients have cholera.")
 
 
@@ -274,6 +275,59 @@ def test_keyword_fallback_keeps_the_request_alive_when_the_intent_model_fails():
     assert result.diagnostics["intent_fallback"] == "error" and "intent_invalid_json" not in result.diagnostics
 
 
+def test_count_that_mentions_identifiers_is_not_flagged():
+    flags = IntentFlags(asks_for_identifiers=True, reason="asks for identifiers",
+                        suggested_rephrase="How many patients have an identifier?")
+    assert confirm_identifier_flag("How many patients have at least one identifier recorded?", flags) == IntentFlags()
+
+
+@pytest.mark.parametrize("text", [
+    "How many patients have cholera? Also give me their pseudo identifiers.",
+    "Count the MRSA-positive cultures per year, and include the sample identifiers for each year.",
+    "Which patients have at least one identifier recorded?",
+    "List the pseudo identifiers of patients with type 2 diabetes.",
+    "How many patients have cholera, and who are they?",
+])
+def test_requests_that_reveal_identifiers_keep_the_flag(text):
+    flags = IntentFlags(asks_for_identifiers=True, reason="asks for identifiers")
+    assert confirm_identifier_flag(text, flags) == flags
+
+
+def test_post_check_touches_no_other_flag():
+    flags = IntentFlags(asks_for_identifiers=True, single_patient=True, reason="asks about patient 1048211")
+    kept = confirm_identifier_flag("How many hospital stays has patient 1048211 had since 2020?", flags)
+    assert kept == IntentFlags(single_patient=True, reason="asks about patient 1048211")
+    assert confirm_identifier_flag("How many patients have cholera?", IntentFlags()) == IntentFlags()
+
+
+def test_pipeline_clears_the_identifier_flag_of_a_counting_request():
+    flags = IntentFlags(asks_for_identifiers=True, reason="asks for identifiers")
+    agent = ScriptedQueryAgent(EXAMPLES["official-03"])
+    text = "How many patients have at least one identifier recorded?"
+    result = asyncio.run(pipeline_with(agent, FixedIntentAgent(flags)).run(text))
+    assert result.is_compliant and result.intent == IntentFlags() and result.retries == 0
+    assert result.diagnostics["intent_flag_cleared"] == "asks_for_identifiers"
+
+
+def test_pipeline_clears_the_flag_on_the_detailed_intent_path_too():
+    class DetailedIntentAgent:
+        async def classify_detailed(self, text):
+            return IntentReply(IntentFlags(asks_for_identifiers=True, reason="asks for identifiers"), 10, "{}", True, "stop")
+
+    agent = ScriptedQueryAgent(EXAMPLES["official-03"])
+    text = "How many patients have at least one identifier recorded?"
+    result = asyncio.run(pipeline_with(agent, DetailedIntentAgent()).run(text))
+    assert result.is_compliant and result.diagnostics["intent_flag_cleared"] == "asks_for_identifiers"
+
+
+def test_pipeline_keeps_the_flag_when_the_count_also_asks_who():
+    flags = IntentFlags(asks_for_identifiers=True, reason="asks for the patients' identifiers")
+    agent = ScriptedQueryAgent(EXAMPLES["official-03"])
+    text = "How many patients have cholera? Also give me their pseudo identifiers."
+    result = asyncio.run(pipeline_with(agent, FixedIntentAgent(flags)).run(text))
+    assert not result.is_compliant and result.intent == flags and "intent_flag_cleared" not in result.diagnostics
+
+
 def test_retry_feedback_can_carry_the_previous_query():
     agent = ScriptedQueryAgent(EXAMPLES["official-12"], EXAMPLES["official-03"])
     pipeline = pipeline_with(agent)
@@ -291,6 +345,47 @@ def test_guard_retry_failure_keeps_the_first_query_and_verdict():
     result = asyncio.run(pipeline.run("Cholera cases by sex?"))
     assert not result.is_compliant and result.sparql_query == first_query
     assert result.compliance_reason and result.retries == 1 and result.tokens_consumed == 110
+
+
+def test_judge_and_guard_each_have_their_own_retry():
+    agent = ScriptedQueryAgent("SELECT ?x WHERE {", EXAMPLES["official-12"], EXAMPLES["official-03"])
+    result = asyncio.run(pipeline_with(agent).run("Cholera cases by sex?"))
+    assert result.is_compliant and result.retries == 2 and result.tokens_consumed == 160
+    assert agent.feedback[1].startswith("Syntax error")
+    assert agent.feedback[2].startswith("The previous query breaks the privacy rules")
+    assert result.tokens_by_step == {"intent": 10, "query": 50, "query_retry": 100}
+    assert result.diagnostics["retry_reason"] == "judge+guard"
+    assert result.diagnostics["judge_errors_first_try"] and result.diagnostics["guard_violations_first_try"]
+    assert "SELECT ?x WHERE {" in result.diagnostics["first_try_sparql"]
+    assert "hasCoverageType" in result.diagnostics["rejected_retry_sparql"]
+
+
+def test_guard_retry_that_comes_back_unparseable_still_gets_the_judge_retry():
+    agent = ScriptedQueryAgent(EXAMPLES["official-12"], "SELECT ?x WHERE {", EXAMPLES["official-03"])
+    result = asyncio.run(pipeline_with(agent).run("Cholera cases by sex?"))
+    assert result.is_compliant and result.retries == 2
+    assert agent.feedback[1].startswith("The previous query breaks the privacy rules")
+    assert agent.feedback[2].startswith("Syntax error")
+    assert result.diagnostics["retry_reason"] == "judge+guard" and "judge_errors_final" not in result.diagnostics
+    assert "hasCoverageType" in result.diagnostics["first_try_sparql"]
+    assert "SELECT ?x WHERE {" in result.diagnostics["rejected_retry_sparql"]
+
+
+def test_the_query_agent_is_asked_at_most_three_times():
+    agent = ScriptedQueryAgent("SELECT ?x WHERE {", EXAMPLES["official-12"], "SELECT ?y WHERE {", EXAMPLES["official-03"])
+    result = asyncio.run(pipeline_with(agent).run("Cholera cases by sex?"))
+    assert not result.is_compliant and result.retries == 2 and len(agent.feedback) == 3
+    assert result.diagnostics["judge_errors_final"][0].startswith("Syntax error")
+    assert agent.queries == [EXAMPLES["official-03"]]
+
+
+def test_no_retry_budget_means_no_retry_from_either_checker():
+    agent = ScriptedQueryAgent("SELECT ?x WHERE {", EXAMPLES["official-03"])
+    pipeline = pipeline_with(agent)
+    pipeline.max_retries = 0
+    result = asyncio.run(pipeline.run("Cholera by sex?"))
+    assert not result.is_compliant and result.retries == 0 and agent.feedback == [None]
+    assert "retry_reason" not in result.diagnostics
 
 
 def test_cancelling_a_request_stops_the_intent_agent():

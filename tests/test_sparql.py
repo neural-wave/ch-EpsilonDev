@@ -1,7 +1,7 @@
 from rdflib import URIRef
 
 from nl2sparql.sparql.parse import parse_sparql, strip_virtuoso_extensions
-from nl2sparql.sparql.prefixes import SPHN, add_missing_prefixes
+from nl2sparql.sparql.prefixes import SPHN, STANDARD_PREFIXES, add_missing_prefixes, fix_standard_prefixes
 from nl2sparql.sparql.terms import collect_iris
 
 OFFICIAL_EXAMPLE = """DEFINE sql:select-option "order"
@@ -62,6 +62,37 @@ def test_adds_missing_prefixes_after_defines():
 def test_does_not_redeclare_or_touch_iris():
     query = f'PREFIX sphn: <{SPHN}>\nSELECT * WHERE {{ ?s <http://x.org/a:b> "rdf:not-a-prefix" ; sphn:hasCode ?c }}'
     assert add_missing_prefixes(query) == query
+
+
+def test_rewrites_standard_prefixes_declared_with_another_namespace():
+    # Seen in generated queries: the OBO namespace for icd-10-gm, geno under biomedit, a made-up
+    # sphn-individual IRI and SNOMED's "sid" path. Every term under them then names nothing in the data.
+    query = (
+        "PREFIX icd-10-gm: <http://purl.obolibrary.org/obo/ICD10GM_>\n"
+        "PREFIX geno: <https://biomedit.ch/rdf/sphn-resource/geno/>\n"
+        "PREFIX sphn-individual: <https://biomedit.ch/rdf/sphn-individual/>\n"
+        "prefix snomed: <http://snomed.info/sid/>\n"
+        "SELECT * WHERE { ?d sphn:hasRank sphn-individual:Principal ; sphn:hasCode ?c . ?c a icd-10-gm:E11 }"
+    )
+    fixed = fix_standard_prefixes(query)
+    for name in ("icd-10-gm", "geno", "sphn-individual"):
+        assert f"PREFIX {name}: <{STANDARD_PREFIXES[name]}>\n" in fixed
+    assert "prefix snomed: <http://snomed.info/id/>\n" in fixed
+    assert fixed.splitlines()[-1] == query.splitlines()[-1]
+    parsed = parse_sparql(add_missing_prefixes(fixed))
+    assert parsed.kind == "SelectQuery"
+    assert URIRef(STANDARD_PREFIXES["icd-10-gm"] + "E11") in collect_iris(parsed.algebra)
+    assert URIRef(STANDARD_PREFIXES["sphn-individual"] + "Principal") in collect_iris(parsed.algebra)
+
+
+def test_keeps_bif_other_prefix_names_and_right_declarations():
+    query = (
+        "PREFIX bif: <http://www.openlinksw.com/schemas/bif#>\n"
+        f"PREFIX icd: <{STANDARD_PREFIXES['icd-10-gm']}>\n"
+        f"PREFIX sphn: <{SPHN}>\n"
+        'SELECT * WHERE { ?c a icd:E11 ; sphn:hasValue "PREFIX snomed: <http://snomed.info/sid/>" }'
+    )
+    assert fix_standard_prefixes(query) == query
 
 
 def test_collects_iris_including_paths():

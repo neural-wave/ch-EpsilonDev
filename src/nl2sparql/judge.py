@@ -1,8 +1,14 @@
 """Judge: technical checks on the generated query, in code (no LLM).
 
-Adds missing standard prefixes, checks syntax and SPHN terms against the data snapshot, and
-reports known query-style issues for code inference and non-distinct patient graph counts.
-Any error triggers the shared retry with the error text as feedback.
+First the repairs that need no model: a standard prefix declared with another namespace, the
+inference option on a variable class, a date plus a duration string, three syntax mistakes with
+exactly one meaning (judge_checks.syntax.normalize) and a typed value-set entry. Then the checks:
+syntax, with hints that name the real error when rdflib still rejects the text (rdflib's own
+message points at the wrong token); SPHN terms against the data snapshot; the inference option on
+code patterns; distinct patient counts; and the three families in judge_checks/: variable scope,
+semantics and schema. Every error becomes the retry feedback, so a check that fires on a correct
+query costs the request its retry: each one was measured at zero hits on the reference queries.
+The repairs are reported so the pipeline can log them.
 
 Database-agnostic by design: the judge never contacts a database (confirmed by the jury).
 """
@@ -16,9 +22,11 @@ from rdflib.namespace import RDF
 from rdflib.plugins.sparql.parserutils import CompValue
 
 from nl2sparql.context.schema import SchemaCards
+from nl2sparql.judge_checks import schema as schema_checks, scope as scope_checks, semantics as semantic_checks
+from nl2sparql.judge_checks.syntax import diagnose, normalize
 from nl2sparql.models import JudgeResult
 from nl2sparql.sparql.parse import parse_sparql
-from nl2sparql.sparql.prefixes import SPHN, add_missing_prefixes
+from nl2sparql.sparql.prefixes import SPHN, add_missing_prefixes, fix_standard_prefixes
 from nl2sparql.sparql.terms import collect_iris
 
 CODE_CLASS_ROOTS = (
@@ -27,6 +35,9 @@ CODE_CLASS_ROOTS = (
 )
 PREFIX_DECL_RE = re.compile(r"\bPREFIX\s+([\w-]*):\s*<([^>]+)>", re.IGNORECASE)
 CODE_INFERENCE_URI = "https://biomedit.ch/rdf/sphn-resource/global"
+# A single pseudo-identifier triple that nothing reads is harmless for the result: not worth a retry.
+SEMANTIC_CHECKS = [check for check in semantic_checks.CHECKS if check is not semantic_checks.check_unused_pseudo_identifier]
+MAX_ERRORS = 5  # the model gets the first ones; more hints than that read as noise
 
 
 class Judge:
@@ -34,19 +45,42 @@ class Judge:
         self.schema = schema
 
     def check(self, sparql: str) -> JudgeResult:
-        fixed = add_missing_prefixes(sparql.strip() + "\n")
+        repairs: list[str] = []
+        text = fix_standard_prefixes(sparql.strip() + "\n")
+        for rewrite in semantic_checks.REWRITES:
+            text, applied = rewrite(text)
+            repairs += applied
+        fixed = add_missing_prefixes(text)
         parsed = parse_sparql(fixed)
         if parsed.kind == "Invalid":
-            return JudgeResult(fixed, [f"Syntax error: {parsed.error}"])
+            fixed, applied = normalize(fixed)
+            repairs += applied
+            parsed = parse_sparql(fixed)
+            if parsed.kind == "Invalid":
+                hints = diagnose(fixed) or [parsed.error]
+                return JudgeResult(fixed, [f"Syntax error: {hint}" for hint in hints], repairs)
         if parsed.query is None:
-            return JudgeResult(fixed)  # updates: nothing to check here, the guard rejects them
+            return JudgeResult(fixed, repairs=repairs)  # updates: nothing to check here, the guard rejects them
+        for rewrite in schema_checks.REWRITES:
+            rewritten, applied = rewrite(fixed, self.schema)
+            if applied:
+                reparsed = parse_sparql(rewritten)
+                if reparsed.kind != "Invalid" and reparsed.query is not None:
+                    fixed, parsed = rewritten, reparsed
+                    repairs += applied
         errors = []
-        for iri in sorted(collect_iris(parsed.algebra)):
+        # A class listed only inside VALUES next to classes the data has is an alternative that matches
+        # nothing, not a mistake (official-08 lists ten variant classes, five of which the data does not
+        # have). A lone misspelt class is still reported, and a property in VALUES is used as a predicate.
+        in_values = _values_iris(parsed.algebra)
+        only_in_values = {iri for iri in in_values - collect_iris(_without_values(parsed.algebra))
+                          if str(iri).startswith(SPHN) and str(iri)[len(SPHN):][:1].isupper()}
+        if not any(str(iri).startswith(SPHN) and self.schema.in_data(str(iri)[len(SPHN):]) for iri in in_values):
+            only_in_values = set()
+        for iri in sorted(collect_iris(parsed.algebra) - only_in_values):
             term = str(iri)[len(SPHN):] if str(iri).startswith(SPHN) else None
             if term and not self.schema.in_data(term):
-                suggestion = self.schema.closest(term)
-                hint = f" Did you mean sphn:{suggestion}?" if suggestion else ""
-                errors.append(f"sphn:{term} does not occur in the data.{hint}")
+                errors.append(schema_checks.suggest_missing_term(term, self.schema))
         if _code_patterns_missing_inference(fixed, parsed.algebra):
             errors.append(
                 "Every ICD-10-GM or CHOP code type pattern needs "
@@ -54,7 +88,60 @@ class Judge:
             )
         if _has_non_distinct_graph_count(parsed.algebra):
             errors.append("Count patients with COUNT(DISTINCT ?g) to avoid counting duplicate graph matches.")
-        return JudgeResult(fixed, errors)
+        for check in scope_checks.CHECKS:
+            errors += check(parsed)
+        for check in schema_checks.CHECKS:
+            errors += check(parsed, fixed, self.schema)
+        for check in SEMANTIC_CHECKS:
+            errors += check(parsed, fixed)
+        return JudgeResult(fixed, _first_unique(errors), repairs)
+
+
+def _values_iris(algebra) -> set:
+    """IRIs that appear in VALUES blocks anywhere in the query."""
+    found = set()
+
+    def visit(node) -> None:
+        if isinstance(node, (list, tuple, set)):
+            for item in node:
+                visit(item)
+            return
+        if not isinstance(node, CompValue):
+            return
+        if node.name == "values":
+            for row in node.res or []:
+                found.update(value for value in row.values() if isinstance(value, URIRef))
+            return
+        for key, value in node.items():
+            if not key.startswith("_"):
+                visit(value)
+
+    visit(algebra)
+    return found
+
+
+def _without_values(node):
+    """The algebra with every VALUES block replaced by an empty one, to see what the rest uses."""
+    if isinstance(node, list):
+        return [_without_values(item) for item in node]
+    if isinstance(node, tuple):
+        return tuple(_without_values(item) for item in node)
+    if not isinstance(node, CompValue):
+        return node
+    if node.name == "values":
+        return CompValue("values", res=[])
+    copy = CompValue(node.name)
+    for key, value in node.items():
+        copy[key] = value if key.startswith("_") else _without_values(value)
+    return copy
+
+
+def _first_unique(errors: list[str]) -> list[str]:
+    unique: list[str] = []
+    for error in errors:
+        if error not in unique:
+            unique.append(error)
+    return unique[:MAX_ERRORS]
 
 
 def _code_type_patterns(algebra) -> list[tuple]:

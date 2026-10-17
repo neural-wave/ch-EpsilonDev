@@ -1,5 +1,6 @@
 """The pipeline: input check, then intent agent in parallel with context -> query agent -> judge,
-then the compliance guard. One retry per request, shared by the judge and the guard."""
+then the compliance guard. The judge and the guard each have their own retry budget (MAX_RETRIES per
+checker), so with the default of 1 the query agent is called at most three times per request."""
 from __future__ import annotations
 
 import asyncio
@@ -14,6 +15,7 @@ from nl2sparql.agents.base import IntentAgent, QueryAgent
 from nl2sparql.context.builder import ContextBuilder
 from nl2sparql.guard.decision import ComplianceGuard
 from nl2sparql.input_check import normalize_text
+from nl2sparql.intent_check import confirm_identifier_flag
 from nl2sparql.judge import Judge
 from nl2sparql.models import Context, IntentFlags, PipelineResult
 
@@ -29,23 +31,42 @@ class PipelineError(RuntimeError):
 
 
 class _Run:
-    """Bookkeeping of one request: time and tokens per step, why a retry happened."""
+    """Bookkeeping of one request: time and tokens per step, which checker asked for a retry."""
 
     def __init__(self, max_retries: int):
-        self.retries_left = max_retries
+        # One budget per checker: a guard retry that comes back unparseable still gets the judge's retry,
+        # and a judge retry that still breaks a rule still gets the guard's.
+        self.retries_left = {"judge": max_retries, "guard": max_retries}
+        self.retries = 0
         self.timings: dict[str, float] = {}
         self.tokens: dict[str, int] = {}
         self.diagnostics: dict = {}
 
-    def take_retry(self, reason: str) -> bool:
-        if self.retries_left <= 0:
+    def can_retry(self, checker: str) -> bool:
+        return self.retries_left[checker] > 0
+
+    def take_retry(self, checker: str) -> bool:
+        if not self.can_retry(checker):
             return False
-        self.retries_left -= 1
-        self.diagnostics["retry_reason"] = reason
+        self.retries_left[checker] -= 1
+        self.retries += 1
+        taken = set(self.diagnostics.get("retry_reason", "").split("+")) | {checker}
+        self.diagnostics["retry_reason"] = "+".join(name for name in ("judge", "guard") if name in taken)
         return True
+
+    def note_rejected(self, key: str, problems: list[str], sparql: str) -> None:
+        """What a checker rejected before its retry. `first_try_sparql` keeps the first answer; when the
+        rejected query is a retry answer it gets its own key, so both retries can be reproduced."""
+        self.diagnostics[key] = problems
+        if self.diagnostics.setdefault("first_try_sparql", sparql) != sparql:
+            self.diagnostics["rejected_retry_sparql"] = sparql
 
     def add_tokens(self, step: str, used: int) -> None:
         self.tokens[step] = self.tokens.get(step, 0) + used
+
+    def note_repairs(self, repairs: list[str]) -> None:
+        if repairs:  # what the judge fixed without the model
+            self.diagnostics.setdefault("judge_repairs", []).extend(repairs)
 
     def note_cut_off(self, step: str) -> None:
         self.diagnostics.setdefault("cut_off", []).append(step)
@@ -106,8 +127,7 @@ class Pipeline:
         except Exception as error:
             raise PipelineError("Compliance check failed.") from error
         if decision.retry_hint and run.take_retry("guard"):
-            run.diagnostics["guard_violations_first_try"] = [f"{v.rule}: {v.message}" for v in decision.violations]
-            run.diagnostics["first_try_sparql"] = sparql
+            run.note_rejected("guard_violations_first_try", [f"{v.rule}: {v.message}" for v in decision.violations], sparql)
             try:
                 candidate_sparql = await self._generate(text, context, self._feedback(decision.retry_hint, sparql), run, intent_task)
                 candidate_decision = await asyncio.to_thread(
@@ -127,7 +147,7 @@ class Pipeline:
             suggested_rephrase=decision.suggested_rephrase,
             intent=flags,
             violations=[f"{v.rule}: {v.message}" for v in decision.violations],
-            retries=self.max_retries - run.retries_left,
+            retries=run.retries,
             timings_ms=run.timings,
             tokens_by_step=run.tokens,
             diagnostics=run.diagnostics,
@@ -152,7 +172,10 @@ class Pipeline:
                 if reply.fallback:
                     run.diagnostics["intent_fallback"] = reply.fallback
             run.add_tokens("intent", used)
-            return flags
+            confirmed = confirm_identifier_flag(text, flags)
+            if confirmed != flags:
+                run.diagnostics["intent_flag_cleared"] = "asks_for_identifiers"
+            return confirmed
         except Exception as error:  # the verdict needs the intent flags: the request fails (HTTP 503)
             raise PipelineError("Intent classification failed.") from error
         finally:
@@ -165,13 +188,14 @@ class Pipeline:
         step = "query" if feedback is None else "query_retry"
         sparql, cut_off = await self._ask_query_agent(text, context, feedback, step, run)
         verdict = await asyncio.to_thread(self.judge.check, sparql)
+        run.note_repairs(verdict.repairs)
         # The first generation runs alongside the intent agent, but a forbidden request is never retried.
-        if verdict.errors and run.retries_left > 0 and not (await intent_task).flagged and run.take_retry("judge"):
-            run.diagnostics["judge_errors_first_try"] = verdict.errors
-            run.diagnostics["first_try_sparql"] = verdict.sparql
+        if verdict.errors and run.can_retry("judge") and not (await intent_task).flagged and run.take_retry("judge"):
+            run.note_rejected("judge_errors_first_try", verdict.errors, verdict.sparql)
             retry_feedback = self._feedback(" ".join(([CUT_OFF_FEEDBACK] if cut_off else []) + verdict.errors), verdict.sparql)
             sparql, _ = await self._ask_query_agent(text, context, retry_feedback, "query_retry", run)
             verdict = await asyncio.to_thread(self.judge.check, sparql)
+            run.note_repairs(verdict.repairs)
         if verdict.errors:
             run.diagnostics["judge_errors_final"] = verdict.errors
         run.timings["generate" if feedback is None else "generate_retry"] = round((time.perf_counter() - started) * 1000, 1)

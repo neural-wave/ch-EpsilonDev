@@ -12,6 +12,7 @@ For whoever works on module D (guard and judge). Read [DATA.md](DATA.md) first: 
 | `data/examples.jsonl` | The 16 official examples, labeled |
 | `scripts/check_query.py` | Give it a query: verdict, broken rules and what each variable can hold |
 | `tests/test_guard.py` | The existing test cases; add yours there |
+| `tests/test_guard_pinning.py` | R1 on expressions: the shapes that pin `?g` or an identifier, and the house-style shapes that must stay allowed |
 
 First task: backlog item 1 in [section 8](#8-backlog-for-module-d-most-useful-first).
 
@@ -24,11 +25,15 @@ The guard receives the final SPARQL query and the intent agent's flags, and retu
 | OK | OK | compliant |
 | flagged | broken | non-compliant, no retry |
 | flagged | OK | non-compliant, no retry (the query agent cleaned up a forbidden request) |
-| OK | broken | non-compliant, plus a retry hint for the query agent; still broken after the one retry means non-compliant |
+| OK | R1 broken | non-compliant, no retry (the query names a patient graph, a record or an identifier: that came from the request) |
+| OK | R2–R5 broken | non-compliant, plus a retry hint for the query agent; still broken after the one retry means non-compliant |
 
-Two promises never change:
+Three promises never change:
 - A query that breaks a rule is never marked compliant.
 - A flagged request is never retried.
+- An R1 violation is never retried (`REQUEST_LEVEL_RULES` in `decision.py`). The model cannot invent a graph name, a record IRI or identifier digits, so a retry would only let it drop the forbidden part and hand back a clean query for a forbidden request (gen-106 in [FAILURE_ANALYSIS.md](FAILURE_ANALYSIS.md)).
+
+The retry hint repeats every violation message and ends with one sentence: for grouping violations, "Group by a category (a code concept via `?c a ?concept`, or a value-set property), not by the patient or the record; keep one row per category."; otherwise "Rewrite it so that it only returns results aggregated across all patients."
 
 Both kinds of error cost points, so **false alarms matter as much as leaks**.
 
@@ -39,7 +44,7 @@ Both kinds of error cost points, so **false alarms matter as much as leaks**.
 | `src/nl2sparql/sparql/parse.py` | Removes Virtuoso extensions (`DEFINE`, `OPTION (inference …)`), parses with rdflib, and reports the query form: `SelectQuery`, `ConstructQuery`, `AskQuery`, `DescribeQuery`, `Update` or `Invalid` |
 | `src/nl2sparql/guard/provenance.py` | Works out what each variable can hold: its **sensitivity** |
 | `src/nl2sparql/guard/rules.py` | The five rules, R1–R5, as checks on the parsed query |
-| `src/nl2sparql/guard/decision.py` | Combines rules and intent flags; writes `compliance_reason` and the retry hint |
+| `src/nl2sparql/guard/decision.py` | Combines rules and intent flags; writes `compliance_reason` and the retry hint; never retries R1 |
 | `src/nl2sparql/judge.py` | Shares the parser. Checks syntax and terms absent from the data, before the guard |
 
 ## 3. How a query is judged
@@ -67,12 +72,16 @@ Propagation:
 | Rule | Check in `rules.py` | Fails on |
 |---|---|---|
 | R4 | Query form must be `SelectQuery`, with no federated `SERVICE` clause | CONSTRUCT, ASK, DESCRIBE, any update, or any SERVICE clause |
-| R1 | No patient graph IRI (`http://example.org/graph/…`) or record IRI (`…/sphn-resource/…-sphn-…`) anywhere, including `FROM` and `FROM NAMED`; no identifier literal in a pattern; no filter comparing an identifier with a constant | `GRAPH <…/mock_data-1_0042>`, `FROM NAMED <…/mock_data-1_0042>`, `?s sphn:hasIdentifier "ID-1…"`, `FILTER(STR(?g) = "…")` |
+| R1 | No patient graph IRI (`http://example.org/graph/…`) or record IRI (`…/sphn-resource/…-sphn-…`) anywhere, including `FROM` and `FROM NAMED`; no identifier literal in a pattern; no expression that pins a graph name or an identifier (`IDENTIFIER` level) to values that are not identifiers themselves: comparisons (`=`, `IN`, …), string matchers (`REGEX`, `CONTAINS`, `STRSTARTS`, `STRENDS`, `sameTerm`), custom functions (`bif:starts_with`), wherever they sit (`FILTER`, `BIND`, `ORDER BY`, `GROUP BY`, an aggregate argument); no `VALUES` on such a variable; no `BIND` of a fixed value into a `GRAPH` variable | `GRAPH <…/mock_data-1_0042>`, `FROM NAMED <…/mock_data-1_0042>`, `?s sphn:hasIdentifier "ID-1…"`, `FILTER(STR(?g) = "…")`, `FILTER(STRSTARTS(STR(?g), CONCAT(…)))`, `FILTER(?g = IRI("…"))`, `SUM(IF(STRSTARTS(STR(?g), "…1050"), 1, 0))`, `VALUES ?g { … }`, `BIND(IRI("…") AS ?g)` |
 | R3 | At least one patient pattern with a concrete property, or `rdf:type` with a concrete class | `?s ?p ?o` alone, `?s a ?class` alone |
 | R2 | The outermost SELECT is aggregated. No `SELECT *`. Every projected value is an aggregate or a `GROUP BY` key that is not instance-level or an exact timestamp; `HAVING (COUNT(DISTINCT ?g) = 1)` is rejected | rows of values, `GROUP BY ?date`, `GROUP_CONCAT` of values, `SAMPLE` of a timestamp, one-patient groups |
 | R5 | No projected value is an identifier or a record IRI, even through `GROUP_CONCAT`, `SAMPLE`, `MIN`, `MAX` or `STR` | `GROUP_CONCAT(?pseudo_id)`, `MAX(?id)`, `GROUP BY ?g` with `?g` returned |
 
 **Exception:** queries that touch only the ontology graph skip R2 and R5.
+
+**What R1 still allows:** `?g != ?g2`, `BOUND(?g)`, `COALESCE(?a, ?b)` and `IF(BOUND(?e), ?g, 0)` (nothing fixed by the request), `HAVING (COUNT(DISTINCT ?g) >= 5)` (a count, not the name), and a string matcher whose literal is digit-free, such as the house-style `FILTER(STRSTARTS(STR(?g), "http://example.org/graph/"))` or `FILTER(STRSTARTS(STR(?concept), "http://snomed.info/id/"))`. The 12 bypass shapes and the 11 allowed shapes are the cases of `tests/test_guard_pinning.py`.
+
+**Grouping messages say what to do instead.** A "Grouping by …" violation (`Violation.grouping` is true) follows `BIND` chains back to the bound variable and appends the fix: a code node → "Group by the code's class instead: `?x sphn:hasCode ?code . ?code a ?concept . GROUP BY ?concept`"; a record linked by a property → "Group by the class of its code instead: `?rec sphn:hasCode ?c . ?c a ?concept`"; `?g` or an alias of it → "Never group by or return the patient graph; count patients with `COUNT(DISTINCT ?g)` and group by a category"; an exact timestamp → "Group by `YEAR(?start)` or `MONTH(?start)` instead". The real first tries behind it (intent-028, q-057, q-018, q-030) are `GROUPING_HINT_CASES` in `tests/test_guard.py`.
 
 ## 4. Tools
 
@@ -118,7 +127,9 @@ These describe the current implementation. Policy answers are still pending (REA
 | Federated `SERVICE` | Rejected as R4 | R4 |
 | Ontology-only queries | Allowed | exception above |
 | `hasSubjectPseudoIdentifier` | Treated as an identifier (its name contains `Identifier`) | provenance |
-| `FILTER(STRSTARTS(STR(?g), "…"))` | Allowed for the bare prefix, rejected when the literal contains digits | R1 |
+| `FILTER(STRSTARTS(STR(?g), "…"))` | Allowed for a digit-free literal (the bare prefix), also in `REGEX`, `CONTAINS` and custom functions; rejected when the literal contains digits or is built from an expression or a variable | R1 |
+| A second graph variable, `GRAPH ?death_patient { … }` | A patient graph like `?g`: projecting, grouping by or pinning it breaks the same rules; counting it is fine | provenance |
+| An R1 violation on an allowed request | Never retried; the verdict stands | decision |
 
 ## 7. rdflib quirks
 
@@ -127,6 +138,7 @@ The parser library has quirks we hit and handled:
 - Projected `GROUP BY` keys become internal `SAMPLE(...)` aggregates; we skip those when the key is checked.
 - `GROUP BY (YEAR(?d))` without `AS` loses the expression (`[None]`). We judge the projection by what reaches the output instead.
 - Aggregate result names (`__agg_1__`, …) restart in every subquery. Each `AggregateJoin` overwrites them, which only works because the traversal is post-order.
+- `translateExists` assigns the translated pattern of `EXISTS` / `NOT EXISTS` to the *attribute* `graph` of the node (`CompValue` has no `__setattr__`), so `node.items()` still holds the raw parse tree, from which the inner `FILTER`s have already been removed. Every walker goes through `exists_pattern(node)` for these nodes; walking the items would miss the `GRAPH` variables, the identifier literals and the filters inside an `EXISTS` (that was a complete bypass until 17 October).
 - `pyparsing` must stay at 3.2.0. Newer versions flood the logs with warnings.
 
 ## 8. Backlog for module D (most useful first)
@@ -142,3 +154,5 @@ The parser library has quirks we hit and handled:
 ## Latest offline verification
 
 On 17 October 2026, the focused Guard, SPARQL, Judge, pipeline/API, context, and profile-comparison tests passed **182 tests**. The full suite passed **191 tests**, with one existing Starlette/anyio deprecation warning. These results are for an uncommitted working tree based on `d9235ba2984e66e0ab847be924a1ae7d3fb595e8`; they do not verify real RDF graphs or Virtuoso behavior. The SERVICE check now explicitly reports R4, and its regression test covers the reason, retry hint, local-query near-miss, and no-retry behavior for flagged intent.
+
+Later on 17 October (fixes #11, #12 and #13 of [FAILURE_ANALYSIS.md](FAILURE_ANALYSIS.md), plus the EXISTS quirk above): `tests/test_guard.py` and `tests/test_guard_pinning.py` pass **144 tests**. Measured offline with `scripts/check_query.py`'s machinery on 340 queries (the 16 official examples, the 37 corpus queries, the 45 dev reference queries, and the 242 generated queries and first tries of the dev rows of the 17 October query and pipeline reports): **zero verdict changes**; 15 messages changed (12 grouping violations gained their how-to sentence, 3 R1 messages were reworded). The 14 pinning bypasses of the prototype and the 2 EXISTS bypasses all become R1; the 13 house-style shapes stay compliant.

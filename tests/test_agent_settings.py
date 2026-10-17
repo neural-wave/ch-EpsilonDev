@@ -69,6 +69,13 @@ def test_context_sizes_come_from_the_environment(env):
     assert (pipeline.context_builder.k_examples, pipeline.context_builder.k_cards, pipeline.context_builder.k_codes) == (2, 4, 5)
 
 
+def test_retry_budget_per_checker_comes_from_the_environment(env):
+    env.setenv("MAX_RETRIES", "2")
+    settings = Settings.from_env()
+    pipeline = build_pipeline(Settings(**{**settings.__dict__, "data_dir": DATA_DIR, "log_path": None}))
+    assert settings.max_retries == 2 and pipeline.max_retries == 2
+
+
 def test_unknown_agent_name_is_rejected():
     with pytest.raises(ValueError, match="Unknown agent"):
         Settings().agent("judge")

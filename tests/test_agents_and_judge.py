@@ -109,7 +109,7 @@ def test_llm_query_agent_can_reorder_patterns_after_the_model():
     agent = LLMQueryAgent(LLMClient("http://gpu/v1", transport=fake_server(answer, seen)), "m", reorder_patterns=True)
     reply = run(agent.generate_detailed("q", Context()))
     assert reply.sparql.startswith('DEFINE sql:select-option "order"')
-    assert reply.sparql.index("?c a icd-10-gm:A00") < reply.sparql.index("?dx a sphn:BilledDiagnosis")
+    assert reply.sparql.index("?c a icd-10-gm:A00") < reply.sparql.index("?dx sphn:hasCode ?c ;")
 
 
 def test_judge_fixes_prefixes_and_flags_terms_missing_from_the_data():
@@ -391,3 +391,16 @@ def test_guard_and_judge_do_not_access_virtuoso_with_missing_metadata(monkeypatc
     query = "SELECT (COUNT(DISTINCT ?g) AS ?n) WHERE { GRAPH ?g { ?s ?p ?o } }"
     assert Judge(SchemaCards({}, [])).check(query).ok
     assert "R3" in {violation.rule for violation in guard.check_query(query)}
+
+
+def test_judge_ignores_terms_that_only_appear_inside_values(judge_schema_cards=None):
+    from nl2sparql.context.schema import SchemaCards
+    from nl2sparql.judge import Judge
+
+    cards = SchemaCards({"GenomicDeletion": {"instances": 1, "patients": 1, "properties": {"hasCode": {"kind": "resource"}}}}, [])
+    judge = Judge(cards)
+    listed = ("SELECT ?class (COUNT(DISTINCT ?g) AS ?n) WHERE { GRAPH ?g { ?v a ?class } "
+              "VALUES ?class { sphn:GenomicDeletion sphn:GenomicInversion } } GROUP BY ?class")
+    assert judge.check(listed).errors == []  # official-08 lists variant classes the data does not have
+    used = "SELECT (COUNT(DISTINCT ?g) AS ?n) WHERE { GRAPH ?g { ?v a sphn:GenomicInversion } }"
+    assert any("sphn:GenomicInversion does not occur" in error for error in judge.check(used).errors)

@@ -31,6 +31,17 @@ IDENTITY_PRESERVING = {
     "Builtin_SHA256", "Builtin_SHA384", "Builtin_SHA512",
 }
 VALUE_AGGREGATES = {"Aggregate_Count", "Aggregate_Sum", "Aggregate_Avg"}
+EXISTS = {"Builtin_EXISTS", "Builtin_NOTEXISTS"}
+
+
+def exists_pattern(node: CompValue):
+    """The translated pattern of an EXISTS / NOT EXISTS node.
+
+    rdflib's translateExists assigns the translated pattern to the attribute ``graph`` of the node, so
+    ``node.items()`` still holds the raw parse tree, from which the inner FILTERs have been removed.
+    Walking the items would miss every GRAPH variable, triple and filter inside the EXISTS.
+    """
+    return node.graph
 
 
 class Sensitivity(IntEnum):
@@ -119,6 +130,9 @@ def _collect_type_objects(node, found: set[Variable]) -> None:
         if node.name == "BGP":
             found.update(o for _, p, o in node.triples if p == RDF.type and isinstance(o, Variable))
             return
+        if node.name in EXISTS:
+            _collect_type_objects(exists_pattern(node), found)
+            return
         for key, value in node.items():
             if not key.startswith("_"):
                 _collect_type_objects(value, found)
@@ -199,6 +213,9 @@ def _visit(node, facts: QueryFacts, kinds: PropertyKinds, ontology_graphs: froze
                 facts.raise_to(variable, Sensitivity.CONSTANT)
                 if isinstance(term, URIRef):
                     facts.iris.add(term)
+        return
+    if node.name in EXISTS:
+        _visit(exists_pattern(node), facts, kinds, ontology_graphs, in_ontology)
         return
     if node.name == "ServiceGraphPattern":
         facts.services.append(node.term)

@@ -7,7 +7,8 @@
     "hasProductCode": {
      "kind": "resource",
      "count": 2841,
-     "target": "Code"
+     "target": "Code",
+     "code_system": "generic"
     },
     "hasSoftware": {
      "kind": "resource",
@@ -16,7 +17,8 @@
     },
     "hasTypeCode": {
      "kind": "resource",
-     "count": 2841
+     "count": 2841,
+     "code_system": "SNOMED CT"
     }
    }
   },
@@ -128,7 +130,8 @@
    "properties": {
     "hasCode": {
      "kind": "resource",
-     "count": 2000
+     "count": 2000,
+     "code_system": "SNOMED CT"
     },
     "hasDataProvider": {
      "kind": "resource",
@@ -164,11 +167,21 @@
     "hasCode": {
      "kind": "resource",
      "count": 340,
-     "target": "Code"
+     "target": "Code",
+     "code_system": "generic"
     },
     "hasConsequences": {
      "kind": "individual",
-     "count": 340
+     "count": 340,
+     "values": {
+      "LifeThreatening": 65,
+      "PermanentDamageOrDisability": 56,
+      "CongenitalAbnormality": 50,
+      "NoneOfTheConsequencesMentioned": 49,
+      "HospitalisationOrProlongation": 49,
+      "Death": 40,
+      "TemporarilySeriousImpactMedicallyImportant": 31
+     }
     },
     "hasDataProvider": {
      "kind": "resource",
@@ -187,12 +200,20 @@
     },
     "hasOutcome": {
      "kind": "individual",
-     "count": 340
+     "count": 340,
+     "values": {
+      "Recovering": 72,
+      "Recovered": 70,
+      "NotRecovered": 69,
+      "Fatal": 68,
+      "RecoveringWithSequelae": 61
+     }
     },
     "hasSeverityCode": {
      "kind": "resource",
      "count": 340,
-     "target": "Code"
+     "target": "Code",
+     "code_system": "generic"
     },
     "hasSourceSystem": {
      "kind": "resource",
@@ -238,7 +259,8 @@
    "properties": {
     "hasCode": {
      "kind": "resource",
-     "count": 8861
+     "count": 8861,
+     "code_system": "SNOMED CT"
     }
    }
   },
@@ -268,11 +290,13 @@
     },
     "hasReactionTypeCode": {
      "kind": "resource",
-     "count": 1950
+     "count": 1950,
+     "code_system": "SNOMED CT"
     },
     "hasSeverityCode": {
      "kind": "resource",
-     "count": 1950
+     "count": 1950,
+     "code_system": "SNOMED CT"
     },
     "hasSourceSystem": {
      "kind": "resource",
@@ -286,7 +310,8 @@
     },
     "hasVerificationStatusCode": {
      "kind": "resource",
-     "count": 1950
+     "count": 1950,
+     "code_system": "SNOMED CT"
     }
    }
   },
@@ -311,7 +336,8 @@
     },
     "hasCertaintyCode": {
      "kind": "resource",
-     "count": 3634
+     "count": 3634,
+     "code_system": "SNOMED CT"
     },
     "hasDataProvider": {
      "kind": "resource",
@@ -335,11 +361,13 @@
     },
     "hasManifestationCode": {
      "kind": "resource",
-     "count": 3634
+     "count": 3634,
+     "code_system": "SNOMED CT"
     },
     "hasSeverityCode": {
      "kind": "resource",
-     "count": 3634
+     "count": 3634,
+     "code_system": "SNOMED CT"
     },
     "hasSourceSystem": {
      "kind": "resource",
@@ -360,11 +388,16 @@
     "hasChemicalAgent": {
      "kind": "resource",
      "count": 588,
-     "target": "Substance"
+     "target": "Drug",
+     "targets": [
+      "Drug",
+      "Substance"
+     ]
     },
     "hasCode": {
      "kind": "resource",
-     "count": 588
+     "count": 588,
+     "code_system": "SNOMED CT"
     },
     "hasInstrument": {
      "kind": "resource",
@@ -435,12 +468,17 @@
    "properties": {
     "hasCode": {
      "kind": "resource",
-     "count": 860
+     "count": 860,
+     "code_system": "SNOMED CT"
     },
     "hasNumericalReference": {
      "kind": "resource",
      "count": 860,
-     "target": "ReferenceRange"
+     "target": "ReferenceRange",
+     "targets": [
+      "ReferenceRange",
+      "ReferenceValue"
+     ]
     },
     "hasQuantity": {
      "kind": "resource",
@@ -470,12 +508,21 @@
     },
     "hasCode": {
      "kind": "resource",
-     "count": 691
+     "count": 691,
+     "code_system": "http://purl.obolibrary.org/obo/OBI_",
+     "code_systems": {
+      "http://purl.obolibrary.org/obo/OBI_": 649,
+      "http://www.ebi.ac.uk/efo/EFO_": 42
+     }
     },
     "hasDataFile": {
      "kind": "resource",
      "count": 899,
-     "target": "TimeSeriesDataFile"
+     "target": "DataFile",
+     "targets": [
+      "DataFile",
+      "TimeSeriesDataFile"
+     ]
     },
     "hasDataProvider": {
      "kind": "resource",
@@ -490,12 +537,21 @@
     "hasPredecessor": {
      "kind": "resource",
      "count": 851,
-     "target": "LibraryPreparation"
+     "target": "LibraryPreparation",
+     "targets": [
+      "LibraryPreparation",
+      "SampleProcessing"
+     ]
     },
     "hasSample": {
      "kind": "resource",
      "count": 886,
-     "target": "TumorSpecimen"
+     "target": "Sample",
+     "targets": [
+      "Sample",
+      "TumorSpecimen",
+      "Isolate"
+     ]
     },
     "hasSourceSystem": {
      "kind": "resource",
@@ -525,7 +581,8 @@
    "properties": {
     "hasCode": {
      "kind": "resource",
-     "count": 854
+     "count": 854,
+     "code_system": "SNOMED CT"
     },
     "hasComponent": {
      "kind": "resource",
@@ -550,7 +607,8 @@
    "properties": {
     "hasCode": {
      "kind": "resource",
-     "count": 4567
+     "count": 4567,
+     "code_system": "SNOMED CT"
     },
     "hasName": {
      "kind": "literal",
@@ -576,7 +634,12 @@
     "hasAssessment": {
      "kind": "resource",
      "count": 2308,
-     "target": "TumorStageAssessment"
+     "target": "Assessment",
+     "targets": [
+      "Assessment",
+      "TumorStageAssessment",
+      "TumorGradeAssessment"
+     ]
     },
     "hasDataProvider": {
      "kind": "resource",
@@ -612,7 +675,8 @@
     "hasCode": {
      "kind": "resource",
      "count": 5620,
-     "target": "Code"
+     "target": "Code",
+     "code_system": "generic"
     },
     "hasQuantity": {
      "kind": "resource",
@@ -637,7 +701,8 @@
     },
     "hasCode": {
      "kind": "resource",
-     "count": 2026
+     "count": 2026,
+     "code_system": "ICD-10-GM"
     },
     "hasDataProvider": {
      "kind": "resource",
@@ -646,7 +711,12 @@
     },
     "hasRank": {
      "kind": "individual",
-     "count": 2026
+     "count": 2026,
+     "values": {
+      "Principal": 696,
+      "Complementary": 682,
+      "Secondary": 648
+     }
     },
     "hasRecordDateTime": {
      "kind": "literal",
@@ -686,7 +756,8 @@
     },
     "hasCode": {
      "kind": "resource",
-     "count": 1650
+     "count": 1650,
+     "code_system": "CHOP"
     },
     "hasDataProvider": {
      "kind": "resource",
@@ -705,7 +776,11 @@
     },
     "hasRank": {
      "kind": "individual",
-     "count": 1650
+     "count": 1650,
+     "values": {
+      "Principal": 945,
+      "Supplementary": 705
+     }
     },
     "hasSourceSystem": {
      "kind": "resource",
@@ -751,7 +826,12 @@
     "hasSample": {
      "kind": "resource",
      "count": 831,
-     "target": "TumorSpecimen"
+     "target": "TumorSpecimen",
+     "targets": [
+      "TumorSpecimen",
+      "Isolate",
+      "Sample"
+     ]
     },
     "hasSourceSystem": {
      "kind": "resource",
@@ -791,7 +871,8 @@
     },
     "hasDeliveryModeCode": {
      "kind": "resource",
-     "count": 2000
+     "count": 2000,
+     "code_system": "SNOMED CT"
     },
     "hasGestationalAge": {
      "kind": "resource",
@@ -821,7 +902,13 @@
    "properties": {
     "hasComparator": {
      "kind": "individual",
-     "count": 2000
+     "count": 2000,
+     "values": {
+      "LessThanOrEqual": 549,
+      "GreaterThan": 501,
+      "GreaterThanOrEqual": 479,
+      "LessThan": 471
+     }
     },
     "hasDataProvider": {
      "kind": "resource",
@@ -918,11 +1005,16 @@
     "hasMedicalDevice": {
      "kind": "resource",
      "count": 14211,
-     "target": "Implant"
+     "target": "Implant",
+     "targets": [
+      "Implant",
+      "MedicalDevice"
+     ]
     },
     "hasMethodCode": {
      "kind": "resource",
-     "count": 14211
+     "count": 14211,
+     "code_system": "SNOMED CT"
     },
     "hasPerformer": {
      "kind": "resource",
@@ -998,7 +1090,8 @@
     },
     "hasMethodCode": {
      "kind": "resource",
-     "count": 2245
+     "count": 2245,
+     "code_system": "SNOMED CT"
     },
     "hasPerformer": {
      "kind": "resource",
@@ -1074,7 +1167,8 @@
     },
     "hasCode": {
      "kind": "resource",
-     "count": 1557
+     "count": 1557,
+     "code_system": "SNOMED CT"
     },
     "hasDataProvider": {
      "kind": "resource",
@@ -1109,7 +1203,8 @@
    "properties": {
     "hasCode": {
      "kind": "resource",
-     "count": 65348
+     "count": 65348,
+     "code_system": "SNOMED CT"
     },
     "hasLaterality": {
      "kind": "resource",
@@ -1129,7 +1224,12 @@
     },
     "hasCalculationMethod": {
      "kind": "individual",
-     "count": 1255
+     "count": 1255,
+     "values": {
+      "DuBois": 464,
+      "Mosteller": 413,
+      "Other": 378
+     }
     },
     "hasDataProvider": {
      "kind": "resource",
@@ -1206,11 +1306,16 @@
     "hasMedicalDevice": {
      "kind": "resource",
      "count": 6539,
-     "target": "Implant"
+     "target": "MedicalDevice",
+     "targets": [
+      "MedicalDevice",
+      "Implant"
+     ]
     },
     "hasMethodCode": {
      "kind": "resource",
-     "count": 6539
+     "count": 6539,
+     "code_system": "SNOMED CT"
     },
     "hasPerformer": {
      "kind": "resource",
@@ -1286,7 +1391,8 @@
     },
     "hasMethodCode": {
      "kind": "resource",
-     "count": 4766
+     "count": 4766,
+     "code_system": "SNOMED CT"
     },
     "hasPerformer": {
      "kind": "resource",
@@ -1336,7 +1442,8 @@
     },
     "hasMethodCode": {
      "kind": "resource",
-     "count": 701
+     "count": 701,
+     "code_system": "SNOMED CT"
     },
     "hasQuantity": {
      "kind": "resource",
@@ -1398,11 +1505,16 @@
     "hasMedicalDevice": {
      "kind": "resource",
      "count": 882,
-     "target": "MedicalDevice"
+     "target": "Implant",
+     "targets": [
+      "Implant",
+      "MedicalDevice"
+     ]
     },
     "hasMethodCode": {
      "kind": "resource",
-     "count": 882
+     "count": 882,
+     "code_system": "SNOMED CT"
     },
     "hasPerformer": {
      "kind": "resource",
@@ -1442,7 +1554,8 @@
     },
     "hasTypeCode": {
      "kind": "resource",
-     "count": 2000
+     "count": 2000,
+     "code_system": "SNOMED CT"
     }
    }
   },
@@ -1458,12 +1571,14 @@
     "hasEndCytobandCode": {
      "kind": "resource",
      "count": 1058,
-     "target": "Code"
+     "target": "Code",
+     "code_system": "generic"
     },
     "hasStartCytobandCode": {
      "kind": "resource",
      "count": 1058,
-     "target": "Code"
+     "target": "Code",
+     "code_system": "generic"
     }
    }
   },
@@ -1473,7 +1588,8 @@
    "properties": {
     "hasCode": {
      "kind": "resource",
-     "count": 1058
+     "count": 1058,
+     "code_system": "SNOMED CT"
     }
    }
   },
@@ -1524,7 +1640,8 @@
     },
     "hasMethodCode": {
      "kind": "resource",
-     "count": 1988
+     "count": 1988,
+     "code_system": "SNOMED CT"
     },
     "hasPerformer": {
      "kind": "resource",
@@ -1559,7 +1676,8 @@
    "properties": {
     "hasCode": {
      "kind": "resource",
-     "count": 2000
+     "count": 2000,
+     "code_system": "SNOMED CT"
     },
     "hasEventDateTime": {
      "kind": "literal",
@@ -1620,7 +1738,8 @@
     },
     "hasStatusCode": {
      "kind": "resource",
-     "count": 2000
+     "count": 2000,
+     "code_system": "SNOMED CT"
     },
     "hasSubjectPseudoIdentifier": {
      "kind": "resource",
@@ -1634,7 +1753,8 @@
     },
     "hasTypeCode": {
      "kind": "resource",
-     "count": 2000
+     "count": 2000,
+     "code_system": "SNOMED CT"
     }
    }
   },
@@ -1664,7 +1784,8 @@
     },
     "hasTypeCode": {
      "kind": "resource",
-     "count": 232
+     "count": 232,
+     "code_system": "http://purl.obolibrary.org/obo/SO_"
     }
    }
   },
@@ -1674,7 +1795,8 @@
    "properties": {
     "hasCode": {
      "kind": "resource",
-     "count": 6000
+     "count": 6000,
+     "code_system": "SNOMED CT"
     }
    }
   },
@@ -1684,7 +1806,8 @@
    "properties": {
     "hasMethodCode": {
      "kind": "resource",
-     "count": 18703
+     "count": 18703,
+     "code_system": "SNOMED CT"
     }
    }
   },
@@ -1704,11 +1827,18 @@
     },
     "hasEncoding": {
      "kind": "individual",
-     "count": 2000
+     "count": 2000,
+     "values": {
+      "ASCII": 541,
+      "ISO88591": 514,
+      "UTF8": 483,
+      "UTF16": 462
+     }
     },
     "hasFormatCode": {
      "kind": "resource",
-     "count": 2000
+     "count": 2000,
+     "code_system": "http://edamontology.org/format_"
     },
     "hasHash": {
      "kind": "resource",
@@ -1748,7 +1878,8 @@
     },
     "hasCode": {
      "kind": "resource",
-     "count": 592
+     "count": 592,
+     "code_system": "http://edamontology.org/operation_"
     },
     "hasDataProvider": {
      "kind": "resource",
@@ -1758,17 +1889,31 @@
     "hasInput": {
      "kind": "resource",
      "count": 756,
-     "target": "DataFile"
+     "target": "TimeSeriesDataFile",
+     "targets": [
+      "TimeSeriesDataFile",
+      "DataFile"
+     ]
     },
     "hasOutput": {
      "kind": "resource",
      "count": 774,
-     "target": "DataFile"
+     "target": "DataFile",
+     "targets": [
+      "DataFile",
+      "TimeSeriesDataFile"
+     ]
     },
     "hasPredecessor": {
      "kind": "resource",
      "count": 886,
-     "target": "DataProcessing"
+     "target": "SequencingAnalysis",
+     "targets": [
+      "SequencingAnalysis",
+      "Assay",
+      "DataProcessing",
+      "SequencingAssay"
+     ]
     },
     "hasQualityControlMetric": {
      "kind": "resource",
@@ -1808,7 +1953,19 @@
    "properties": {
     "hasCategory": {
      "kind": "individual",
-     "count": 2000
+     "count": 2000,
+     "values": {
+      "PrivatePractice": 257,
+      "FederalOffice": 248,
+      "ResearchOrganization": 224,
+      "Hospital": 213,
+      "ExternalLaboratory": 206,
+      "University": 192,
+      "ServiceProvider": 184,
+      "Company": 176,
+      "HealthInsurance": 165,
+      "Pharmacy": 135
+     }
     },
     "hasDepartment": {
      "kind": "resource",
@@ -1818,7 +1975,8 @@
     "hasInstitutionCode": {
      "kind": "resource",
      "count": 2000,
-     "target": "Code"
+     "target": "Code",
+     "code_system": "generic"
     }
    }
   },
@@ -1853,11 +2011,13 @@
     },
     "hasCircumstanceCode": {
      "kind": "resource",
-     "count": 788
+     "count": 788,
+     "code_system": "SNOMED CT"
     },
     "hasConditionCode": {
      "kind": "resource",
-     "count": 788
+     "count": 788,
+     "code_system": "SNOMED CT"
     },
     "hasDataProvider": {
      "kind": "resource",
@@ -1950,7 +2110,8 @@
     "hasCode": {
      "kind": "resource",
      "count": 11712,
-     "target": "Code"
+     "target": "Code",
+     "code_system": "generic"
     },
     "hasDataProvider": {
      "kind": "resource",
@@ -2016,7 +2177,8 @@
    "properties": {
     "hasAdministrationRouteCode": {
      "kind": "resource",
-     "count": 3837
+     "count": 3837,
+     "code_system": "SNOMED CT"
     },
     "hasAdministrativeCase": {
      "kind": "resource",
@@ -2045,7 +2207,8 @@
     },
     "hasReasonToStopCode": {
      "kind": "resource",
-     "count": 3837
+     "count": 3837,
+     "code_system": "SNOMED CT"
     },
     "hasSourceSystem": {
      "kind": "resource",
@@ -2076,7 +2239,8 @@
     "hasCode": {
      "kind": "resource",
      "count": 19414,
-     "target": "Code"
+     "target": "Code",
+     "code_system": "generic"
     },
     "hasManufacturedDoseForm": {
      "kind": "resource",
@@ -2101,7 +2265,8 @@
    "properties": {
     "hasAdministrationRouteCode": {
      "kind": "resource",
-     "count": 15281
+     "count": 15281,
+     "code_system": "SNOMED CT"
     },
     "hasAdministrativeCase": {
      "kind": "resource",
@@ -2131,7 +2296,13 @@
     "hasIndicationToStart": {
      "kind": "resource",
      "count": 21455,
-     "target": "BilledDiagnosis"
+     "target": "NursingDiagnosis",
+     "targets": [
+      "NursingDiagnosis",
+      "BilledDiagnosis",
+      "Diagnosis",
+      "OncologyDiagnosis"
+     ]
     },
     "hasIntent": {
      "kind": "resource",
@@ -2192,7 +2363,8 @@
     },
     "hasCode": {
      "kind": "resource",
-     "count": 2190
+     "count": 2190,
+     "code_system": "SNOMED CT"
     },
     "hasDataProvider": {
      "kind": "resource",
@@ -2253,7 +2425,8 @@
     "hasCode": {
      "kind": "resource",
      "count": 1152,
-     "target": "Code"
+     "target": "Code",
+     "code_system": "generic"
     },
     "hasDataProvider": {
      "kind": "resource",
@@ -2288,7 +2461,8 @@
     },
     "hasAgentCode": {
      "kind": "resource",
-     "count": 3227
+     "count": 3227,
+     "code_system": "SNOMED CT"
     },
     "hasDataProvider": {
      "kind": "resource",
@@ -2297,7 +2471,8 @@
     },
     "hasDegreeCode": {
      "kind": "resource",
-     "count": 3227
+     "count": 3227,
+     "code_system": "SNOMED CT"
     },
     "hasDuration": {
      "kind": "resource",
@@ -2321,7 +2496,8 @@
     },
     "hasRouteCode": {
      "kind": "resource",
-     "count": 4892
+     "count": 4892,
+     "code_system": "SNOMED CT"
     },
     "hasSourceSystem": {
      "kind": "resource",
@@ -2433,7 +2609,8 @@
    "properties": {
     "hasCode": {
      "kind": "resource",
-     "count": 686
+     "count": 686,
+     "code_system": "SNOMED CT"
     },
     "hasDataProvider": {
      "kind": "resource",
@@ -2469,7 +2646,8 @@
     "hasCode": {
      "kind": "resource",
      "count": 4254,
-     "target": "Code"
+     "target": "Code",
+     "code_system": "generic"
     },
     "hasOrganism": {
      "kind": "resource",
@@ -2578,7 +2756,11 @@
    "properties": {
     "hasCoordinateConvention": {
      "kind": "individual",
-     "count": 1058
+     "count": 1058,
+     "values": {
+      "ResidueCoordinates": 643,
+      "InterResidueCoordinates": 415
+     }
     },
     "hasEnd": {
      "kind": "literal",
@@ -2634,7 +2816,12 @@
    "properties": {
     "hasAlgorithm": {
      "kind": "individual",
-     "count": 4000
+     "count": 4000,
+     "values": {
+      "MD5": 1361,
+      "SHA256": 1323,
+      "SHA512": 1316
+     }
     },
     "hasStringValue": {
      "kind": "literal",
@@ -2710,7 +2897,8 @@
    "properties": {
     "hasCode": {
      "kind": "resource",
-     "count": 2000
+     "count": 2000,
+     "code_system": "SNOMED CT"
     },
     "hasDataProvider": {
      "kind": "resource",
@@ -2745,7 +2933,8 @@
     },
     "hasRegularityCode": {
      "kind": "resource",
-     "count": 11917
+     "count": 11917,
+     "code_system": "SNOMED CT"
     }
    }
   },
@@ -2776,11 +2965,16 @@
     "hasMedicalDevice": {
      "kind": "resource",
      "count": 8985,
-     "target": "Implant"
+     "target": "MedicalDevice",
+     "targets": [
+      "MedicalDevice",
+      "Implant"
+     ]
     },
     "hasMethodCode": {
      "kind": "resource",
-     "count": 8985
+     "count": 8985,
+     "code_system": "SNOMED CT"
     },
     "hasPerformer": {
      "kind": "resource",
@@ -2871,7 +3065,8 @@
     },
     "hasCode": {
      "kind": "resource",
-     "count": 6808
+     "count": 6808,
+     "code_system": "SNOMED CT"
     },
     "hasDataProvider": {
      "kind": "resource",
@@ -2912,7 +3107,8 @@
     "hasProductCode": {
      "kind": "resource",
      "count": 17150,
-     "target": "Code"
+     "target": "Code",
+     "code_system": "generic"
     },
     "hasSoftware": {
      "kind": "resource",
@@ -2921,7 +3117,8 @@
     },
     "hasTypeCode": {
      "kind": "resource",
-     "count": 17150
+     "count": 17150,
+     "code_system": "SNOMED CT"
     }
    }
   },
@@ -3003,7 +3200,11 @@
     "hasOxygenEquipment": {
      "kind": "resource",
      "count": 4099,
-     "target": "AccessDevice"
+     "target": "AccessDevice",
+     "targets": [
+      "AccessDevice",
+      "MedicalDevice"
+     ]
     },
     "hasOxygenFlowRate": {
      "kind": "resource",
@@ -3038,7 +3239,15 @@
     },
     "hasCoverageType": {
      "kind": "individual",
-     "count": 2000
+     "count": 2000,
+     "values": {
+      "None": 411,
+      "General": 334,
+      "Other": 328,
+      "Private": 325,
+      "Foreign": 306,
+      "SemiPrivate": 296
+     }
     },
     "hasDataProvider": {
      "kind": "resource",
@@ -3073,7 +3282,8 @@
    "properties": {
     "hasCode": {
      "kind": "resource",
-     "count": 36012
+     "count": 36012,
+     "code_system": "SNOMED CT"
     }
    }
   },
@@ -3094,12 +3304,175 @@
     "hasInput": {
      "kind": "resource",
      "count": 4359,
-     "target": "DeathDate"
+     "target": "BilledDiagnosis",
+     "targets": [
+      "BilledDiagnosis",
+      "GestationalAgeAtBirth",
+      "ResuscitationDirective",
+      "AccessDevicePresence",
+      "DataProcessing",
+      "LibraryPreparation",
+      "DataFile",
+      "SampleProcessing",
+      "BodyPosition",
+      "TumorGradeAssessmentEvent",
+      "BodySurfaceArea",
+      "TransplantPresence",
+      "Consent",
+      "OrganSupport",
+      "MicrobiologyMicroscopyLabTestEvent",
+      "BloodPressureMeasurement",
+      "HomeAddress",
+      "Allergy",
+      "Nationality",
+      "Measurement",
+      "AntimicrobialSusceptibilityLabTestEvent",
+      "SequencingAnalysis",
+      "OncologySurgery",
+      "FluidInputOutput",
+      "CircumferenceMeasurement",
+      "ProblemCondition",
+      "HealthcareEncounter",
+      "BodyTemperatureMeasurement",
+      "Death",
+      "RadiotherapyProcedure",
+      "HeartRateMeasurement",
+      "Exposure",
+      "LabTestEvent",
+      "Diagnosis",
+      "ImplantPresence",
+      "CardiacIndex",
+      "BodyWeightMeasurement",
+      "Biobanksample",
+      "TimeSeriesDataFile",
+      "VariantDescriptor",
+      "NursingDiagnosis",
+      "Age",
+      "InsuranceStatus",
+      "InhaledOxygenConcentration",
+      "CardiacOutputMeasurement",
+      "AdministrativeSex",
+      "OxygenSaturationMeasurement",
+      "FluidBalance",
+      "BirthDate",
+      "VitalStatus",
+      "Sample",
+      "MicrobiologyBiomoleculePresenceLabTestEvent",
+      "Birth",
+      "ElectrocardiographicProcedure",
+      "ExcludedDisorder",
+      "MicroorganismIdentificationLabTestEvent",
+      "AdministrativeCase",
+      "BilledProcedure",
+      "FollowUp",
+      "Isolate",
+      "DeathDate",
+      "BodyHeightMeasurement",
+      "ImagingProcedure",
+      "TobaccoExposure",
+      "AllergyEpisode",
+      "RespiratoryRateMeasurement",
+      "Assay",
+      "TumorSpecimen",
+      "SourceSystem",
+      "AssessmentEvent",
+      "TumorStageAssessmentEvent",
+      "AdverseEvent",
+      "DrugPrescription",
+      "BodyMassIndex",
+      "MedicalProcedure",
+      "NutritionIntake",
+      "SequencingAssay",
+      "CivilStatus",
+      "DrugAdministrationEvent"
+     ]
     },
     "hasOutput": {
      "kind": "resource",
      "count": 4407,
-     "target": "OxygenSaturationMeasurement"
+     "target": "BilledProcedure",
+     "targets": [
+      "BilledProcedure",
+      "AdministrativeSex",
+      "MicroorganismIdentificationLabTestEvent",
+      "AccessDevicePresence",
+      "BirthDate",
+      "AdministrativeCase",
+      "TumorGradeAssessmentEvent",
+      "OncologySurgery",
+      "AdverseEvent",
+      "Consent",
+      "AntimicrobialSusceptibilityLabTestEvent",
+      "HomeAddress",
+      "AllergyEpisode",
+      "BodySurfaceArea",
+      "TumorStageAssessmentEvent",
+      "CivilStatus",
+      "Measurement",
+      "Assay",
+      "Sample",
+      "Allergy",
+      "NursingDiagnosis",
+      "DataFile",
+      "BodyHeightMeasurement",
+      "SourceSystem",
+      "BodyMassIndex",
+      "OxygenSaturationMeasurement",
+      "TobaccoExposure",
+      "InsuranceStatus",
+      "OrganSupport",
+      "BilledDiagnosis",
+      "InhaledOxygenConcentration",
+      "SampleProcessing",
+      "Biobanksample",
+      "CardiacIndex",
+      "Exposure",
+      "DataProcessing",
+      "BodyPosition",
+      "ImplantPresence",
+      "MedicalProcedure",
+      "FluidInputOutput",
+      "DrugPrescription",
+      "VariantDescriptor",
+      "Age",
+      "ExcludedDisorder",
+      "CardiacOutputMeasurement",
+      "TumorSpecimen",
+      "BloodPressureMeasurement",
+      "DeathDate",
+      "FollowUp",
+      "LabTestEvent",
+      "TimeSeriesDataFile",
+      "ResuscitationDirective",
+      "HealthcareEncounter",
+      "ProblemCondition",
+      "RadiotherapyProcedure",
+      "AssessmentEvent",
+      "DrugAdministrationEvent",
+      "SequencingAnalysis",
+      "Nationality",
+      "RespiratoryRateMeasurement",
+      "VitalStatus",
+      "LibraryPreparation",
+      "ElectrocardiographicProcedure",
+      "TransplantPresence",
+      "Birth",
+      "CircumferenceMeasurement",
+      "Diagnosis",
+      "ImagingProcedure",
+      "HeartRateMeasurement",
+      "MicrobiologyBiomoleculePresenceLabTestEvent",
+      "BodyTemperatureMeasurement",
+      "Isolate",
+      "BodyWeightMeasurement",
+      "Death",
+      "GestationalAgeAtBirth",
+      "SequencingAssay",
+      "NutritionIntake",
+      "FluidBalance",
+      "MicrobiologyMicroscopyLabTestEvent",
+      "OncologyDiagnosis"
+     ]
     },
     "hasSourceSystem": {
      "kind": "resource",
@@ -3139,7 +3512,23 @@
     },
     "hasFixationType": {
      "kind": "individual",
-     "count": 2000
+     "count": 2000,
+     "values": {
+      "RNALater": 177,
+      "HeatStabilization": 173,
+      "NeutralBufferedFormalin": 160,
+      "AldehydeBased": 150,
+      "SnapFreezing": 149,
+      "OptimumCuttingTemperatureMedium": 149,
+      "NonaldehydeWithAceticAcid": 148,
+      "AlcoholBased": 145,
+      "NonaldehydeBasedWithoutAceticAcid": 141,
+      "VacuumTechnologyStabilization": 136,
+      "Other": 131,
+      "NonbufferedFormalin": 118,
+      "PAXgeneTissue": 117,
+      "AllprotectTissueReagent": 106
+     }
     },
     "hasIdentifier": {
      "kind": "literal",
@@ -3148,7 +3537,8 @@
     },
     "hasMaterialTypeCode": {
      "kind": "resource",
-     "count": 3011
+     "count": 3011,
+     "code_system": "SNOMED CT"
     },
     "hasOrganism": {
      "kind": "resource",
@@ -3157,7 +3547,43 @@
     },
     "hasPrimaryContainer": {
      "kind": "individual",
-     "count": 2000
+     "count": 2000,
+     "values": {
+      "SodiumEDTA": 97,
+      "LithiumHeparinAndGel": 90,
+      "CitratePhosphateDextrose": 85,
+      "TempusTube": 80,
+      "Glass": 79,
+      "RNALater": 76,
+      "LithiumHeparinAndRubberPlug": 75,
+      "SerumSeparatorTubeWithClotActivator": 74,
+      "PolypropyleneTubeSterile": 70,
+      "CellPreparationTubeCitrate": 67,
+      "LithiumHeparin": 67,
+      "S8820ProteaseInhibitorTabletsOrEquivalent": 66,
+      "SodiumHeparin": 65,
+      "ProteaseInhibitors": 63,
+      "SodiumFluoridePotassiumOxalate": 62,
+      "EDTAAndGel": 56,
+      "ChemicalAdditivesStabilizers": 55,
+      "PAXgeneBoneMarrowRNA": 54,
+      "PhysicalFiltrationSystem": 53,
+      "NonAldehydeBasedStabilizerForCellFreeNucleicAcids": 52,
+      "StoolCollectionContainerWithDNAStabilizer": 51,
+      "PolyethyleneTubeSterile": 49,
+      "PAXgeneBloodDNA": 49,
+      "PotassiumEDTA": 48,
+      "OrageneCollectionContainerOrEquivalent": 48,
+      "PAXgeneBloodRNAplus": 47,
+      "SodiumCitrate": 46,
+      "CellPreparationTubeHeparin": 45,
+      "Hirudin": 45,
+      "AldehydeBasedStabilizerForCTCs": 42,
+      "TraceElementsTube": 40,
+      "Other": 40,
+      "AcidCitrateDextrose": 37,
+      "SerumTubeWithoutClotActivator": 27
+     }
     },
     "hasSharedIdentifier": {
      "kind": "literal",
@@ -3183,7 +3609,8 @@
     "hasProductCode": {
      "kind": "resource",
      "count": 51274,
-     "target": "Code"
+     "target": "Code",
+     "code_system": "generic"
     },
     "hasSoftware": {
      "kind": "resource",
@@ -3192,7 +3619,8 @@
     },
     "hasTypeCode": {
      "kind": "resource",
-     "count": 51274
+     "count": 51274,
+     "code_system": "https://biomedit.ch/rdf/sphn-resource/emdn/"
     }
    }
   },
@@ -3203,12 +3631,17 @@
     "hasCode": {
      "kind": "resource",
      "count": 36488,
-     "target": "Code"
+     "target": "Code",
+     "code_system": "generic"
     },
     "hasNumericalReference": {
      "kind": "resource",
      "count": 36488,
-     "target": "ReferenceRange"
+     "target": "ReferenceValue",
+     "targets": [
+      "ReferenceValue",
+      "ReferenceRange"
+     ]
     },
     "hasQuantity": {
      "kind": "resource",
@@ -3228,7 +3661,8 @@
    "properties": {
     "hasCode": {
      "kind": "resource",
-     "count": 22904
+     "count": 22904,
+     "code_system": "SNOMED CT"
     },
     "hasInstrument": {
      "kind": "resource",
@@ -3279,7 +3713,12 @@
     "hasSample": {
      "kind": "resource",
      "count": 14953,
-     "target": "Sample"
+     "target": "Sample",
+     "targets": [
+      "Sample",
+      "Isolate",
+      "TumorSpecimen"
+     ]
     },
     "hasSourceSystem": {
      "kind": "resource",
@@ -3299,7 +3738,8 @@
    "properties": {
     "hasCode": {
      "kind": "resource",
-     "count": 65348
+     "count": 65348,
+     "code_system": "SNOMED CT"
     }
    }
   },
@@ -3315,7 +3755,15 @@
     "hasCode": {
      "kind": "resource",
      "count": 1648,
-     "target": "Terminology"
+     "target": "Terminology",
+     "code_system": "http://www.ebi.ac.uk/efo/EFO_",
+     "code_systems": {
+      "http://www.ebi.ac.uk/efo/EFO_": 1256,
+      "https://www.genenames.org/data/gene-symbol-report/#!/hgnc_id/": 299,
+      "http://purl.obolibrary.org/obo/OBI_": 36,
+      "https://biomedit.ch/rdf/sphn-resource/hgnc/": 25,
+      "generic": 11
+     }
     },
     "hasDataProvider": {
      "kind": "resource",
@@ -3330,7 +3778,12 @@
     "hasInput": {
      "kind": "resource",
      "count": 2181,
-     "target": "Sample"
+     "target": "Sample",
+     "targets": [
+      "Sample",
+      "Isolate",
+      "TumorSpecimen"
+     ]
     },
     "hasIntendedInsertSize": {
      "kind": "resource",
@@ -3340,17 +3793,26 @@
     "hasKitCode": {
      "kind": "resource",
      "count": 1648,
-     "target": "Code"
+     "target": "Code",
+     "code_system": "generic"
     },
     "hasOutput": {
      "kind": "resource",
      "count": 1648,
-     "target": "Isolate"
+     "target": "Sample",
+     "targets": [
+      "Sample",
+      "Isolate"
+     ]
     },
     "hasPredecessor": {
      "kind": "resource",
      "count": 2092,
-     "target": "SampleProcessing"
+     "target": "SampleProcessing",
+     "targets": [
+      "SampleProcessing",
+      "LibraryPreparation"
+     ]
     },
     "hasQualityControlMetric": {
      "kind": "resource",
@@ -3380,7 +3842,8 @@
     "hasTargetEnrichmentKitCode": {
      "kind": "resource",
      "count": 1648,
-     "target": "Code"
+     "target": "Code",
+     "code_system": "generic"
     }
    }
   },
@@ -3400,7 +3863,8 @@
     },
     "hasTypeCode": {
      "kind": "resource",
-     "count": 47203
+     "count": 47203,
+     "code_system": "SNOMED CT"
     }
    }
   },
@@ -3426,11 +3890,16 @@
     "hasMedicalDevice": {
      "kind": "resource",
      "count": 1881,
-     "target": "Implant"
+     "target": "MedicalDevice",
+     "targets": [
+      "MedicalDevice",
+      "Implant"
+     ]
     },
     "hasMethodCode": {
      "kind": "resource",
-     "count": 1881
+     "count": 1881,
+     "code_system": "SNOMED CT"
     },
     "hasPerformer": {
      "kind": "resource",
@@ -3440,7 +3909,23 @@
     "hasResult": {
      "kind": "resource",
      "count": 2682,
-     "target": "OxygenSaturation"
+     "target": "Circumference",
+     "targets": [
+      "Circumference",
+      "Result",
+      "BloodPressure",
+      "BodyWeight",
+      "BodyHeight",
+      "RespiratoryRate",
+      "AssessmentResult",
+      "HeartRate",
+      "OxygenSaturation",
+      "CardiacOutput",
+      "ReferenceInterpretationResult",
+      "TumorGradeAssessmentResult",
+      "BodyTemperature",
+      "TumorStageAssessmentResult"
+     ]
     },
     "hasSourceSystem": {
      "kind": "resource",
@@ -3466,7 +3951,8 @@
     "hasProductCode": {
      "kind": "resource",
      "count": 39122,
-     "target": "Code"
+     "target": "Code",
+     "code_system": "generic"
     },
     "hasSoftware": {
      "kind": "resource",
@@ -3475,7 +3961,8 @@
     },
     "hasTypeCode": {
      "kind": "resource",
-     "count": 39122
+     "count": 39122,
+     "code_system": "SNOMED CT"
     }
    }
   },
@@ -3496,7 +3983,8 @@
     "hasCode": {
      "kind": "resource",
      "count": 2698,
-     "target": "Code"
+     "target": "Code",
+     "code_system": "generic"
     },
     "hasDataProvider": {
      "kind": "resource",
@@ -3536,7 +4024,8 @@
    "properties": {
     "hasCode": {
      "kind": "resource",
-     "count": 596
+     "count": 596,
+     "code_system": "SNOMED CT"
     },
     "hasInstrument": {
      "kind": "resource",
@@ -3551,7 +4040,11 @@
     "hasTargetMolecule": {
      "kind": "resource",
      "count": 596,
-     "target": "Protein"
+     "target": "Protein",
+     "targets": [
+      "Protein",
+      "Gene"
+     ]
     },
     "hasTestKit": {
      "kind": "resource",
@@ -3612,12 +4105,17 @@
    "properties": {
     "hasCode": {
      "kind": "resource",
-     "count": 928
+     "count": 928,
+     "code_system": "SNOMED CT"
     },
     "hasNumericalReference": {
      "kind": "resource",
      "count": 928,
-     "target": "ReferenceRange"
+     "target": "ReferenceValue",
+     "targets": [
+      "ReferenceValue",
+      "ReferenceRange"
+     ]
     },
     "hasQuantity": {
      "kind": "resource",
@@ -3637,7 +4135,8 @@
    "properties": {
     "hasCode": {
      "kind": "resource",
-     "count": 656
+     "count": 656,
+     "code_system": "SNOMED CT"
     },
     "hasInstrument": {
      "kind": "resource",
@@ -3651,7 +4150,8 @@
     },
     "hasStainingMethodCode": {
      "kind": "resource",
-     "count": 656
+     "count": 656,
+     "code_system": "SNOMED CT"
     },
     "hasTestKit": {
      "kind": "resource",
@@ -3692,7 +4192,11 @@
     "hasSample": {
      "kind": "resource",
      "count": 430,
-     "target": "Sample"
+     "target": "Isolate",
+     "targets": [
+      "Isolate",
+      "Sample"
+     ]
     },
     "hasSourceSystem": {
      "kind": "resource",
@@ -3712,20 +4216,40 @@
    "properties": {
     "hasCellCountEstimateCode": {
      "kind": "resource",
-     "count": 982
+     "count": 982,
+     "code_system": "SNOMED CT"
     },
     "hasCellMorphology": {
      "kind": "individual",
-     "count": 982
+     "count": 982,
+     "values": {
+      "CurvedRodShaped": 146,
+      "Filamentous": 135,
+      "RodShaped": 132,
+      "Round": 130,
+      "Spiral": 129,
+      "Elongated": 124,
+      "Other": 102,
+      "Ovoid": 84
+     }
     },
     "hasCellOrganization": {
      "kind": "individual",
-     "count": 982
+     "count": 982,
+     "values": {
+      "EntireCell": 350,
+      "Unicellular": 323,
+      "Multicellular": 309
+     }
     },
     "hasNumericalReference": {
      "kind": "resource",
      "count": 982,
-     "target": "ReferenceRange"
+     "target": "ReferenceRange",
+     "targets": [
+      "ReferenceRange",
+      "ReferenceValue"
+     ]
     },
     "hasQuantity": {
      "kind": "resource",
@@ -3734,7 +4258,8 @@
     },
     "hasStainingResultCode": {
      "kind": "resource",
-     "count": 982
+     "count": 982,
+     "code_system": "SNOMED CT"
     },
     "hasStringValue": {
      "kind": "literal",
@@ -3749,7 +4274,8 @@
    "properties": {
     "hasCode": {
      "kind": "resource",
-     "count": 893
+     "count": 893,
+     "code_system": "SNOMED CT"
     },
     "hasInstrument": {
      "kind": "resource",
@@ -3800,7 +4326,11 @@
     "hasSample": {
      "kind": "resource",
      "count": 560,
-     "target": "Sample"
+     "target": "Sample",
+     "targets": [
+      "Sample",
+      "Isolate"
+     ]
     },
     "hasSourceSystem": {
      "kind": "resource",
@@ -3820,12 +4350,17 @@
    "properties": {
     "hasCode": {
      "kind": "resource",
-     "count": 1428
+     "count": 1428,
+     "code_system": "SNOMED CT"
     },
     "hasNumericalReference": {
      "kind": "resource",
      "count": 1428,
-     "target": "ReferenceRange"
+     "target": "ReferenceValue",
+     "targets": [
+      "ReferenceValue",
+      "ReferenceRange"
+     ]
     },
     "hasOrganism": {
      "kind": "resource",
@@ -3850,7 +4385,8 @@
    "properties": {
     "hasAcquistionCode": {
      "kind": "resource",
-     "count": 2000
+     "count": 2000,
+     "code_system": "SNOMED CT"
     },
     "hasAssociatedCountry": {
      "kind": "resource",
@@ -3891,7 +4427,8 @@
     "hasCode": {
      "kind": "resource",
      "count": 1106,
-     "target": "Code"
+     "target": "Code",
+     "code_system": "generic"
     },
     "hasDataProvider": {
      "kind": "resource",
@@ -3946,7 +4483,8 @@
     },
     "hasModeCode": {
      "kind": "resource",
-     "count": 1933
+     "count": 1933,
+     "code_system": "SNOMED CT"
     },
     "hasSourceSystem": {
      "kind": "resource",
@@ -3986,7 +4524,8 @@
     },
     "hasCode": {
      "kind": "resource",
-     "count": 300
+     "count": 300,
+     "code_system": "ICD-10-GM"
     },
     "hasDataProvider": {
      "kind": "resource",
@@ -4037,7 +4576,8 @@
     "hasCode": {
      "kind": "resource",
      "count": 436,
-     "target": "Code"
+     "target": "Code",
+     "code_system": "generic"
     },
     "hasDataProvider": {
      "kind": "resource",
@@ -4087,7 +4627,8 @@
     },
     "hasCode": {
      "kind": "resource",
-     "count": 1112
+     "count": 1112,
+     "code_system": "SNOMED CT"
     },
     "hasDataProvider": {
      "kind": "resource",
@@ -4128,7 +4669,12 @@
     "hasCode": {
      "kind": "resource",
      "count": 27180,
-     "target": "Code"
+     "target": "Code",
+     "code_system": "SNOMED CT",
+     "code_systems": {
+      "SNOMED CT": 25752,
+      "generic": 1428
+     }
     }
    }
   },
@@ -4180,11 +4726,16 @@
     "hasMedicalDevice": {
      "kind": "resource",
      "count": 4654,
-     "target": "MedicalDevice"
+     "target": "MedicalDevice",
+     "targets": [
+      "MedicalDevice",
+      "Implant"
+     ]
     },
     "hasMethodCode": {
      "kind": "resource",
-     "count": 4654
+     "count": 4654,
+     "code_system": "SNOMED CT"
     },
     "hasPerformer": {
      "kind": "resource",
@@ -4219,7 +4770,8 @@
    "properties": {
     "hasCode": {
      "kind": "resource",
-     "count": 54146
+     "count": 54146,
+     "code_system": "SNOMED CT"
     }
    }
   },
@@ -4229,7 +4781,8 @@
    "properties": {
     "hasCode": {
      "kind": "resource",
-     "count": 19414
+     "count": 19414,
+     "code_system": "SNOMED CT"
     }
    }
   },
@@ -4239,7 +4792,8 @@
    "properties": {
     "hasCode": {
      "kind": "resource",
-     "count": 10498
+     "count": 10498,
+     "code_system": "SNOMED CT"
     }
    }
   },
@@ -4255,7 +4809,8 @@
     "hasCode": {
      "kind": "resource",
      "count": 1194,
-     "target": "Code"
+     "target": "Code",
+     "code_system": "generic"
     },
     "hasDataProvider": {
      "kind": "resource",
@@ -4274,7 +4829,8 @@
     },
     "hasRelativeTemporalityCode": {
      "kind": "resource",
-     "count": 1194
+     "count": 1194,
+     "code_system": "SNOMED CT"
     },
     "hasSourceSystem": {
      "kind": "resource",
@@ -4300,7 +4856,8 @@
     "hasCode": {
      "kind": "resource",
      "count": 12985,
-     "target": "Code"
+     "target": "Code",
+     "code_system": "generic"
     },
     "hasOrganism": {
      "kind": "resource",
@@ -4316,7 +4873,8 @@
     "hasCode": {
      "kind": "resource",
      "count": 8145,
-     "target": "Code"
+     "target": "Code",
+     "code_system": "generic"
     },
     "hasDataProvider": {
      "kind": "resource",
@@ -4336,7 +4894,13 @@
    "properties": {
     "hasComparator": {
      "kind": "individual",
-     "count": 380659
+     "count": 380659,
+     "values": {
+      "GreaterThan": 97729,
+      "GreaterThanOrEqual": 94702,
+      "LessThan": 94693,
+      "LessThanOrEqual": 93535
+     }
     },
     "hasUnit": {
      "kind": "resource",
@@ -4366,7 +4930,8 @@
     },
     "hasCode": {
      "kind": "resource",
-     "count": 2087
+     "count": 2087,
+     "code_system": "SNOMED CT"
     },
     "hasDataProvider": {
      "kind": "resource",
@@ -4416,7 +4981,8 @@
    "properties": {
     "hasCode": {
      "kind": "resource",
-     "count": 138
+     "count": 138,
+     "code_system": "SNOMED CT"
     }
    }
   },
@@ -4443,7 +5009,8 @@
     "hasCode": {
      "kind": "resource",
      "count": 1727,
-     "target": "Code"
+     "target": "Code",
+     "code_system": "generic"
     }
    }
   },
@@ -4510,7 +5077,8 @@
     },
     "hasMethodCode": {
      "kind": "resource",
-     "count": 4948
+     "count": 4948,
+     "code_system": "SNOMED CT"
     },
     "hasPerformer": {
      "kind": "resource",
@@ -4555,7 +5123,8 @@
     },
     "hasCode": {
      "kind": "resource",
-     "count": 312
+     "count": 312,
+     "code_system": "SNOMED CT"
     },
     "hasDataProvider": {
      "kind": "resource",
@@ -4605,7 +5174,23 @@
     },
     "hasFixationType": {
      "kind": "individual",
-     "count": 1979
+     "count": 1979,
+     "values": {
+      "NonbufferedFormalin": 170,
+      "Other": 167,
+      "NonaldehydeWithAceticAcid": 156,
+      "RNALater": 151,
+      "AldehydeBased": 150,
+      "SnapFreezing": 149,
+      "PAXgeneTissue": 149,
+      "HeatStabilization": 148,
+      "VacuumTechnologyStabilization": 137,
+      "NeutralBufferedFormalin": 130,
+      "NonaldehydeBasedWithoutAceticAcid": 125,
+      "AlcoholBased": 117,
+      "AllprotectTissueReagent": 115,
+      "OptimumCuttingTemperatureMedium": 115
+     }
     },
     "hasIdentifier": {
      "kind": "literal",
@@ -4614,11 +5199,48 @@
     },
     "hasMaterialTypeCode": {
      "kind": "resource",
-     "count": 2951
+     "count": 2951,
+     "code_system": "SNOMED CT"
     },
     "hasPrimaryContainer": {
      "kind": "individual",
-     "count": 1979
+     "count": 1979,
+     "values": {
+      "PAXgeneBloodRNAplus": 93,
+      "SerumSeparatorTubeWithClotActivator": 79,
+      "EDTAAndGel": 76,
+      "S8820ProteaseInhibitorTabletsOrEquivalent": 73,
+      "PAXgeneBloodDNA": 72,
+      "SodiumFluoridePotassiumOxalate": 70,
+      "ChemicalAdditivesStabilizers": 70,
+      "SodiumEDTA": 69,
+      "TempusTube": 68,
+      "SodiumCitrate": 66,
+      "PotassiumEDTA": 65,
+      "PolyethyleneTubeSterile": 65,
+      "ProteaseInhibitors": 65,
+      "PolypropyleneTubeSterile": 64,
+      "LithiumHeparinAndGel": 63,
+      "CitratePhosphateDextrose": 62,
+      "Hirudin": 62,
+      "RNALater": 62,
+      "AldehydeBasedStabilizerForCTCs": 58,
+      "NonAldehydeBasedStabilizerForCellFreeNucleicAcids": 58,
+      "CellPreparationTubeHeparin": 54,
+      "SodiumHeparin": 53,
+      "LithiumHeparinAndRubberPlug": 53,
+      "AcidCitrateDextrose": 49,
+      "CellPreparationTubeCitrate": 48,
+      "Other": 47,
+      "OrageneCollectionContainerOrEquivalent": 46,
+      "SerumTubeWithoutClotActivator": 43,
+      "PAXgeneBoneMarrowRNA": 43,
+      "Glass": 41,
+      "PhysicalFiltrationSystem": 41,
+      "StoolCollectionContainerWithDNAStabilizer": 38,
+      "LithiumHeparin": 33,
+      "TraceElementsTube": 30
+     }
     },
     "hasSharedIdentifier": {
      "kind": "literal",
@@ -4649,7 +5271,8 @@
     "hasCode": {
      "kind": "resource",
      "count": 1665,
-     "target": "Code"
+     "target": "Code",
+     "code_system": "generic"
     },
     "hasDataProvider": {
      "kind": "resource",
@@ -4659,17 +5282,30 @@
     "hasInput": {
      "kind": "resource",
      "count": 2255,
-     "target": "Isolate"
+     "target": "Sample",
+     "targets": [
+      "Sample",
+      "Isolate",
+      "TumorSpecimen"
+     ]
     },
     "hasOutput": {
      "kind": "resource",
      "count": 1665,
-     "target": "Sample"
+     "target": "Isolate",
+     "targets": [
+      "Isolate",
+      "Sample"
+     ]
     },
     "hasPredecessor": {
      "kind": "resource",
      "count": 2068,
-     "target": "SampleProcessing"
+     "target": "LibraryPreparation",
+     "targets": [
+      "LibraryPreparation",
+      "SampleProcessing"
+     ]
     },
     "hasQualityControlMetric": {
      "kind": "resource",
@@ -4709,7 +5345,8 @@
     },
     "hasCode": {
      "kind": "resource",
-     "count": 682
+     "count": 682,
+     "code_system": "http://edamontology.org/operation_"
     },
     "hasDataProvider": {
      "kind": "resource",
@@ -4719,17 +5356,31 @@
     "hasInput": {
      "kind": "resource",
      "count": 682,
-     "target": "DataFile"
+     "target": "DataFile",
+     "targets": [
+      "DataFile",
+      "TimeSeriesDataFile"
+     ]
     },
     "hasOutput": {
      "kind": "resource",
      "count": 842,
-     "target": "DataFile"
+     "target": "DataFile",
+     "targets": [
+      "DataFile",
+      "TimeSeriesDataFile"
+     ]
     },
     "hasPredecessor": {
      "kind": "resource",
      "count": 945,
-     "target": "SequencingAssay"
+     "target": "DataProcessing",
+     "targets": [
+      "DataProcessing",
+      "Assay",
+      "SequencingAnalysis",
+      "SequencingAssay"
+     ]
     },
     "hasQualityControlMetric": {
      "kind": "resource",
@@ -4779,7 +5430,12 @@
     },
     "hasCode": {
      "kind": "resource",
-     "count": 597
+     "count": 597,
+     "code_system": "http://purl.obolibrary.org/obo/OBI_",
+     "code_systems": {
+      "http://purl.obolibrary.org/obo/OBI_": 562,
+      "http://www.ebi.ac.uk/efo/EFO_": 35
+     }
     },
     "hasDataFile": {
      "kind": "resource",
@@ -4814,7 +5470,11 @@
     "hasPredecessor": {
      "kind": "resource",
      "count": 772,
-     "target": "LibraryPreparation"
+     "target": "SampleProcessing",
+     "targets": [
+      "SampleProcessing",
+      "LibraryPreparation"
+     ]
     },
     "hasSample": {
      "kind": "resource",
@@ -4859,7 +5519,13 @@
    "properties": {
     "hasCode": {
      "kind": "resource",
-     "count": 594
+     "count": 594,
+     "code_system": "http://purl.obolibrary.org/obo/OBI_",
+     "code_systems": {
+      "http://purl.obolibrary.org/obo/OBI_": 383,
+      "http://purl.obolibrary.org/obo/GENEPIO_": 119,
+      "http://www.ebi.ac.uk/efo/EFO_": 92
+     }
     },
     "hasDataProvider": {
      "kind": "resource",
@@ -4982,7 +5648,18 @@
    "properties": {
     "hasCategory": {
      "kind": "individual",
-     "count": 2000
+     "count": 2000,
+     "values": {
+      "Biobank": 245,
+      "ResearchLaboratory": 238,
+      "ClinicalRegistry": 233,
+      "HealthcareInformationSystem": 231,
+      "CaseReportForm": 227,
+      "Cohort": 222,
+      "DataRepository": 215,
+      "OMICSFacility": 200,
+      "ClinicalDataPlatform": 189
+     }
     },
     "hasDataProvider": {
      "kind": "resource",
@@ -5001,7 +5678,13 @@
     },
     "hasPurpose": {
      "kind": "individual",
-     "count": 2000
+     "count": 2000,
+     "values": {
+      "Billing": 643,
+      "Research": 504,
+      "QualityControl": 458,
+      "PatientCare": 395
+     }
     }
    }
   },
@@ -5064,7 +5747,12 @@
     "hasCode": {
      "kind": "resource",
      "count": 65442,
-     "target": "Code"
+     "target": "Code",
+     "code_system": "SNOMED CT",
+     "code_systems": {
+      "SNOMED CT": 62420,
+      "generic": 3022
+     }
     },
     "hasGenericName": {
      "kind": "literal",
@@ -5120,7 +5808,73 @@
     },
     "hasSpecialtyName": {
      "kind": "individual",
-     "count": 14401
+     "count": 14401,
+     "values": {
+      "Urology": 2021,
+      "ChildAndAdolescentPsychiatryAndPsychotherapy": 708,
+      "HospitalPharmacy": 688,
+      "OccupationalMedicine": 674,
+      "Radiology": 507,
+      "IntensiveCareMedicine": 492,
+      "MedicalOncology": 464,
+      "Neurosurgery": 438,
+      "Haematology": 390,
+      "Other": 345,
+      "Nephrology": 324,
+      "Gastroenterology": 317,
+      "GynaecologyAndObstetrics": 313,
+      "NuclearMedicine": 308,
+      "MedicalGenetics": 307,
+      "OralAndMaxillofacialSurgery": 285,
+      "ChiropracticSpecialist": 280,
+      "Cardiology": 246,
+      "Angiology": 224,
+      "PreventionAndPublicHealth": 217,
+      "CommunityPharmacy": 198,
+      "Psychotherapy": 198,
+      "GeneralMedicalPractitioner": 191,
+      "GeneralInternalMedicine": 189,
+      "HandSurgery": 188,
+      "PhysicalMedicineAndRehabilitation": 179,
+      "TropicalAndTravelMedicine": 176,
+      "HealthPsychology": 176,
+      "ForensicMedicine": 168,
+      "AllergologyAndClinicalImmunology": 167,
+      "VascularSurgery": 167,
+      "Anaesthesiology": 167,
+      "Paediatrics": 163,
+      "PaediatricSurgery": 147,
+      "VisceralMedicine": 146,
+      "OrthopaedicSurgeryAndTraumatologyOfTheLocomotorApparatus": 136,
+      "OralSurgery": 121,
+      "Neurology": 119,
+      "Rheumatology": 113,
+      "PharmaceuticalMedicine": 112,
+      "DermatologyAndVenereology": 111,
+      "RadioOncologyAndRadiotherapy": 107,
+      "Ophthalmology": 106,
+      "Orthodontics": 100,
+      "Surgery": 94,
+      "CardiacAndThoracicVascularSurgery": 90,
+      "ChildAndAdolescentPsychology": 79,
+      "ClinicalPsychology": 78,
+      "Pathology": 77,
+      "InternalMedicine": 77,
+      "Neuropsychology": 72,
+      "ThoracicSurgery": 72,
+      "Otorhinolaryngology": 66,
+      "Periodontics": 65,
+      "PlasticReconstructiveAndAestheticSurgery": 64,
+      "ReconstructiveDentistry": 61,
+      "GeneralMedicine": 57,
+      "PsychiatryAndPsychotherapy": 57,
+      "AddictionMedicine": 51,
+      "ClinicalPharmacologyAndToxicology": 50,
+      "Pneumology": 26,
+      "GeriatricMedicine": 25,
+      "EndocrinologyAndDiabetology": 24,
+      "Infectology": 23
+     }
     }
    }
   },
@@ -5130,7 +5884,8 @@
    "properties": {
     "hasTypeCode": {
      "kind": "resource",
-     "count": 19118
+     "count": 19118,
+     "code_system": "SNOMED CT"
     }
    }
   },
@@ -5150,7 +5905,13 @@
     },
     "hasEncoding": {
      "kind": "individual",
-     "count": 2000
+     "count": 2000,
+     "values": {
+      "ISO88591": 558,
+      "UTF8": 495,
+      "UTF16": 482,
+      "ASCII": 465
+     }
     },
     "hasEntryCount": {
      "kind": "resource",
@@ -5159,7 +5920,8 @@
     },
     "hasFormatCode": {
      "kind": "resource",
-     "count": 2000
+     "count": 2000,
+     "code_system": "http://edamontology.org/format_"
     },
     "hasHash": {
      "kind": "resource",
@@ -5199,7 +5961,8 @@
     },
     "hasAgentCode": {
      "kind": "resource",
-     "count": 1358
+     "count": 1358,
+     "code_system": "SNOMED CT"
     },
     "hasDataProvider": {
      "kind": "resource",
@@ -5208,7 +5971,8 @@
     },
     "hasDegreeCode": {
      "kind": "resource",
-     "count": 1358
+     "count": 1358,
+     "code_system": "SNOMED CT"
     },
     "hasDuration": {
      "kind": "resource",
@@ -5232,7 +5996,8 @@
     },
     "hasRouteCode": {
      "kind": "resource",
-     "count": 1975
+     "count": 1975,
+     "code_system": "SNOMED CT"
     },
     "hasSourceSystem": {
      "kind": "resource",
@@ -5251,7 +6016,8 @@
     },
     "hasTypeCode": {
      "kind": "resource",
-     "count": 1358
+     "count": 1358,
+     "code_system": "SNOMED CT"
     }
    }
   },
@@ -5262,7 +6028,8 @@
     "hasCode": {
      "kind": "resource",
      "count": 6513,
-     "target": "Code"
+     "target": "Code",
+     "code_system": "generic"
     },
     "hasOrganism": {
      "kind": "resource",
@@ -5282,11 +6049,13 @@
    "properties": {
     "hasCode": {
      "kind": "resource",
-     "count": 125
+     "count": 125,
+     "code_system": "SNOMED CT"
     },
     "hasGraftTypeCode": {
      "kind": "resource",
-     "count": 125
+     "count": 125,
+     "code_system": "SNOMED CT"
     }
    }
   },
@@ -5347,7 +6116,8 @@
    "properties": {
     "hasCode": {
      "kind": "resource",
-     "count": 1100
+     "count": 1100,
+     "code_system": "SNOMED CT"
     },
     "hasComponent": {
      "kind": "resource",
@@ -5413,7 +6183,8 @@
    "properties": {
     "hasCode": {
      "kind": "resource",
-     "count": 1200
+     "count": 1200,
+     "code_system": "SNOMED CT"
     },
     "hasQuantity": {
      "kind": "resource",
@@ -5453,7 +6224,23 @@
     },
     "hasFixationType": {
      "kind": "individual",
-     "count": 1876
+     "count": 1876,
+     "values": {
+      "NonbufferedFormalin": 268,
+      "AllprotectTissueReagent": 176,
+      "NonaldehydeBasedWithoutAceticAcid": 168,
+      "PAXgeneTissue": 161,
+      "OptimumCuttingTemperatureMedium": 137,
+      "HeatStabilization": 135,
+      "SnapFreezing": 132,
+      "AldehydeBased": 127,
+      "NeutralBufferedFormalin": 111,
+      "RNALater": 101,
+      "AlcoholBased": 99,
+      "Other": 90,
+      "NonaldehydeWithAceticAcid": 86,
+      "VacuumTechnologyStabilization": 85
+     }
     },
     "hasIdentifier": {
      "kind": "literal",
@@ -5462,11 +6249,48 @@
     },
     "hasMaterialTypeCode": {
      "kind": "resource",
-     "count": 2822
+     "count": 2822,
+     "code_system": "SNOMED CT"
     },
     "hasPrimaryContainer": {
      "kind": "individual",
-     "count": 1876
+     "count": 1876,
+     "values": {
+      "Other": 129,
+      "AcidCitrateDextrose": 82,
+      "SerumTubeWithoutClotActivator": 75,
+      "SodiumCitrate": 75,
+      "LithiumHeparinAndGel": 73,
+      "PolypropyleneTubeSterile": 72,
+      "LithiumHeparinAndRubberPlug": 67,
+      "SodiumFluoridePotassiumOxalate": 64,
+      "LithiumHeparin": 62,
+      "CellPreparationTubeCitrate": 61,
+      "ChemicalAdditivesStabilizers": 61,
+      "PhysicalFiltrationSystem": 61,
+      "Glass": 58,
+      "TraceElementsTube": 57,
+      "S8820ProteaseInhibitorTabletsOrEquivalent": 55,
+      "EDTAAndGel": 55,
+      "TempusTube": 53,
+      "CitratePhosphateDextrose": 52,
+      "OrageneCollectionContainerOrEquivalent": 51,
+      "NonAldehydeBasedStabilizerForCellFreeNucleicAcids": 50,
+      "PolyethyleneTubeSterile": 48,
+      "PAXgeneBloodRNAplus": 48,
+      "ProteaseInhibitors": 48,
+      "PAXgeneBloodDNA": 47,
+      "PotassiumEDTA": 46,
+      "SodiumEDTA": 43,
+      "SerumSeparatorTubeWithClotActivator": 41,
+      "Hirudin": 41,
+      "StoolCollectionContainerWithDNAStabilizer": 41,
+      "PAXgeneBoneMarrowRNA": 39,
+      "RNALater": 37,
+      "AldehydeBasedStabilizerForCTCs": 29,
+      "SodiumHeparin": 29,
+      "CellPreparationTubeHeparin": 26
+     }
     },
     "hasSharedIdentifier": {
      "kind": "literal",
@@ -5496,7 +6320,8 @@
    "properties": {
     "hasCode": {
      "kind": "resource",
-     "count": 1093
+     "count": 1093,
+     "code_system": "SNOMED CT"
     },
     "hasComponent": {
      "kind": "resource",
@@ -5562,7 +6387,8 @@
    "properties": {
     "hasCode": {
      "kind": "resource",
-     "count": 1164
+     "count": 1164,
+     "code_system": "SNOMED CT"
     },
     "hasQuantity": {
      "kind": "resource",
@@ -5582,7 +6408,8 @@
    "properties": {
     "hasCode": {
      "kind": "resource",
-     "count": 380659
+     "count": 380659,
+     "code_system": "UCUM"
     }
    }
   },
@@ -5597,12 +6424,14 @@
     },
     "hasAlleleOriginCode": {
      "kind": "resource",
-     "count": 1058
+     "count": 1058,
+     "code_system": "GENO"
     },
     "hasCode": {
      "kind": "resource",
      "count": 1058,
-     "target": "Code"
+     "target": "Code",
+     "code_system": "generic"
     },
     "hasDataProvider": {
      "kind": "resource",
@@ -5617,7 +6446,14 @@
     "hasGeneticVariation": {
      "kind": "resource",
      "count": 1058,
-     "target": "SingleNucleotideVariation"
+     "target": "GenomicDeletion",
+     "targets": [
+      "GenomicDeletion",
+      "GeneticVariation",
+      "CopyNumberVariation",
+      "GenomicInsertion",
+      "SingleNucleotideVariation"
+     ]
     },
     "hasNotation": {
      "kind": "resource",
@@ -5636,11 +6472,17 @@
     },
     "hasTypeCode": {
      "kind": "resource",
-     "count": 1058
+     "count": 1058,
+     "code_system": "http://purl.obolibrary.org/obo/SO_",
+     "code_systems": {
+      "http://purl.obolibrary.org/obo/SO_": 1011,
+      "GENO": 47
+     }
     },
     "hasZygosityCode": {
      "kind": "resource",
-     "count": 1058
+     "count": 1058,
+     "code_system": "GENO"
     }
    }
   },
@@ -5666,7 +6508,8 @@
    "properties": {
     "hasCode": {
      "kind": "resource",
-     "count": 734
+     "count": 734,
+     "code_system": "SNOMED CT"
     },
     "hasDataProvider": {
      "kind": "resource",

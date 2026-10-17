@@ -16,6 +16,21 @@ from nl2sparql.config import REPO_ROOT
 HEADING = re.compile(r"^(\d+)\.\s+(.+?)\s*$")
 QUERY_START = re.compile(r"^(PREFIX|SELECT|CONSTRUCT|ASK|DESCRIBE|DEFINE)\b")
 UNTAGGED_NON_COMPLIANT = {15}  # "Exposing identifiers" is not tagged in its title
+# The query shape of each example (nl2sparql.context.examples.SHAPES); the example bank uses it to
+# make sure a question that asks for a share or compares two cohorts sees an example of that shape.
+# Team examples live in data/team_examples.jsonl and are not touched by this import.
+SHAPES = {
+    "official-01": "breakdown",
+    "official-02": "two_cohort",
+    "official-03": "conditional_count",
+    "official-04": "conditional_count",
+    "official-05": "breakdown",
+    "official-06": "breakdown",
+    "official-07": "breakdown",
+    "official-08": "conditional_count",
+    "official-09": "conditional_count",
+    "official-10": "breakdown",
+}
 
 SPEC_EXAMPLE = {
     "id": "spec-01",
@@ -42,6 +57,7 @@ WHERE {
     "compliant": True,
     "source": "challenge brief",
     "title": "Type 2 diabetes patients",
+    "shape": "plain",
 }
 
 
@@ -65,13 +81,15 @@ def parse_markdown(markdown: str) -> list[dict]:
     for example in examples:
         title = re.sub(r"\s*-\s*NON COMPLIANT\s*$", "", example["title"], flags=re.IGNORECASE)
         tagged = "NON COMPLIANT" in example["title"].upper()
+        identifier = f"official-{example['number']:02d}"
         rows.append({
-            "id": f"official-{example['number']:02d}",
+            "id": identifier,
             "question": example["question"],
             "sparql": "\n".join(example["lines"]).strip() + "\n",
             "compliant": not (tagged or example["number"] in UNTAGGED_NON_COMPLIANT),
             "source": "official",
             "title": title,
+            "shape": SHAPES.get(identifier, "plain"),
         })
     return rows
 

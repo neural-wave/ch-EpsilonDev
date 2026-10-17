@@ -1,4 +1,4 @@
-"""Standard prefixes of the SPHN data, and a fixer that declares the ones a query forgot."""
+"""Standard prefixes of the SPHN data, and fixers for declarations a query forgot or got wrong."""
 from __future__ import annotations
 
 import re
@@ -26,9 +26,29 @@ STANDARD_PREFIXES = {
 }
 
 PREFIX_DECLARATION_RE = re.compile(r"^\s*PREFIX\s+([A-Za-z][\w.-]*)?\s*:\s*<", re.IGNORECASE | re.MULTILINE)
+PREFIX_NAMESPACE_RE = re.compile(r"((?<![\w?$:])PREFIX\s+([A-Za-z][\w.-]*)\s*:\s*)<([^<>\s]*)>", re.IGNORECASE)
 LEADING_DEFINES_RE = re.compile(r"(?:\s*DEFINE[^\n]*\n)*", re.IGNORECASE)
 IRIS_AND_STRINGS_RE = re.compile(r"<[^<>\s]*>|\"(?:[^\"\\]|\\.)*\"|'(?:[^'\\]|\\.)*'")
+STRINGS_RE = re.compile(r"\"(?:[^\"\\]|\\.)*\"|'(?:[^'\\]|\\.)*'")
 PREFIX_USE_RE = re.compile(r"(?<![\w?$:-])([A-Za-z][\w-]*):")
+
+
+def fix_standard_prefixes(text: str) -> str:
+    """Point a standard prefix name declared with another namespace back at the data's namespace.
+
+    The model declares `icd-10-gm:` as the OBO namespace, `geno:` under biomedit or `snomed:` as
+    `http://snomed.info/sid/`, and every term under it then names nothing in the data. `bif:` stays
+    as declared (`<bif:>` is the accepted form), and a standard namespace declared under another
+    prefix name is fine. The text comes back unchanged when every declaration is right.
+    """
+    without_strings = STRINGS_RE.sub(lambda match: " " * len(match.group(0)), text)
+    for match in reversed(list(PREFIX_NAMESPACE_RE.finditer(without_strings))):
+        head, name, namespace = match.groups()
+        standard = STANDARD_PREFIXES.get(name)
+        if standard is None or name == "bif" or namespace == standard:
+            continue
+        text = text[:match.start()] + f"{head}<{standard}>" + text[match.end():]
+    return text
 
 
 def add_missing_prefixes(text: str) -> str:

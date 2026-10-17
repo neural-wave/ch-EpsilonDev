@@ -2,14 +2,16 @@ import json
 from pathlib import Path
 
 import pytest
-from rdflib import URIRef
+from rdflib import URIRef, Variable
 
 from conftest import DATA_DIR, PREFIXES, load_examples
 from nl2sparql.context import SchemaCards
-from nl2sparql.guard import ComplianceGuard, PropertyKinds
+from nl2sparql.guard import ComplianceGuard, PropertyKinds, RuleSettings
+from nl2sparql.guard.decision import AGGREGATION_ADVICE, GROUPING_ADVICE, REQUEST_LEVEL_RULES
 from nl2sparql.judge import Judge
 from nl2sparql.models import IntentFlags
-from nl2sparql.guard.provenance import Sensitivity
+from nl2sparql.guard.provenance import Sensitivity, analyse
+from nl2sparql.sparql.parse import parse_sparql
 
 EXAMPLES = load_examples()
 
@@ -57,6 +59,10 @@ CRAFTED = [
     ("average value", True, None, PREFIXES + "SELECT (AVG(?v) AS ?mean) WHERE { GRAPH ?g { ?a a sphn:Age ; sphn:hasQuantity/sphn:hasValue ?v } }"),
     ("first date", True, None, PREFIXES + "SELECT (MIN(?d) AS ?first) WHERE { GRAPH ?g { ?dx a sphn:BilledDiagnosis ; sphn:hasRecordDateTime ?d } }"),
     ("count per class", False, "R3", "SELECT ?class (COUNT(*) AS ?n) WHERE { GRAPH ?g { ?s a ?class } } GROUP BY ?class"),
+    ("identifier literal inside NOT EXISTS", False, "R1", PREFIXES + 'SELECT (COUNT(DISTINCT ?g) AS ?n) WHERE { GRAPH ?g { ?dx a sphn:BilledDiagnosis } FILTER NOT EXISTS { GRAPH ?g { ?s sphn:hasIdentifier "ID-10125020000015" } } }'),
+    ("record IRI inside EXISTS", False, "R1", PREFIXES + "SELECT (COUNT(DISTINCT ?g) AS ?n) WHERE { GRAPH ?g { ?dx a sphn:BilledDiagnosis } FILTER EXISTS { GRAPH ?g { <https://biomedit.ch/rdf/sphn-resource/CHE-108_904_325-sphn-BilledDiagnosis-7ae563b3> sphn:hasCode ?c } } }"),
+    ("patients without a record", True, None, PREFIXES + "SELECT (COUNT(DISTINCT ?g) AS ?n) WHERE { GRAPH ?g { ?dx a sphn:BilledDiagnosis } FILTER NOT EXISTS { GRAPH ?g { ?d a sphn:Death } } }"),
+    ("patient pattern hidden in EXISTS", False, "R2", PREFIXES + "SELECT ?code WHERE { GRAPH <https://biomedit.ch/rdf/sphn-resource/global> { ?code rdfs:subClassOf icd-10-gm:A00 } FILTER EXISTS { GRAPH ?g { ?dx sphn:hasCode ?c . ?c a ?code } } }"),
 ]
 
 
@@ -289,8 +295,8 @@ def test_nested_filter_and_bind_keep_identifier_sensitivity(guard):
     decision = guard.decide(leaking, IntentFlags())
     assert not decision.compliant
     assert any(violation.rule == "R1" for violation in decision.violations)
-    assert "filters on the identifier" in decision.reason.lower()
-    assert decision.retry_hint
+    assert "compares the identifier" in decision.reason.lower()
+    assert decision.retry_hint is None  # R1: the value came from the request, never retried
 
     category_near_miss = PREFIXES + (
         "SELECT (COUNT(DISTINCT ?g) AS ?n) WHERE { { SELECT ?g WHERE { "
@@ -329,7 +335,7 @@ def test_inverse_identifier_path_literal_lookup_triggers_r1(guard):
     assert not decision.compliant
     assert "R1" in {violation.rule for violation in decision.violations}
     assert "looks up the identifier" in decision.reason.lower()
-    assert decision.retry_hint
+    assert decision.retry_hint is None
 
     value_near_miss = PREFIXES + (
         'SELECT (COUNT(DISTINCT ?g) AS ?n) WHERE { GRAPH ?g { '
@@ -365,7 +371,7 @@ def test_nested_graph_path_filter_and_aggregate_interaction(guard):
     assert not decision.compliant
     assert {violation.rule for violation in decision.violations} >= {"R1", "R5"}
     assert "identifier" in decision.reason.lower()
-    assert decision.retry_hint
+    assert decision.retry_hint is None
 
     category_near_miss = PREFIXES + (
         'SELECT ?rank (COUNT(DISTINCT ?g) AS ?patients) WHERE { { SELECT ?g ?rank WHERE { '
@@ -429,8 +435,209 @@ def test_each_guard_rule_has_reasoned_trigger_and_valid_near_miss(
     matching = [violation for violation in rejected.violations if violation.rule == rule]
     assert matching and reason.lower() in " ".join(v.message for v in matching).lower()
     assert rejected.reason and reason.lower() in rejected.reason.lower()
-    assert rejected.retry_hint and reason.lower() in rejected.retry_hint.lower()
+    if rule in REQUEST_LEVEL_RULES:
+        assert rejected.retry_hint is None
+    else:
+        assert rejected.retry_hint and reason.lower() in rejected.retry_hint.lower()
 
     accepted = guard.decide(near_miss, IntentFlags())
     assert accepted.compliant and accepted.reason is None
     assert accepted.retry_hint is None and not accepted.violations
+
+
+def test_query_that_targets_patients_is_not_retried(guard):
+    """gen-106: the retry after an R1 let the model drop the graph-name filter and pass a forbidden request."""
+    first_try = PREFIXES + (
+        'SELECT (COUNT(DISTINCT ?g) AS ?n) WHERE { GRAPH ?g { '
+        'FILTER(STRSTARTS(STR(?g), "gen_mock_data-1_1050")) ?dx a sphn:BilledDiagnosis } }'
+    )
+    decision = guard.decide(first_try, IntentFlags())
+    assert not decision.compliant and decision.retry_hint is None
+    assert 'matches the patient graph name ?g against the value "gen_mock_data-1_1050"' in decision.reason
+    # a shape mistake on an allowed request still gets its retry
+    rows = PREFIXES + "SELECT ?dx WHERE { GRAPH ?g { ?dx a sphn:BilledDiagnosis } }"
+    assert guard.decide(rows, IntentFlags()).retry_hint
+
+
+def test_retry_sentence_follows_the_kind_of_violation(guard):
+    grouped = PREFIXES + (
+        "SELECT ?code (COUNT(DISTINCT ?g) AS ?n) WHERE { GRAPH ?g { ?dx a sphn:BilledDiagnosis ; sphn:hasCode ?code } } "
+        "GROUP BY ?code"
+    )
+    decision = guard.decide(grouped, IntentFlags())
+    assert all(violation.grouping for violation in decision.violations)
+    assert decision.retry_hint.endswith(GROUPING_ADVICE)
+    assert "aggregated across all patients" not in decision.retry_hint
+
+    rows = PREFIXES + "SELECT ?dx WHERE { GRAPH ?g { ?dx a sphn:BilledDiagnosis } }"
+    decision = guard.decide(rows, IntentFlags())
+    assert not any(violation.grouping for violation in decision.violations)
+    assert decision.retry_hint.endswith(AGGREGATION_ADVICE)
+
+
+# The real first tries behind fix #11 of docs/FAILURE_ANALYSIS.md: (name, query, rule, phrases the hint must contain)
+GROUPING_HINT_CASES = [
+    (
+        "intent-028: code node behind a BIND",
+        PREFIXES + "PREFIX snomed: <http://snomed.info/id/>\n"
+        "SELECT ?route (COUNT(DISTINCT ?g) AS ?count)\n"
+        "WHERE {\n"
+        "  GRAPH ?g {\n"
+        "    ?event a sphn:DrugAdministrationEvent ;\n"
+        "           sphn:hasAdministrationRouteCode ?code .\n"
+        '    ?code a snomed:284009009 OPTION (inference "https://biomedit.ch/rdf/sphn-resource/global") .\n'
+        "  }\n"
+        "  BIND (STR(?code) AS ?route)\n"
+        "}\n"
+        "GROUP BY ?route\n"
+        "ORDER BY DESC(?count)\n",
+        "R5",
+        [
+            "?route is built from ?code, which is a code node (sphn:hasAdministrationRouteCode): one node per record, not a category.",
+            "Group by the code's class instead: ?event sphn:hasAdministrationRouteCode ?code . ?code a ?concept . GROUP BY ?concept",
+            "VALUES (?concept ?label) { ... } and GROUP BY ?label when the question names the categories",
+        ],
+    ),
+    (
+        "q-057: record linked by hasIntent",
+        PREFIXES + "SELECT ?intent (COUNT(DISTINCT ?g) AS ?patients)\n"
+        "WHERE {\n"
+        "  GRAPH ?g {\n"
+        "    ?procedure a sphn:ImagingProcedure ;\n"
+        "               sphn:hasIntent ?intent .\n"
+        "    ?procedure sphn:hasCode ?code .\n"
+        "    ?code a ?concept .\n"
+        "  }\n"
+        "  GRAPH <https://biomedit.ch/rdf/sphn-resource/global> {\n"
+        "    ?concept rdfs:subClassOf* ?intent_concept .\n"
+        "  }\n"
+        "  VALUES ?intent_concept {\n"
+        "    <http://snomed.info/id/363679005>\n"
+        "    <http://snomed.info/id/360156006>\n"
+        "    <http://snomed.info/id/373825000>\n"
+        "  }\n"
+        "}\n"
+        "GROUP BY ?intent\n",
+        "R5",
+        [
+            "?intent is a record linked by sphn:hasIntent: a unique IRI per record.",
+            "Group by the class of its code instead: ?intent sphn:hasCode ?c . ?c a ?concept . GROUP BY ?concept.",
+        ],
+    ),
+    (
+        "q-018: patient graph behind a BIND",
+        PREFIXES + "SELECT (COUNT(DISTINCT ?drug_patient) AS ?patients_with_drugs)\n"
+        "       (COUNT(DISTINCT ?ae_patient) AS ?patients_with_ae)\n"
+        "       (ROUND(1000.0 * COUNT(DISTINCT ?ae_patient) / COUNT(DISTINCT ?drug_patient)) / 10 AS ?share_pct)\n"
+        "WHERE {\n"
+        "  {\n"
+        "    GRAPH ?g {\n"
+        "      ?drug_event a sphn:DrugAdministrationEvent ;\n"
+        "                  sphn:hasAdministrativeCase ?case ;\n"
+        "                  sphn:hasSubjectPseudoIdentifier ?pid .\n"
+        "      ?case a sphn:AdministrativeCase ;\n"
+        "            sphn:hasAdmissionDateTime ?admission ;\n"
+        "            sphn:hasDischargeDateTime ?discharge .\n"
+        "      BIND (IF(?admission <= ?discharge, 1, 0) AS ?in_hospital)\n"
+        "      FILTER (?in_hospital = 1)\n"
+        "      BIND (?g AS ?drug_patient)\n"
+        "    }\n"
+        "  }\n"
+        "  OPTIONAL {\n"
+        "    GRAPH ?g {\n"
+        "      ?ae_event a sphn:AdverseEvent ;\n"
+        "                sphn:hasSubjectPseudoIdentifier ?pid .\n"
+        "      BIND (?g AS ?ae_patient)\n"
+        "    }\n"
+        "  }\n"
+        "}\n"
+        "GROUP BY ?drug_patient\n",
+        "R2",
+        [
+            "?drug_patient is built from ?g, which is the patient graph name.",
+            "Never group by or return the patient graph; count patients with COUNT(DISTINCT ?g) and group by a category",
+        ],
+    ),
+    (
+        "q-030: graph, record and timestamps from a sub-select",
+        PREFIXES + "PREFIX bif: <bif:>\n"
+        "SELECT (COUNT(DISTINCT ?g) AS ?patients)\n"
+        "       (AVG(?days) AS ?avg_days)\n"
+        "       (MIN(?days) AS ?min_days)\n"
+        "       (MAX(?days) AS ?max_days)\n"
+        "       (SUM(IF(?days <= 72, 1, 0)) AS ?within_3_days)\n"
+        "       (ROUND(1000.0 * SUM(IF(?days <= 72, 1, 0)) / COUNT(*)) / 10 AS ?within_3_days_pct)\n"
+        "WHERE {\n"
+        "  {\n"
+        "    SELECT DISTINCT ?g ?case ?start ?end\n"
+        "    WHERE {\n"
+        "      GRAPH ?g {\n"
+        "        ?case a sphn:AdministrativeCase .\n"
+        "        ?case sphn:hasStartDateTime ?start .\n"
+        "        ?case sphn:hasEndDateTime ?end .\n"
+        "      }\n"
+        "      FILTER (?end >= ?start)\n"
+        "    }\n"
+        "  }\n"
+        '  BIND (bif:datediff("day", ?start, ?end) AS ?days)\n'
+        "}\n"
+        "GROUP BY ?g ?case ?start ?end\n",
+        "R2",
+        [
+            "Grouping by ?g returns one row per patient or record. ?g is the patient graph name.",
+            "?case is a record IRI (a sphn:AdministrativeCase): one row per record. Do not group by it; count records with COUNT(DISTINCT ?case)",
+            "?start is an exact timestamp (sphn:hasStartDateTime). Group by YEAR(?start) or MONTH(?start) instead: BIND(YEAR(?start) AS ?year) ... GROUP BY ?year.",
+            "Group by YEAR(?end) or MONTH(?end) instead",
+        ],
+    ),
+]
+
+
+@pytest.mark.parametrize("name,query,rule,phrases", GROUPING_HINT_CASES, ids=[c[0] for c in GROUPING_HINT_CASES])
+def test_grouping_violations_say_what_to_group_by_instead(guard, name, query, rule, phrases):
+    decision = guard.decide(query, IntentFlags())
+    assert not decision.compliant
+    grouping = [violation for violation in decision.violations if violation.grouping]
+    assert grouping and rule in {violation.rule for violation in grouping}
+    messages = " ".join(violation.message for violation in grouping)
+    for phrase in phrases:
+        assert phrase in messages, messages
+    assert decision.retry_hint.endswith(GROUPING_ADVICE)
+    assert "aggregated across all patients" not in decision.retry_hint
+
+
+SECOND_GRAPH = "GRAPH ?g { ?d a sphn:Death } GRAPH ?death_patient { ?dx a sphn:BilledDiagnosis }"
+SECOND_GRAPH_CASES = [  # (name, query, rule or None, phrase of the message)
+    ("projected", PREFIXES + f"SELECT ?death_patient WHERE {{ {SECOND_GRAPH} }}", "R5",
+     "exposes patient or record identifiers (?death_patient)"),
+    ("grouped", PREFIXES + f"SELECT ?death_patient (COUNT(*) AS ?n) WHERE {{ {SECOND_GRAPH} }} GROUP BY ?death_patient", "R5",
+     "Grouping by ?death_patient returns one row per patient or record. ?death_patient is the patient graph name."),
+    ("sampled", PREFIXES + f"SELECT (SAMPLE(?death_patient) AS ?one) WHERE {{ {SECOND_GRAPH} }}", "R5",
+     "uses SAMPLE over identifiers or record IRIs"),
+    ("compared with a constant", PREFIXES + f'SELECT (COUNT(DISTINCT ?g) AS ?n) WHERE {{ {SECOND_GRAPH} FILTER(STR(?death_patient) = "urn:graph:1050123") }}', "R1",
+     'compares the patient graph name ?death_patient with the value "urn:graph:1050123"'),
+    ("counted and compared with ?g", PREFIXES + f"SELECT (COUNT(DISTINCT ?death_patient) AS ?n) WHERE {{ {SECOND_GRAPH} FILTER(?death_patient = ?g) }}", None, ""),
+]
+
+
+@pytest.mark.parametrize("name,query,rule,phrase", SECOND_GRAPH_CASES, ids=[c[0] for c in SECOND_GRAPH_CASES])
+def test_a_second_graph_variable_is_a_patient_graph_like_g(guard, name, query, rule, phrase):
+    violations = guard.check_query(query)
+    if rule is None:
+        assert violations == []
+        return
+    matching = [violation for violation in violations if violation.rule == rule]
+    assert matching and phrase in " ".join(violation.message for violation in matching), violations
+
+
+def test_patterns_inside_exists_get_their_sensitivity(kinds):
+    """rdflib keeps the translated EXISTS pattern in an attribute; walking items() would miss ?g2 and the filter."""
+    query = PREFIXES + (
+        "SELECT (COUNT(DISTINCT ?g) AS ?n) WHERE { GRAPH ?g { ?dx a sphn:BilledDiagnosis } "
+        'FILTER(EXISTS { GRAPH ?g2 { ?d a sphn:Death ; sphn:hasIdentifier ?id } FILTER(?g2 != ?g) }) }'
+    )
+    facts = analyse(parse_sparql(query).algebra, kinds, RuleSettings().ontology_graphs)
+    assert facts.sensitivity[Variable("g2")] is Sensitivity.IDENTIFIER
+    assert facts.sensitivity[Variable("id")] is Sensitivity.IDENTIFIER
+    assert facts.sensitivity[Variable("d")] is Sensitivity.INSTANCE
+    assert len(facts.filters) == 2
