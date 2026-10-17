@@ -1,8 +1,9 @@
 """Judge checks that read the schema cards.
 
 A property used on a class whose records do not carry it, a record link typed as if it were a code
-node, a value-set entry typed or placed on the wrong class, and a code system the class does not use
-are all valid SPARQL that answers empty or wrong rows on the real data. Every check here prefers a
+node, a value-set entry typed or placed on the wrong class, a code system the class does not use, and
+a code whose kind lives in another class (a country on a radiotherapy procedure) are all valid SPARQL
+that answers empty or wrong rows on the real data. Every check here prefers a
 miss to a false alarm, because a false alarm costs the request its only retry: a hint fires only when
 the cards say the pattern cannot match (one class per record, one target per link, a known value set).
 
@@ -23,6 +24,7 @@ from rdflib.namespace import RDF
 from rdflib.plugins.sparql.parserutils import CompValue
 
 from nl2sparql.context.schema import SchemaCards, words
+from nl2sparql.context.terminology import TerminologyIndex
 from nl2sparql.sparql.parse import ParsedQuery, parse_sparql
 from nl2sparql.sparql.prefixes import SPHN, STANDARD_PREFIXES
 
@@ -591,6 +593,39 @@ def check_value_set_member(parsed: ParsedQuery, text: str, schema: SchemaCards) 
     return errors
 
 
+def check_code_home(parsed: ParsedQuery, text: str, schema: SchemaCards, terminology: TerminologyIndex | None) -> list[str]:
+    """A concrete code typed on a class property that cannot hold it, when the code's kind lives in
+    another class (SchemaCards.code_home: a SNOMED CT geographic location is a sphn:Country code). The
+    property cannot hold it when its codes are a closed list on the card that lacks the code
+    (RadiotherapyProcedure.hasCode is one of 8 SNOMED CT codes) or belong to another code system
+    (OncologyDiagnosis.hasCode is ICD-10-GM): "How many patients live in India?" typed the country on
+    those two. check_value_set_member covers a code of another value set, check_code_system says the
+    system is wrong; this one names the class the code belongs to and the records that reach it. Reads the
+    code's labels from the terminology index, so it is silent without one."""
+    if schema.empty or terminology is None or parsed.algebra is None:
+        return []
+    analysis = _Analysis(parsed.algebra, schema)
+    individual = STANDARD_PREFIXES["sphn-individual"]
+    errors, seen = [], set()
+    for pattern, prop in analysis.links():
+        name = analysis.single_class(pattern.subject, pattern)
+        if name is None:
+            continue
+        allowed = {_expand(entry["value"]) for entry in schema.value_sets.get(name, {}).get(prop) or ()}
+        closed = bool(allowed) and not all(value.startswith(individual) for value in allowed)
+        system = schema.classes[name]["properties"].get(prop, {}).get("code_system")
+        for iri in sorted(_matched_constants(analysis, pattern, individual=False)):
+            entry = terminology.by_iri.get(iri)
+            home = schema.code_home(entry)
+            if home is None or home.name == name or iri in allowed or (name, prop, iri) in seen:
+                continue
+            if not closed and (system is None or system == entry.system):
+                continue  # an open list of the code's own system: the cards cannot tell
+            seen.add((name, prop, iri))
+            errors.append(f"{_short(iri)} is a {home.kind}, not a code of sphn:{name} {prop}: use it with {home.describe()}.")
+    return errors
+
+
 def _systems_assumed(analysis: _Analysis, pattern: Pattern) -> set[str]:
     """Code systems the query assumes for the object of a code property."""
     target = pattern.object
@@ -703,4 +738,5 @@ def suggest_missing_term(term: str, schema: SchemaCards) -> str:
 
 
 CHECKS = [check_class_property, check_record_link_typed, check_typed_value_set, check_value_set_member, check_code_system]
+TERMINOLOGY_CHECKS = [check_code_home]  # (parsed, text, schema, terminology): they read the labels of the typed codes
 REWRITES = [rewrite_typed_value_set]

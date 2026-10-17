@@ -1,14 +1,18 @@
 import copy
+import json
 from pathlib import Path
 
 import pytest
 
 from conftest import DATA_DIR, load_examples
-from nl2sparql.context import SchemaCards
+from nl2sparql.context import SchemaCards, TerminologyIndex
+from nl2sparql.judge import Judge
 from nl2sparql.judge_checks.schema import (
     CHECKS,
     REWRITES,
+    TERMINOLOGY_CHECKS,
     check_class_property,
+    check_code_home,
     check_code_system,
     check_record_link_typed,
     check_typed_value_set,
@@ -16,6 +20,7 @@ from nl2sparql.judge_checks.schema import (
     rewrite_typed_value_set,
     suggest_missing_term,
 )
+from nl2sparql.models import CodeEntry
 from nl2sparql.sparql.parse import parse_sparql
 from nl2sparql.sparql.prefixes import add_missing_prefixes
 
@@ -298,7 +303,7 @@ def test_suggest_missing_term_renders_the_class_pattern_or_a_near_identical_prop
     assert suggest_missing_term("hasSex", SchemaCards({}, [])) == "sphn:hasSex does not occur in the data."
 
 
-def test_checks_are_silent_on_the_official_examples_and_without_cards(schema):
+def test_checks_are_silent_on_the_official_examples_and_without_cards(schema, places):
     for example in load_examples():
         text = add_missing_prefixes(example["sparql"].strip() + "\n")
         for rewrite in REWRITES:
@@ -307,12 +312,97 @@ def test_checks_are_silent_on_the_official_examples_and_without_cards(schema):
         assert parsed.algebra is not None, example["id"]
         for check in CHECKS:
             assert check(parsed, text, schema) == [], (example["id"], check.__name__)
+        for check in TERMINOLOGY_CHECKS:
+            assert check(parsed, text, schema, places) == [], (example["id"], check.__name__)
     query = GRAPH_COUNT % "?stay a sphn:AdministrativeCase ; sphn:hasStartDateTime ?t . ?stay sphn:hasTherapeuticArea ?a . ?a a ?cls ."
     for check in CHECKS:
         assert run(check, query, SchemaCards({}, [])) == []
+    for check in TERMINOLOGY_CHECKS:
+        assert run(lambda parsed, text, cards: check(parsed, text, cards, places), query, SchemaCards({}, [])) == []
     assert rewrite_typed_value_set(query, SchemaCards({}, [])) == (query, [])
+
+
+# --- A code whose kind lives in another class (18 October): "How many patients live in India?" typed the
+# country code on OncologyDiagnosis, then on RadiotherapyProcedure, and answered 0 instead of 22. Fictional
+# places and synthetic codes: no terminology label in the repo.
+ATLANTIS_IRI = "http://snomed.info/id/1000101"
+COUNTRY_USE = "sphn:Country hasCode (via Birth / HomeAddress hasCountry, Nationality hasAssociatedCountry)"
+INFERENCE = 'OPTION (inference "https://biomedit.ch/rdf/sphn-resource/global")'
+
+
+@pytest.fixture(scope="module")
+def places() -> TerminologyIndex:
+    return TerminologyIndex([
+        CodeEntry(ATLANTIS_IRI, "1000101", "SNOMED CT", ("Atlantis (geographic location)",)),
+        CodeEntry("http://snomed.info/id/1000102", "1000102", "SNOMED CT", ("Atlantis fever (disorder)",)),
+    ])
+
+
+@pytest.fixture(scope="module")
+def radiotherapy(tmp_path_factory) -> SchemaCards:
+    """The cards with a closed list of codes on RadiotherapyProcedure.hasCode, as the local value sets have."""
+    path = tmp_path_factory.mktemp("sets") / "value_sets.json"
+    path.write_text(json.dumps({"classes": {"RadiotherapyProcedure": {"hasCode": [
+        {"value": "snomed:1000201", "label": "Beam therapy", "count": 5},
+        {"value": "snomed:1000202", "label": "Seed therapy", "count": 3},
+    ]}}}), encoding="utf-8")
+    return SchemaCards.load(DATA_DIR / "schema_cards.json", path)
+
+
+def code_home(query: str, cards: SchemaCards, index: TerminologyIndex | None) -> list[str]:
+    return run(lambda parsed, text, schema: check_code_home(parsed, text, schema, index), query, cards)
+
+
+def test_code_home_names_the_class_a_code_of_a_closed_list_or_another_system_belongs_to(radiotherapy, places):
+    on_procedure = GRAPH_COUNT % f"?c a snomed:1000101 {INFERENCE} . ?r sphn:hasCode ?c . ?r a sphn:RadiotherapyProcedure ."
+    assert code_home(on_procedure, radiotherapy, places) == [
+        f"snomed:1000101 is a geographic location, not a code of sphn:RadiotherapyProcedure hasCode: use it with {COUNTRY_USE}."
+    ]
+    # OncologyDiagnosis codes are ICD-10-GM: check_code_system says so, this check says where the code goes.
+    on_diagnosis = GRAPH_COUNT % f"?c a snomed:1000101 {INFERENCE} . ?d sphn:hasCode ?c . ?d a sphn:OncologyDiagnosis ."
+    assert code_home(on_diagnosis, radiotherapy, places) == [
+        f"snomed:1000101 is a geographic location, not a code of sphn:OncologyDiagnosis hasCode: use it with {COUNTRY_USE}."
+    ]
+    assert len(run(check_code_system, on_diagnosis, radiotherapy)) == 1
+    # Through VALUES too, and on a closed list of another coded property (Nationality.hasAcquistionCode).
+    values = GRAPH_COUNT % "?r a sphn:RadiotherapyProcedure ; sphn:hasCode ?c . ?c a ?place . VALUES ?place { snomed:1000101 }"
+    assert len(code_home(values, radiotherapy, places)) == 1
+    acquired = SchemaCards(radiotherapy.classes, list(radiotherapy.schema_terms),
+                           {**radiotherapy.value_sets, "Nationality": {"hasAcquistionCode": [
+                               {"value": "snomed:1000301", "label": "Way one", "count": 1}]}})
+    citizens = GRAPH_COUNT % "?n a sphn:Nationality ; sphn:hasAcquistionCode ?c . ?c a snomed:1000101 ."
+    assert code_home(citizens, acquired, places) == [
+        f"snomed:1000101 is a geographic location, not a code of sphn:Nationality hasAcquistionCode: use it with {COUNTRY_USE}."
+    ]
+
+
+def test_code_home_stays_silent_where_the_code_can_be(radiotherapy, places):
+    right = GRAPH_COUNT % f"?addr a sphn:HomeAddress ; sphn:hasCountry ?country . ?country sphn:hasCode ?c . ?c a snomed:1000101 {INFERENCE} ."
+    typed_country = GRAPH_COUNT % "?country a sphn:Country ; sphn:hasCode ?c . ?c a snomed:1000101 ."
+    own = GRAPH_COUNT % "?r a sphn:RadiotherapyProcedure ; sphn:hasCode ?c . ?c a snomed:1000201 ."
+    no_home = GRAPH_COUNT % "?r a sphn:RadiotherapyProcedure ; sphn:hasCode ?c . ?c a snomed:1000102 ."  # a disorder: no home
+    unknown = GRAPH_COUNT % "?r a sphn:RadiotherapyProcedure ; sphn:hasCode ?c . ?c a snomed:1 ."  # not in the index
+    untyped = GRAPH_COUNT % "?r sphn:hasCode ?c . ?c a snomed:1000101 ."
+    open_list = GRAPH_COUNT % "?s a sphn:Substance ; sphn:hasCode ?c . ?c a snomed:1000101 ."  # SNOMED CT, no list: cannot tell
+    for query in (right, typed_country, own, no_home, unknown, untyped, open_list):
+        assert code_home(query, radiotherapy, places) == [], query
+    on_procedure = GRAPH_COUNT % "?r a sphn:RadiotherapyProcedure ; sphn:hasCode ?c . ?c a snomed:1000101 ."
+    assert code_home(on_procedure, radiotherapy, None) == []  # no index: no semantic tag
+    assert code_home(on_procedure, SchemaCards({}, []), places) == []
+    assert code_home(on_procedure, SchemaCards.load(DATA_DIR / "schema_cards.json"), places) == []  # no value sets: an open list
+
+
+def test_the_judge_reports_a_code_typed_where_its_kind_cannot_be(radiotherapy, places):
+    query = (
+        "SELECT (COUNT(DISTINCT ?g) AS ?patients) WHERE { GRAPH ?g { "
+        f"?c a snomed:1000101 {INFERENCE} . ?r sphn:hasCode ?c . ?r a sphn:RadiotherapyProcedure . }} }}"
+    )
+    message = f"snomed:1000101 is a geographic location, not a code of sphn:RadiotherapyProcedure hasCode: use it with {COUNTRY_USE}."
+    assert message in Judge(radiotherapy, places).check(query, "How many patients live in Atlantis?").errors
+    assert message not in Judge(radiotherapy).check(query).errors  # the judge without an index
 
 
 def test_module_lists_every_check_and_rewrite():
     assert CHECKS == [check_class_property, check_record_link_typed, check_typed_value_set, check_value_set_member, check_code_system]
+    assert TERMINOLOGY_CHECKS == [check_code_home]
     assert REWRITES == [rewrite_typed_value_set]

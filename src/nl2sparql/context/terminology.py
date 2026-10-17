@@ -15,6 +15,10 @@ A00.1, A00.9) follow the direct matches. Ties keep the index order, so results a
 Given the SPHN class names, a code whose label only spells out a class name ("Imaging (procedure)"
 for sphn:ImagingProcedure) is dropped: no reference uses such a code, and the model typed the intent
 of an imaging procedure with it twice.
+
+The semantic tag also says where a code is used: SchemaCards.code_home() reads it ("(geographic
+location)" -> sphn:Country hasCode) for the context line of a candidate and for the judge, which finds
+the entry of a typed code by its IRI (by_iri).
 """
 from __future__ import annotations
 
@@ -75,9 +79,11 @@ class TerminologyIndex:
     def __init__(self, entries: list[CodeEntry]):
         self.entries = entries
         self.by_code = {entry.code: entry for entry in entries}
+        self.by_iri: dict[str, CodeEntry] = {}  # the judge looks up the code a query types (its semantic tag)
         self.position = {}  # first position of each code: the tie-break
         for position, entry in enumerate(entries):
             self.position.setdefault(entry.code, position)
+            self.by_iri.setdefault(entry.iri, entry)
         self.labels: list[tuple[int, set[str]]] = []  # (entry position, words of one label)
         self.postings: dict[str, list[int]] = defaultdict(list)
         self.entry_words: list[set[str]] = []  # all label words of each entry

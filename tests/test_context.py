@@ -686,3 +686,89 @@ def test_context_builder_hands_class_names_to_the_index_and_candidates_to_the_pi
     context = builder.build("How many imaging procedures were done for staging?")
     assert [entry.code for entry in context.code_candidates] == ["373825000"]  # "Imaging (procedure)" restates the class
     assert [card.split(" ", 1)[0] for card in context.schema_cards] == ["sphn:ImagingProcedure", "sphn:Intent"]
+
+
+# --- Where a code is used (18 October): "How many patients live in India?" had the country among the code
+# candidates but neither the HomeAddress nor the Country card, and the model typed the country on
+# OncologyDiagnosis, then on RadiotherapyProcedure. Fictional places: no terminology label in the repo.
+ATLANTIS = CodeEntry("http://snomed.info/id/1000101", "1000101", "SNOMED CT", ("Atlantis (geographic location)",))
+COUNTRY_USE = "sphn:Country hasCode (via Birth / HomeAddress hasCountry, Nationality hasAssociatedCountry)"
+
+
+def test_a_geographic_code_has_its_home_on_the_country_card_and_the_records_that_reach_it():
+    cards = SchemaCards.load(DATA_DIR / "schema_cards.json")
+    home = cards.code_home(ATLANTIS)
+    assert (home.kind, home.name, home.prop) == ("geographic location", "Country", "hasCode")
+    assert home.via == (("Birth", "hasCountry"), ("HomeAddress", "hasCountry"), ("Nationality", "hasAssociatedCountry"))
+    assert home.describe() == COUNTRY_USE
+    # Only a SNOMED CT tag of a known kind has a home, and only when the cards hold its coded class.
+    fever = CodeEntry("http://snomed.info/id/1000102", "1000102", "SNOMED CT", ("Atlantis fever (disorder)",))
+    assert cards.code_home(fever) is None
+    assert cards.code_home(CodeEntry("https://example.org/icd/X1", "X1", "ICD-10-GM", ("Atlantis (geographic location)",))) is None
+    assert cards.code_home(None) is None
+    assert synthetic_cards({"Country": {}}).code_home(ATLANTIS) is None
+    coded_only = synthetic_cards({"Country": {"hasCode": {"kind": "resource", "code_system": "SNOMED CT"}}})
+    assert coded_only.code_home(ATLANTIS).describe() == "sphn:Country hasCode"
+
+
+@pytest.mark.parametrize("question,expected", [
+    ("How many patients live in Atlantis?", {"Country", "HomeAddress"}),  # the linking record the question names
+    ("How many patients were born in Atlantis?", {"Birth", "Country"}),
+    ("How many patients are citizens of Atlantis?", {"Nationality", "Country"}),
+    ("How many patients come from Atlantis?", {"Country", "Birth", "HomeAddress", "Nationality"}),  # none named: all
+])
+def test_the_picker_shows_the_home_of_a_candidate_and_the_records_that_link_to_it(question, expected):
+    cards = SchemaCards.load(DATA_DIR / "schema_cards.json")
+    found = names(cards.cards_for(question, k=8, codes=[ATLANTIS]))
+    assert set(found[:len(expected)]) == expected, found  # first, ahead of everything else
+    if "come from" in question:
+        assert "Country" not in names(cards.cards_for(question, k=8))  # the candidate brought it
+
+
+@pytest.mark.parametrize("question,expected,unexpected", [
+    ("How many patients live in Atlantis?", {"HomeAddress"}, set()),
+    ("How many of our patients are living in Atlantis, by sex?", {"HomeAddress", "AdministrativeSex"}, set()),
+    ("Which countries do our patients live in?", {"HomeAddress", "Country"}, set()),
+    ("How many patients have their residence abroad, and how many are residents here?", {"HomeAddress"}, set()),
+    ("What is the most common home country of our patients?", {"HomeAddress"}, set()),
+    ("What is the most common birthplace of our patients?", {"Birth"}, set()),
+    ("How many patients have a country of birth on record?", {"Birth"}, set()),
+    ("How many patients hold their citizenship from birth?", {"Nationality", "Birth"}, set()),
+    # q-006 asks for a civil status, and a live birth is a birth: no address.
+    ("What is the civil status breakdown of our patients: how many are married, single, divorced, widowed, separated "
+     "from a partner, or living with a partner without being married?", {"CivilStatus"}, {"HomeAddress"}),
+    ("How many live births were recorded?", {"Birth"}, {"HomeAddress"}),
+    ("How many patients were still living at the time of their last follow-up?", {"FollowUp"}, {"HomeAddress"}),
+])
+def test_picker_synonyms_for_where_patients_live_were_born_and_are_citizens(question, expected, unexpected):
+    cards = SchemaCards.load(DATA_DIR / "schema_cards.json")
+    found = set(names(cards.cards_for(question, k=8)))
+    assert expected <= found and not (unexpected & found), found
+
+
+def test_context_builder_says_where_a_geographic_candidate_is_used():
+    from nl2sparql.agents.prompts import render_query_user_v1
+
+    two_labels = CodeEntry("http://snomed.info/id/1000103", "1000103", "SNOMED CT",
+                           ("Lemuria (geographic location)", "Lemurian republic (geographic location)", "third label"))
+    fever = CodeEntry("http://snomed.info/id/1000104", "1000104", "SNOMED CT", ("Atlantis fever (disorder)",))
+    builder = ContextBuilder(
+        ExampleBank([]),
+        SchemaCards.load(DATA_DIR / "schema_cards.json"),
+        TerminologyIndex([ATLANTIS, two_labels, fever]),
+        k_cards=4,
+    )
+    question = "How many patients live in Atlantis, and how many of them had Atlantis fever?"
+    context = builder.build(question)
+    assert sorted(entry.code for entry in context.code_candidates) == ["1000101", "1000104"]
+    atlantis, other = sorted(context.code_candidates, key=lambda entry: entry.code)
+    assert atlantis.labels == (f"Atlantis (geographic location); used as: {COUNTRY_USE}",)
+    assert other is fever  # a kind without a home is left alone
+    assert [card.split(" [", 1)[0] for card in context.schema_cards][:2] == ["sphn:Country", "sphn:HomeAddress"]
+    line = f"SNOMED CT 1000101 <http://snomed.info/id/1000101>: Atlantis (geographic location); used as: {COUNTRY_USE}"
+    assert line in render_query_user_v1(question, context, None).splitlines()
+    # The prompt shows two labels: the line goes after the second, the rest stay as they are.
+    lemuria = builder.build("How many patients live in Lemuria?").code_candidates[0]
+    assert lemuria.labels == ("Lemuria (geographic location)", f"Lemurian republic (geographic location); used as: {COUNTRY_USE}",
+                              "third label")
+    assert builder.terminology.by_iri["http://snomed.info/id/1000101"] is ATLANTIS  # the index entries stay untouched
