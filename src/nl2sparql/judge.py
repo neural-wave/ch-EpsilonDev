@@ -12,7 +12,10 @@ question names and counts the records it asks for (judge_checks/coverage.py). Sh
 correct form are repaired instead of reported (judge_checks/rewrites_scope.py, rewrites_aggregation.py):
 a hint buys a whole new query, which came back worse as often as better. Every error becomes the retry feedback, so a check that fires on a correct
 query costs the request its retry: each one was measured at zero hits on the reference queries.
-The repairs are reported so the pipeline can log them.
+Last, after the checks, the counts the reference queries always show and our answers left out become
+extra columns (rewrites_aggregation.ADDITIONS): the patients, the parts of a share, the patients next to
+a conditional record count and the records under a summed 0/1 indicator. No check sees them, so they
+never cost a retry. The repairs are reported so the pipeline can log them.
 
 Database-agnostic by design: the judge never contacts a database (confirmed by the jury).
 """
@@ -138,6 +141,16 @@ class Judge:
             for check in question_checks.CHECKS:
                 asked += check(question, parsed, fixed, self.schema, self.terminology)
             errors = asked + errors  # first, so the cap below never drops them
+        # Last, after every check: the counts the reference queries always show (patients, the parts of a share,
+        # the patients next to a conditional record count, the records under a summed 0/1 indicator) become extra
+        # columns. The checks never see them, so an addition never costs a retry.
+        for addition in rewrites_aggregation.ADDITIONS:
+            rewritten, applied = addition(fixed, parsed)
+            if applied:
+                reparsed = parse_sparql(rewritten)
+                if reparsed.kind != "Invalid" and reparsed.query is not None:
+                    fixed, parsed = rewritten, reparsed
+                    repairs += applied
         return JudgeResult(fixed, _first_unique(errors), repairs)
 
 
