@@ -1,4 +1,5 @@
 import asyncio
+import json
 import sys
 from pathlib import Path
 
@@ -272,3 +273,21 @@ def test_the_perf_client_sends_no_anytime_timeout_and_treats_overruns_as_timeout
     assert client.run("FAST")["complete"] is True and client.run("FAST")["rows"] == 1
     assert time_on_perf.overran(client.run("SLOW")) and time_on_perf.overran(client.run("PARTIAL"))
     assert all(set(data) == {"query"} and timeout == 30.0 for data, timeout in seen)
+
+
+def test_known_reference_timings_are_reused_only_for_the_same_reference_query(tmp_path):
+    source = {"summary": {}, "rows": [{"id": "q-1", "reference_sparql": "REF1"}, {"id": "q-2", "reference_sparql": "OLD-REF2"}]}
+    (tmp_path / "query-20261017-000000.json").write_text(json.dumps(source), encoding="utf-8")
+    earlier = {"summary": {"source_report": "query-20261017-000000.json"},
+               "rows": [{"id": "q-1", "reference": {**OK, "seconds": 4.0, "runs": 1}},
+                        {"id": "q-2", "reference": {**OK, "seconds": 9.0, "runs": 1}}]}
+    perf_path = tmp_path / "perf-20261017-000000.json"
+    perf_path.write_text(json.dumps(earlier), encoding="utf-8")
+    known = time_on_perf.known_reference_times([str(perf_path)], tmp_path)
+    assert known["q-1"][0] == "REF1" and known["q-1"][1]["seconds"] == 4.0 and known["q-1"][1]["reused_from"] == perf_path.name
+
+    client = FakePerfClient({"GEN1": [{**OK, "seconds": 0.1}] * 2, "REF2": [{**OK, "seconds": 0.3}] * 2, "GEN2": [{**OK, "seconds": 0.2}] * 2})
+    rows, restarts = time_on_perf.time_pairs([candidate("q-1", "REF1", "GEN1"), candidate("q-2", "REF2", "GEN2")], client, runs=1, known=known)
+    assert "REF1" not in client.calls and "REF2" in client.calls  # q-2's reference changed since the earlier report
+    assert rows[0]["reference"]["seconds"] == 4.0 and rows[0]["ratio"] == round(0.1 / 4.0, 2) and rows[1]["reference"]["seconds"] == 0.3
+    assert restarts == 0

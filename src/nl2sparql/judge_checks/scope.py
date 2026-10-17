@@ -218,6 +218,8 @@ def _unbound_in_scope(project, select_star: bool) -> list[str]:
     aggregates: dict[tuple[str, Variable], CompValue] = {}
     extends, _ = _select_clause(project)
     aliases = {extend.var for extend in extends}  # an aggregate over an alias is check_aggregate_over_aggregate's
+    # SELECT expressions only: a projected GROUP BY key is Extend(?key, __agg_n__) over SAMPLE and binds nothing.
+    expression_aliases = {extend.var for extend in extends if not _is_projected_key(extend)}
 
     def unbound(variable, clause, bound) -> None:
         if variable not in bound and clause not in clauses.setdefault(variable, []):
@@ -232,7 +234,9 @@ def _unbound_in_scope(project, select_star: bool) -> list[str]:
         if node is not project and node.name == "Project":
             return True  # a sub-select is its own scope
         if node.name == "Group":
-            bound = _in_scope(node.p)
+            # Virtuoso accepts GROUP BY on a SELECT alias (SELECT (YEAR(?dt) AS ?year) ... GROUP BY ?year gave an
+            # exact result on q-004); the spec does not, but Virtuoso is the target.
+            bound = _in_scope(node.p) | expression_aliases
             for variable in _expression_variables(node.expr):
                 unbound(variable, "GROUP BY", bound)
         elif node.name == "OrderBy":

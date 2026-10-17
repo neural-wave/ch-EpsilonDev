@@ -282,3 +282,13 @@ def test_no_check_flags_the_dev_reference_queries(row):
     parsed = parse_sparql(add_missing_prefixes(row["reference_sparql"]))
     assert parsed.kind == "SelectQuery"
     assert [check(parsed) for check in CHECKS] == [[] for _ in CHECKS]
+
+
+def test_group_by_on_a_select_alias_is_accepted_because_virtuoso_runs_it():
+    # q-004's exact answer: the alias of the SELECT expression is the group key (invalid per the spec, fine in Virtuoso).
+    query = (PREFIXES + "SELECT (YEAR(?dt) AS ?year) (COUNT(DISTINCT ?g) AS ?patients) WHERE { GRAPH ?g { "
+             "?x a sphn:ImagingProcedure ; sphn:hasStartDateTime ?dt } } GROUP BY ?year")
+    assert check_unbound_variables(parse(query)) == []
+    nested = (PREFIXES + "SELECT ?year (COUNT(DISTINCT ?g) AS ?patients) WHERE { { SELECT ?g (YEAR(?dt) AS ?year) WHERE { "
+              "GRAPH ?g { ?x a sphn:ImagingProcedure ; sphn:hasStartDateTime ?dt } } GROUP BY ?g ?year } } GROUP BY ?year")
+    assert check_unbound_variables(parse(nested)) == []

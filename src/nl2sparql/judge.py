@@ -38,6 +38,23 @@ CODE_INFERENCE_URI = "https://biomedit.ch/rdf/sphn-resource/global"
 # A single pseudo-identifier triple that nothing reads is harmless for the result: not worth a retry.
 SEMANTIC_CHECKS = [check for check in semantic_checks.CHECKS if check is not semantic_checks.check_unused_pseudo_identifier]
 MAX_ERRORS = 5  # the model gets the first ones; more hints than that read as noise
+# Errors after which the query still runs (the numbers may be off) are severity 1; wrong terms, scopes and
+# dates make Virtuoso fail or return nothing (2); a syntax error is rejected outright (3).
+HARD_ERROR_RE = re.compile(
+    r"does not occur in the data| has no sphn:|needs OPTION \(inference|Count patients with COUNT\(DISTINCT"
+    r"|bound twice|already bound|nests an aggregate|aggregates \?\w+, which is an alias|needs a dateTime"
+    r"|is a record, not a date|datediff")
+
+
+def severity(result: JudgeResult) -> tuple[int, int]:
+    """How bad a verdict is, as (worst error, number of errors). The query agent regenerates the whole query
+    on a retry, and on the 17 October run a retry that was still not clean was worse than the first answer as
+    often as it was better: the pipeline keeps the less bad of the two attempts (26 of 36 ran instead of 21)."""
+    worst = 0
+    for error in result.errors:
+        level = 3 if error.startswith("Syntax error") else 2 if HARD_ERROR_RE.search(error) else 1
+        worst = max(worst, level)
+    return (worst, len(result.errors))
 
 
 class Judge:

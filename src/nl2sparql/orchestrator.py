@@ -16,7 +16,7 @@ from nl2sparql.context.builder import ContextBuilder
 from nl2sparql.guard.decision import ComplianceGuard
 from nl2sparql.input_check import normalize_text
 from nl2sparql.intent_check import confirm_identifier_flag
-from nl2sparql.judge import Judge
+from nl2sparql.judge import Judge, severity
 from nl2sparql.models import Context, IntentFlags, PipelineResult
 
 logger = logging.getLogger(__name__)
@@ -193,9 +193,15 @@ class Pipeline:
         if verdict.errors and run.can_retry("judge") and not (await intent_task).flagged and run.take_retry("judge"):
             run.note_rejected("judge_errors_first_try", verdict.errors, verdict.sparql)
             retry_feedback = self._feedback(" ".join(([CUT_OFF_FEEDBACK] if cut_off else []) + verdict.errors), verdict.sparql)
-            sparql, _ = await self._ask_query_agent(text, context, retry_feedback, "query_retry", run)
-            verdict = await asyncio.to_thread(self.judge.check, sparql)
-            run.note_repairs(verdict.repairs)
+            retry_sparql, _ = await self._ask_query_agent(text, context, retry_feedback, "query_retry", run)
+            retry_verdict = await asyncio.to_thread(self.judge.check, retry_sparql)
+            run.note_repairs(retry_verdict.repairs)
+            # A retry that is still not clean is a fresh query, not a repaired one: keep the less bad attempt.
+            if retry_verdict.errors and severity(verdict) < severity(retry_verdict):
+                run.diagnostics["kept_first_try"] = retry_verdict.errors
+                run.diagnostics["worse_retry_sparql"] = retry_verdict.sparql
+            else:
+                sparql, verdict = retry_sparql, retry_verdict
         if verdict.errors:
             run.diagnostics["judge_errors_final"] = verdict.errors
         run.timings["generate" if feedback is None else "generate_retry"] = round((time.perf_counter() - started) * 1000, 1)

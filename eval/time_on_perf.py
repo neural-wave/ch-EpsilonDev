@@ -118,12 +118,35 @@ def time_query(client, sparql: str, runs: int) -> dict:
     return result
 
 
-def time_pairs(candidates: list[dict], client, runs: int) -> tuple[list[dict], int]:
-    """Reference then generated query of each candidate; the number of container restarts comes second."""
+def known_reference_times(paths: list[str], reports_dir: Path) -> dict[str, tuple[str, dict]]:
+    """Reference timings from earlier perf reports, by question id, with the reference query they timed
+    (read from each perf report's source query report), so a reference that changed since is timed again.
+    The reference queries are the same from run to run and the slow ones cost a container restart each:
+    reusing them is what keeps a perf run under half an hour. Earlier paths win on duplicates."""
+    known = {}
+    for path in paths:
+        perf = json.loads(Path(path).read_text(encoding="utf-8"))
+        source = reports_dir / perf["summary"].get("source_report", "")
+        if not source.exists():
+            continue
+        texts = {r["id"]: r.get("reference_sparql") for r in json.loads(source.read_text(encoding="utf-8"))["rows"]}
+        for row in perf["rows"]:
+            if row["id"] not in known and texts.get(row["id"]):
+                known[row["id"]] = (texts[row["id"]], {**row["reference"], "reused_from": Path(path).name})
+    return known
+
+
+def time_pairs(candidates: list[dict], client, runs: int, known: dict | None = None) -> tuple[list[dict], int]:
+    """Reference then generated query of each candidate; the number of container restarts comes second.
+    A reference whose timing is known from an earlier report (same query text) is not run again."""
     rows, restarts = [], 0
+    known = known or {}
     for item in candidates:
         timed = {}
         for side, sparql in (("reference", item["reference_sparql"]), ("generated", item["sparql_query"])):
+            if side == "reference" and item["id"] in known and known[item["id"]][0] == sparql:
+                timed[side] = known[item["id"]][1]
+                continue
             timed[side] = time_query(client, sparql, runs)
             if still_running(timed[side]):
                 client.restart()
@@ -164,19 +187,26 @@ def main() -> None:
                         help="client-side deadline per execution; past it the query is marked timed out and Virtuoso restarted")
     parser.add_argument("--restart-wait", type=float, default=600.0, help="seconds to wait for Virtuoso after a restart")
     parser.add_argument("--limit", type=int, default=0)
+    parser.add_argument("--reference-times", nargs="*", default=[], metavar="PERF_REPORT",
+                        help="earlier perf reports whose reference timings are reused when the reference query is unchanged")
     args = parser.parse_args()
 
+    settings = Settings.from_env()
     report = json.loads(Path(args.report).read_text(encoding="utf-8"))
     candidates = [r for r in report["rows"] if r.get("sparql_query") and r.get("generated_rows") is not None]
     candidates = candidates[: args.limit or None]
+    known = known_reference_times(args.reference_times, settings.reports_dir)
+    reused = sum(1 for r in candidates if r["id"] in known and known[r["id"]][0] == r["reference_sparql"])
     print(f"{len(candidates)} queries ran on dev; timing them on {args.endpoint} "
-          f"(1 warm-up + {args.runs} timed runs, {args.timeout_ms} ms deadline, plain runs)")
+          f"(1 warm-up + {args.runs} timed runs, {args.timeout_ms} ms deadline, plain runs; "
+          f"{reused} reference timings reused)")
     client = PerfClient(args.endpoint, args.timeout_ms / 1000, args.restart_wait)
-    rows, restarts = time_pairs(candidates, client, args.runs)
+    rows, restarts = time_pairs(candidates, client, args.runs, known)
     summary = summarize(rows, {"endpoint": args.endpoint, "runs": args.runs, "timeout_ms": args.timeout_ms,
-                               "source_report": Path(args.report).name, "restarts": restarts})
+                               "source_report": Path(args.report).name, "restarts": restarts,
+                               "reference_timings_reused": reused})
     print("\n" + json.dumps(summary, indent=2))
-    print(f"report: {write_report(Settings.from_env(), 'perf', summary, rows)}")
+    print(f"report: {write_report(settings, 'perf', summary, rows)}")
 
 
 if __name__ == "__main__":

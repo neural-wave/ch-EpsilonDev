@@ -611,3 +611,22 @@ def test_demo_never_shows_the_query_of_forbidden_requests(client):
 def test_health_and_demo_page(client):
     assert client.get("/health").json()["status"] == "ok"
     assert "NL-to-SPARQL" in client.get("/").text
+
+
+SOFT_HINT_QUERY = "SELECT (COUNT(DISTINCT ?g) AS ?total_episodes) WHERE { GRAPH ?g { ?e a sphn:AllergyEpisode } }"
+
+
+def test_a_retry_that_is_worse_by_the_judge_is_dropped_for_the_first_try():
+    # First try: runs, one semantic hint (records counted as patients). Retry: unparseable. Keep the first.
+    agent = ScriptedQueryAgent(SOFT_HINT_QUERY, "SELECT ?x WHERE {")
+    result = asyncio.run(pipeline_with(agent).run("How many allergy episodes are there?"))
+    assert result.retries == 1 and "total_episodes" in result.sparql_query and result.is_compliant
+    assert result.diagnostics["kept_first_try"][0].startswith("Syntax error")
+    assert result.diagnostics["judge_errors_final"][0].startswith("COUNT(DISTINCT ?g) counts patients")
+    assert "?x" in result.diagnostics["worse_retry_sparql"]
+
+
+def test_a_retry_that_is_less_bad_than_the_first_try_is_kept():
+    agent = ScriptedQueryAgent("SELECT ?x WHERE {", SOFT_HINT_QUERY)
+    result = asyncio.run(pipeline_with(agent).run("How many allergy episodes are there?"))
+    assert result.retries == 1 and "total_episodes" in result.sparql_query and "kept_first_try" not in result.diagnostics
