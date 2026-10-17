@@ -93,6 +93,7 @@ class QueryFacts:
     triples: list[TriplePattern] = field(default_factory=list)
     iris: set[URIRef] = field(default_factory=set)
     filters: list[object] = field(default_factory=list)
+    services: list[object] = field(default_factory=list)
     touches_patient_data: bool = False
     type_objects: set[Variable] = field(default_factory=set)  # objects of rdf:type: always classes
 
@@ -199,6 +200,8 @@ def _visit(node, facts: QueryFacts, kinds: PropertyKinds, ontology_graphs: froze
                 if isinstance(term, URIRef):
                     facts.iris.add(term)
         return
+    if node.name == "ServiceGraphPattern":
+        facts.services.append(node.term)
     if node.name == "Filter":
         facts.filters.append(node.expr)
     for key, value in node.items():

@@ -45,9 +45,17 @@ def check_rules(parsed: ParsedQuery, kinds: PropertyKinds, settings: RuleSetting
         return [Violation("R4", f"The query is a {form} query. Only SELECT queries are allowed.")]
     facts = analyse(parsed.algebra, kinds, settings.ontology_graphs)
     violations: list[Violation] = []
+    if facts.services:
+        violations.append(
+            Violation(
+                "R4",
+                "The query uses SERVICE to access another endpoint. Only local SELECT queries are allowed.",
+            )
+        )
     violations += _single_patient(facts, settings)
     violations += _whole_graph(facts)
     if facts.touches_patient_data:
+        violations += _minimum_group_size(parsed.algebra, facts)
         violations += _projection(parsed, facts)
     return list(dict.fromkeys(violations))  # drop duplicates, keep order
 
@@ -109,6 +117,51 @@ def _whole_graph(facts: QueryFacts) -> list[Violation]:
             continue
         return []  # at least one pattern restricts by a concrete property or class
     return [Violation("R3", "The query matches the whole graph without restricting it to a concept.")]
+
+
+def _minimum_group_size(algebra, facts: QueryFacts) -> list[Violation]:
+    """Reject HAVING clauses that keep groups containing exactly one patient.
+
+    rdflib represents a HAVING clause as a Filter above an AggregateJoin. The
+    aggregate result is an internal variable such as ``__agg_2__``; the
+    aggregate map built by ``analyse`` lets us identify the original
+    ``COUNT(DISTINCT ?g)`` safely without inspecting the query text.
+    """
+    node = algebra.p
+    while isinstance(node, CompValue):
+        if node.name == "Filter":
+            if _is_single_patient_count(node.expr, facts):
+                return [
+                    Violation(
+                        "R2",
+                        "HAVING keeps groups containing exactly one patient. Use a minimum group size greater than one.",
+                    )
+                ]
+            node = node.p
+            continue
+        if node.name in ("Project", "OrderBy", "Extend", "Distinct", "Reduced", "Slice", "ToMultiSet"):
+            node = node.p
+            continue
+        break
+    return []
+
+
+def _is_single_patient_count(expr, facts: QueryFacts) -> bool:
+    if not isinstance(expr, CompValue) or expr.name != "RelationalExpression" or expr.op != "=":
+        return False
+    for aggregate_variable, constant in ((expr.expr, expr.other), (expr.other, expr.expr)):
+        if not isinstance(aggregate_variable, Variable) or not isinstance(constant, Literal):
+            continue
+        if constant.toPython() != 1:
+            continue
+        aggregate = facts.aggregates.get(aggregate_variable)
+        if aggregate is None or aggregate.name != "Aggregate_Count":
+            continue
+        if aggregate.distinct not in (True, "DISTINCT"):
+            continue
+        if aggregate.vars == Variable("g"):
+            return True
+    return False
 
 
 def _projection(parsed: ParsedQuery, facts: QueryFacts) -> list[Violation]:
