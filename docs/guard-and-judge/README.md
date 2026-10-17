@@ -1,121 +1,165 @@
 # Guard and Judge — Santiago handoff
 
-This guide records what is implemented and verified locally, what Santiago needs to validate on the configured run machine, and which policy decisions must come from the organizers. The root [README](../../README.md) remains the project-wide source of truth.
+This guide records what Adrika implemented and verified locally, what Santiago still needs to validate on the configured run machine, and which policy choices must wait for organizer decisions. The root [README](../../README.md) is the project-wide source of truth; [docs/DATA.md](../DATA.md) describes the RDF graph structure.
 
-## Status at a glance
+## Handoff status
 
-| Area | Status | What the status means |
+| Area | Status | Owner / next action |
 | --- | --- | --- |
-| Guard and Judge local implementation | **Done for current offline scope** | Synthetic tests pass, including the R1 classifier wiring and inverse-path regressions. |
-| Local verification | **Passed** | Guard: 68 passed; focused Guard/Judge/SPARQL/pipeline suite: 116 passed; full suite: 133 passed. |
-| Organizer-dependent policy | **Pending** | Do not change behavior for fine-grained grouping, `MIN`/`MAX`, group size, `SERVICE`, or singleton groups until decisions arrive. |
-| RDF snapshot freshness and Virtuoso execution | **Pending Santiago** | This checkout has no `.env`; dev/performance endpoints are unavailable here. Local tests do not establish real-graph compatibility. |
-| Fresh LLM evaluation and retry review | **Pending Santiago** | Needs the configured model/run machine and updated evaluation logs. |
+| Guard R1–R5 and shared SPARQL parsing | Implemented and locally verified | Preserve current behavior unless regression evidence supports a bug fix. |
+| Judge syntax, prefix, term, and style diagnostics | Implemented and locally verified | Review retry value on fresh run-machine LLM results. |
+| Synthetic Guard/Judge regression coverage | Passing locally | Re-run on `guardjudge` with the runbox test command. |
+| Real RDF metadata and Virtuoso execution | Not verified | Santiago must profile and execute queries on dev. |
+| Fresh LLM evaluation and corpus reconciliation | Not verified | Santiago must run the configured model and inspect local retry logs. |
+| Virtuoso-only static diagnostics and performance guidance | Evidence-gated | Reproduce a concrete error or repeatable improvement before adding code. |
+| Organizer-dependent policies | Pending | Keep existing behavior until decisions arrive. |
 
-## What is implemented
+**Code revision described here:** `51d998327ce1e39159e3abcc174ccc5a70f41dfa` on branch `guardjudge`. This handoff rewrite is a documentation-only follow-up to that code revision.
 
-The request pipeline is database-agnostic. It parses SPARQL and uses the checked-in `data/schema_cards.json` and `data/property_kinds.json`; Guard and Judge do not query Virtuoso. Database calls belong only in profiling and evaluation scripts or the demo's optional development check.
+**Access from Adrika's checkout, checked 2026-10-17:** `.env` is absent; localhost ports 8890 (dev) and 8891 (perf) are closed. No real-graph profiling, Virtuoso query execution, or fresh LLM evaluation was performed here. Local tests do not count as real-graph verification.
 
-The **Judge** adds missing prefixes, parses SPARQL (including the supported Virtuoso extensions), checks syntax and SPHN terms against local schema cards, and reports the current style diagnostics for typed code-pattern inference and patient counts using `COUNT(DISTINCT ?g)`. Its regression tests cover nested unknown terms and valid near-misses, syntax and prefix handling, inference, graph counts, and extension parsing.
+## What Adrika completed
 
-The **Guard** checks the final query and intent flags against R1–R5:
+### Guard
 
-| Rule | Current check |
-| --- | --- |
-| R1 | Reject identifiable patient targeting, identifier literal lookups, and filters that compare identifier values. |
-| R2 | Reject unaggregated rows and patient- or record-level results. |
-| R3 | Reject unrestricted whole-graph matching. |
-| R4 | Allow read-only `SELECT` queries only. |
-| R5 | Reject patient or record identifiers exposed directly, through identity-preserving expressions, or through sensitive aggregates. |
+- Fixed R1 classifier wiring in `src/nl2sparql/guard/rules.py` so `_single_patient` uses the supplied `PropertyKinds` instance.
+- Restored inverse identifier-path detection. Identifier paths ending in a literal are checked using the supplied classifier; the valid `hasValue` near-miss remains allowed.
+- Preserved the current R1–R5 decisions, verdict behavior, reasons, and retry contract: a query violation cannot become compliant, and a request flagged as forbidden is never retried.
+- Added or verified synthetic trigger/near-miss coverage across nested queries, graph scopes, `VALUES`, filters, `BIND`, aggregates, grouping, property paths, identity-preserving transforms, `OPTIONAL`, and `UNION`.
 
-The Guard uses the supplied `PropertyKinds` classifier for identifier literal lookups and handles inverse identifier paths. The synthetic tests cover nested queries, graph scopes, `VALUES`, filters, `BIND`, aggregates, grouping, property paths, identity transforms, `OPTIONAL`, and `UNION`, with valid neighboring cases. A forbidden intent is never retried; query violations remain non-compliant.
+### Judge and parser
 
-## Work completed locally
+- Preserved diagnostics for syntax errors, prefix handling, unknown SPHN terms/suggestions, per-pattern ICD/CHOP inference, and `COUNT(DISTINCT ?g)`.
+- Added or verified nested-scope unknown-term cases and valid neighbors, plus `DEFINE` and inference `OPTION` parsing behavior.
+- Kept the parser database-agnostic. Guard and Judge use the committed local profile snapshots; they do not call Virtuoso.
 
-- Fixed R1 classifier wiring and inverse identifier-path detection in `src/nl2sparql/guard/rules.py`.
-- Preserved synthetic passing/failing examples in `tests/fixtures/guard_judge_baseline.json`.
-- Added or verified trigger/near-miss coverage for R1–R5 and the current Judge/parser diagnostics. No organizer-dependent policy was added.
-- Verified metadata startup validation, API contract tests, literal-translation behavior, and the absence of request-time database calls.
-- Reviewed local corpus outcomes without copying raw questions or query text here: #01/#08 have parse errors; #07's committed status differs from current local Guard/Judge acceptance. A fresh LLM run is needed to resolve the discrepancy.
+### Other verified constraints
 
-### Local verification
+- API fields, shared interfaces, literal-translation behavior, open-source model requirements, and request-time database independence were left unchanged.
+- Organizer-dependent behavior was not introduced for fine-grained grouping, `MIN`/`MAX`, minimum group size, `SERVICE`, or singleton groups.
+- Local corpus review found parse errors for #01 and #08 and a discrepancy between committed and current local Guard/Judge acceptance for #07. These are unresolved until a fresh LLM run and retry-log review.
 
-Run locally from the repository root with Python 3.11 or newer:
+## Local evidence
 
-```bash
+Latest Guard-specific results recorded for this branch:
+
+```text
 PYTHONPATH=src python -m pytest -q tests/test_guard.py -k 'supplied_property_classifier or inverse_identifier_path'
+2 passed
+
 PYTHONPATH=src python -m pytest -q tests/test_guard.py
+68 passed
+
 PYTHONPATH=src python -m pytest -q tests/test_guard.py tests/test_sparql.py tests/test_agents_and_judge.py tests/test_pipeline_and_api.py
+116 passed
+
 PYTHONPATH=src python -m pytest -q
+171 passed, 1 existing Starlette/anyio deprecation warning
 ```
 
-Latest results: the two R1 regressions passed; Guard tests **68 passed**; focused tests **116 passed**; full suite **133 passed**. The focused and full runs each reported one existing Starlette/anyio deprecation warning. `PYTHONPATH=src` is used because this checkout's tests require the source tree on the import path.
+The full-suite result is the latest repository-wide run recorded on the branch. The local stub evaluation recorded 31 questions, 87.1% verdict accuracy, zero forbidden leaks, four allowed requests blocked, seven retries, p50/p95 latency of 12.7/49.9 ms, and zero tokens. This is a local code-path signal only; it is neither the configured LLM evaluation nor a Virtuoso execution result.
 
-The latest local stub evaluation reported 31 questions, 87.1% verdict accuracy, zero forbidden leaks, four allowed requests blocked, 7 retries, p50/p95 latency of 12.7/49.9 ms, and zero tokens. This is a local regression signal only. It is not the LLM evaluation and does not execute queries against the real graph.
+## What remains code-wise
+
+There is no known unconditional Guard/Judge implementation item in the current offline checklist. The Judge already has the currently agreed deterministic diagnostics; Guard already covers confirmed R1–R5 policy and the synthetic interaction cases listed above.
+
+Further code changes are conditional:
+
+- Add a static Virtuoso compatibility diagnostic only after Santiago reproduces a specific failure on dev and identifies a query pattern. Pair it with a synthetic valid near-miss.
+- Add selective-pattern feedback only after team agreement and repeated performance evidence.
+- Add or alter privacy enforcement only after the organizer/team policy decisions below.
+- Fix any corpus/evaluation issue only after fresh LLM output and retry logs identify an actionable cause.
 
 ## Santiago's run-machine checklist
 
-Push the fixed branch so it is available to Santiago. `scripts/runbox.sh` checks it out into a separate worktree and sets `PYTHONPATH` to that worktree's source.
+Run on the configured machine with the `guardjudge` branch. Keep `.env`, raw questions, SPARQL, corpus exports, request logs, full reports, terminology entries, and patient-level query results on that machine. Share sanitized summaries only.
 
-### 1. Verify the branch and test suite
+### 1. Check out the branch and rerun the suite
 
 ```bash
-scripts/runbox.sh test --branch guard/your-branch-name
+scripts/runbox.sh status
+scripts/runbox.sh test --branch guardjudge
 ```
 
-Require the full suite to pass. Record the commit and test summary. If it fails, keep the run-machine validation open and send back the failing test names and sanitized traceback only.
+Require the full suite to pass. Record the tested commit and summary. If it fails, share sanitized failing test names and traceback only. Do not claim this test run verifies RDF freshness or Virtuoso compatibility.
 
-### 2. Compare local metadata snapshots with the dev graph
+### 2. Compare committed snapshots with the dev RDF profile
 
-Profile to a temporary directory so the committed snapshots are not overwritten:
+Generate a candidate profile in a temporary directory so the committed snapshots stay untouched:
 
 ```bash
+repo_root="$PWD"
+worktree="$(dirname "$repo_root")/nl2sparql-worktrees/guardjudge"
 profile_dir="$(mktemp -d)"
-python scripts/profile_data.py --endpoint http://localhost:8890/sparql --data-dir "$profile_dir"
-diff -u data/property_kinds.json "$profile_dir/property_kinds.json"
-diff -u data/schema_cards.json "$profile_dir/schema_cards.json"
+
+(cd "$worktree" && \
+  PYTHONPATH="$worktree/src" "$repo_root/.venv/bin/python" \
+  scripts/profile_data.py \
+  --endpoint http://localhost:8890/sparql \
+  --data-dir "$profile_dir")
+
+(cd "$worktree" && \
+  PYTHONPATH="$worktree/src" "$repo_root/.venv/bin/python" \
+  scripts/compare_data_profile.py \
+  --profile-dir "$profile_dir")
 ```
 
-Confirm that the dev graph and ontology IRIs match the documented configuration, and that profiling returns non-empty classes and properties. Summarize whether each snapshot matches and explain any material differences. Refresh committed snapshots only when the profile justifies the change; then rerun the branch test suite. Coordinate with the owner of `factory.py` before changing snapshot validation.
+Comparator outcomes: exit code `0` means snapshots match; `1` means profile drift; `2` means a file is missing, malformed, or empty. Check the configured patient and ontology graph IRIs against [docs/DATA.md](../DATA.md). Review aggregate additions/removals/changes locally. Do not paste raw profile entries or diffs into shared reports. Refresh snapshots only when the measured dev graph supports it, then rerun focused and full tests. `factory.py` snapshot validation is owned by teammate A; coordinate before changing it.
 
-### 3. Run fresh LLM evaluation and dev execution
+### 3. Run fresh LLM evaluation with dev execution
 
 ```bash
-scripts/runbox.sh eval --execute --branch guard/your-branch-name
+scripts/runbox.sh eval --execute --branch guardjudge
 ```
 
-Compare verdict accuracy, false positives, false negatives, forbidden leaks, retries, latency, and tokens against the historical root README §11 baseline: LLM accuracy 90%, zero forbidden leaks, p50/p95 latency 2.8/16.6 seconds, and about 3,000 tokens per request. Record compliant-query execution status, empty-result status, and timing by example. Do not copy patient-level results into the report.
+Review the complete report locally. Compare against the historical root README §11 baseline: 90% LLM verdict accuracy, zero forbidden requests marked compliant, p50/p95 latency of 2.8/16.6 seconds, and about 3,000 tokens per request. Record sanitized counts for false positives, false negatives, forbidden leaks, retries, empty results, execution errors, latency, and tokens. Do not share raw report rows, request text, or query text.
 
-### 4. Review corpus discrepancies and compatibility errors
+### 4. Reconcile the corpus and retry behavior
 
-- Regenerate the corpus from fresh run-machine logs to a protected temporary path, not the committed corpus file by default:
+Export fresh corpus data to a protected temporary path, not over the committed corpus by default:
 
-  ```bash
-  corpus_dir="$(mktemp -d)"
-  python scripts/export_guard_corpus.py --out "$corpus_dir/guard_corpus.jsonl"
-  ```
-- Review the new outcomes for #01, #07, and #08 and inspect the run-machine retry logs to determine whether Judge feedback or the shared retry is actionable.
-- Reproduce the documented #05 and #10 Virtuoso failures. Investigate the reported `NULL` and nested-`GRAPH` error categories. Add a static diagnostic only for a reproduced, identifiable query pattern, and pair it with a synthetic valid near-miss.
-- Keep raw corpus exports, request logs, full evaluation reports, question text, and query text on the run machine. Share only sanitized outcomes, error categories, retry counts, and timings.
+```bash
+corpus_dir="$(mktemp -d)"
+python scripts/export_guard_corpus.py --out "$corpus_dir/guard_corpus.jsonl"
+```
 
-### 5. Decide ordering and performance guidance
+Review #01, #07, and #08 against the new run and inspect local retry logs. Determine whether the failure is from generation, Judge feedback, or the shared retry. Do not infer the cause from the old corpus alone. Keep exported corpus and logs private.
 
-Get team agreement before adding selective-pattern ordering feedback. If approved, use repeated isolated timings on the performance graph (`docker start virtuoso-perf` if its container is stopped). The current repo does not include a dedicated ten-run timing harness; coordinate with the evaluation owner or provide a controlled run script before reporting results. Add guidance only for repeatable gains. Do not add an automatic rewrite until regression tests and dev-graph result comparisons demonstrate equivalent results, including duplicates, grouping, optional patterns, and nested queries.
+### 5. Reproduce Virtuoso errors before proposing static checks
 
-## Organizer decisions required
+- Reproduce the documented #05 and #10 failures on dev; capture the error category and execution stage locally.
+- Investigate the reported `NULL` and nested-`GRAPH` patterns.
+- Only propose a database-agnostic static diagnostic when the failure is reproducible and the syntax pattern is identifiable. Add a synthetic failing case and a valid near-miss, then rerun all local tests and dev evaluation.
+- Never add a Virtuoso call to request-time Guard/Judge code.
 
-Keep current behavior until the organizers or team policy owners answer these questions:
+### 6. Resolve policy and performance gates
 
-1. Should aggregation grouped by a fine-grained attribute be non-compliant?
-2. Should `MIN` or `MAX` be restricted when the result could describe or single out one patient or record?
-3. Is a minimum group size required? If so, what threshold applies and what should happen below it, including a singleton produced by a `HAVING` condition?
-4. Are `SERVICE` clauses allowed?
+Keep existing behavior until the organizers/team answer:
 
-No enforcement for these cases is included in the current local work.
+1. Is fine-grained grouping, such as grouping by exact birth date, compliant?
+2. Should `MIN`/`MAX` of values or dates be restricted when they can single out a record or patient?
+3. Is minimum group size required? If so, what threshold applies, including groups reduced to one by `HAVING`?
+4. Is `SERVICE` allowed?
 
-## Constraints and report format
+Before adding selective-pattern ordering feedback, get team agreement and measure repeated isolated timings on the perf graph. This repository does not currently provide a dedicated ten-run Guard/Judge timing harness. Do not add automatic query rewrites until synthetic equivalence cases and dev result comparisons show the rewrite preserves query meaning, including duplicates, grouping, optional patterns, and nested queries.
 
-- Keep database access outside the request-time API. Do not change shared interfaces or API response fields. Teammate A owns `factory.py` snapshot validation; coordinate before changing it.
-- Preserve literal translation, no-retry behavior for forbidden requests, and the rule that a query violation cannot become compliant.
-- Use only synthetic fixtures in unit tests. Do not add patient data, restricted terminology content or derived assets, secrets, GPU host details, or raw run-machine logs to this guide or Git.
-- After run-machine checks, update the status table above and the checklist with the commit tested, snapshot comparison result, sanitized execution outcomes, evaluation metrics, and remaining blockers. Passing local tests must not be described as real-graph verification.
+## What Santiago should report
+
+Update this guide with the tested branch commit and only sanitized summaries:
+
+- profile match/drift and aggregate counts;
+- dev query execution success, empty-result, and error counts by example ID where safe;
+- fresh LLM accuracy, false positive/negative, forbidden leak, retry, latency, and token metrics versus baseline;
+- whether #01/#07/#08 discrepancies were explained;
+- reproduced Virtuoso error categories and whether any static pattern is justified;
+- perf medians/spread and any follow-up code that evidence supports;
+- organizer decisions and remaining blockers.
+
+Do not add raw patient results, questions, SPARQL, corpus exports, terminology content, credentials, `.env`, GPU host details, or raw run-machine reports to Git or this guide.
+
+## Invariants
+
+- Database access stays in maintenance/evaluation tooling, outside `POST /nl-to-sparql`.
+- Forbidden intent is never retried; a query violation never becomes compliant.
+- Preserve fixed API fields, shared interfaces, and literal translation.
+- Keep organizer-dependent policy unchanged until decisions are recorded.
