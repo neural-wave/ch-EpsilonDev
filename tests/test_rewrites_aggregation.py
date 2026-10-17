@@ -371,10 +371,150 @@ def test_two_binds_in_one_empty_optional_both_move_out():
 
 @pytest.mark.parametrize("block", [
     "OPTIONAL { GRAPH ?g { ?rx a sphn:DrugPrescription } BIND(?g AS ?with_prescription) }",  # a pattern: a real OPTIONAL
-    "OPTIONAL { BIND(IF(?prescriptions > 3, ?g, ?unbound) AS ?many) FILTER (BOUND(?many)) }",  # a filter rides along
-], ids=["with-pattern", "with-filter"])
-def test_an_optional_with_a_pattern_or_a_filter_stays(block):
+    "OPTIONAL { BIND(IF(?prescriptions > 3, ?g, ?unbound) AS ?many) FILTER (BOUND(?many)) }",  # the filter reads the BIND
+], ids=["with-pattern", "filter-on-its-own-bind"])
+def test_an_optional_with_a_pattern_or_a_filter_on_its_own_bind_stays(block):
     query = f"SELECT ?sex (COUNT(DISTINCT ?g) AS ?n) WHERE {{ {SEX} {PER_PATIENT_PRESCRIPTIONS} {block} }} GROUP BY ?sex"
+    assert apply(rewrite_optional_bind_without_pattern, query)[1] == []
+
+
+# The 17 October 21:07 run's final queries (dev outcome in brackets): a FILTER and a BIND with no pattern.
+OFFICIAL_10 = """
+SELECT ?concept
+       (COUNT(DISTINCT ?g) AS ?total_patients)
+       (COUNT(DISTINCT ?early_patient) AS ?early_patients)
+       (ROUND(1000.0 * COUNT(DISTINCT ?early_patient) / COUNT(DISTINCT ?g)) / 10 AS ?pct_early)
+WHERE {
+  GRAPH ?g {
+    ?birth a sphn:Birth ;
+           sphn:hasDeliveryModeCode ?delivery_code ;
+           sphn:hasGestationalAge ?gest_age .
+    ?delivery_code a ?concept .
+    ?gest_age sphn:hasQuantity ?q .
+    ?q sphn:hasValue ?value .
+  }
+  OPTIONAL {
+    FILTER (?value < 37)
+    BIND (?g AS ?early_patient)
+  }
+}
+GROUP BY ?concept
+ORDER BY DESC(?pct_early)
+"""  # 0 early births in every group -> same_rows; rewritten, the 7 births below 37 are counted
+Q071 = """
+SELECT (COUNT(DISTINCT ?g) AS ?patients_with_any)
+       (AVG(?count) AS ?avg_tests_per_patient)
+       (MAX(?count) AS ?max_tests_per_patient)
+       (COUNT(DISTINCT ?high_count_g) AS ?patients_with_10_or_more)
+       (ROUND(1000.0 * COUNT(DISTINCT ?high_count_g) / COUNT(DISTINCT ?g)) / 10 AS ?pct_with_10_or_more)
+WHERE {
+  {
+    SELECT ?g (COUNT(DISTINCT ?event) AS ?count)
+    WHERE {
+      GRAPH ?g { ?event a sphn:LabTestEvent . }
+    }
+    GROUP BY ?g
+  }
+  OPTIONAL {
+    FILTER (?count >= 10)
+    BIND (?g AS ?high_count_g)
+  }
+}
+"""  # 0 patients with 10 or more -> same_rows; rewritten -> exact (244, with STR(?g); 229 with ?g)
+OFFICIAL_07_FIRST_TRY = """
+SELECT ?route (COUNT(DISTINCT ?admin) AS ?total) (COUNT(DISTINCT ?in_hospital_admin) AS ?in_hospital)
+WHERE {
+  GRAPH ?g {
+    ?admin a sphn:DrugAdministrationEvent ;
+           sphn:hasAdministrationRouteCode ?route_code ;
+           sphn:hasStartDateTime ?start ;
+           sphn:hasAdministrativeCase ?case .
+    ?route_code a ?route .
+    ?case sphn:hasAdmissionDateTime ?admission ;
+          sphn:hasDischargeDateTime ?discharge .
+    OPTIONAL {
+      FILTER (?start >= ?admission && ?start <= ?discharge)
+      BIND (?admin AS ?in_hospital_admin)
+    }
+  }
+}
+GROUP BY ?route
+"""
+
+
+def test_a_filter_and_a_bind_without_pattern_become_a_conditional_bind():
+    rewritten, repairs = apply(rewrite_optional_bind_without_pattern, OFFICIAL_10)
+    assert repairs == [
+        "OPTIONAL { FILTER (?value < 37) BIND (?g AS ?early_patient) } has no pattern, so its FILTER and BIND could not "
+        "see the variables bound outside the block and bound nothing: written as "
+        "BIND (IF(?value < 37, STR(?g), ?unbound_early_patient) AS ?early_patient)"
+    ]
+    assert rewritten == prepared(OFFICIAL_10)[0].replace(
+        "  OPTIONAL {\n    FILTER (?value < 37)\n    BIND (?g AS ?early_patient)\n  }\n",
+        "  BIND (IF(?value < 37, STR(?g), ?unbound_early_patient) AS ?early_patient)\n",
+    )
+
+
+def test_the_patient_of_a_sub_select_is_counted_through_str():
+    # Virtuoso's COUNT(DISTINCT ?x) over IF(?count >= 10, ?g, ...) after the per-patient sub-select gives 229, not 244.
+    rewritten, repairs = apply(rewrite_optional_bind_without_pattern, Q071)
+    assert len(repairs) == 1 and "OPTIONAL" not in rewritten
+    assert "  }\n  BIND (IF(?count >= 10, STR(?g), ?unbound_high_count_g) AS ?high_count_g)\n}" in rewritten
+
+
+def test_a_record_inside_graph_keeps_its_iri():
+    rewritten, repairs = apply(rewrite_optional_bind_without_pattern, OFFICIAL_07_FIRST_TRY)
+    assert len(repairs) == 1
+    assert ("          sphn:hasDischargeDateTime ?discharge .\n"
+            "    BIND (IF(?start >= ?admission && ?start <= ?discharge, ?admin, ?unbound_in_hospital_admin) "
+            "AS ?in_hospital_admin)\n  }\n}") in rewritten
+
+
+def test_every_filter_and_every_bind_of_the_block_take_part():
+    query = (f"SELECT ?sex (COUNT(DISTINCT ?many) AS ?n) (SUM(?flag) AS ?flags) WHERE {{ {SEX} {PER_PATIENT_PRESCRIPTIONS} "
+             "OPTIONAL { BIND (?g AS ?many) . FILTER (?prescriptions > 3) BIND (1 AS ?flag) FILTER (?prescriptions < 9) } "
+             "BIND (0 AS ?unbound_many) } GROUP BY ?sex")
+    rewritten, repairs = apply(rewrite_optional_bind_without_pattern, query)
+    assert len(repairs) == 1 and "OPTIONAL" not in rewritten
+    condition = "(?prescriptions > 3) && (?prescriptions < 9)"
+    assert (f"}} BIND (IF({condition}, STR(?g), ?unbound_many_2) AS ?many) BIND (IF({condition}, 1, ?unbound_flag) AS ?flag) "
+            "BIND (0 AS ?unbound_many) }") in " ".join(rewritten.split())  # ?unbound_many is taken: the placeholder gets a suffix
+
+
+def test_a_bare_variable_filter_is_a_condition_too():
+    query = (f"SELECT ?sex (COUNT(DISTINCT ?many) AS ?n) WHERE {{ {SEX} {PER_PATIENT_PRESCRIPTIONS} "
+             "BIND (?prescriptions > 3 AS ?flag) OPTIONAL { FILTER (?flag) BIND (?g AS ?many) } } GROUP BY ?sex")
+    rewritten, repairs = apply(rewrite_optional_bind_without_pattern, query)
+    assert len(repairs) == 1 and "BIND (IF(?flag, STR(?g), ?unbound_many) AS ?many)" in rewritten
+
+
+def test_a_filter_block_the_scan_cannot_read_leaves_the_plain_blocks_moving():
+    query = (f"SELECT ?sex (SUM(?more) AS ?n) (COUNT(DISTINCT ?alive) AS ?a) WHERE {{ {SEX} {PER_PATIENT_PRESCRIPTIONS} "
+             "OPTIONAL { BIND(IF(?prescriptions > 3, 1, 0) AS ?more) } "
+             "OPTIONAL { FILTER NOT EXISTS { GRAPH ?g { ?death a sphn:Death } } BIND (?g AS ?alive) } } GROUP BY ?sex")
+    rewritten, repairs = apply(rewrite_optional_bind_without_pattern, query)
+    assert repairs == [
+        "OPTIONAL { BIND(IF(?prescriptions > 3, 1, 0) AS ?more) } has no pattern, so the BIND could not see the variables "
+        "bound outside the block: the BIND now stands on its own"
+    ]
+    assert "OPTIONAL { FILTER NOT EXISTS" in rewritten
+
+
+@pytest.mark.parametrize("blocks", [
+    # two blocks label one variable: as two BINDs it would be bound twice, which Virtuoso rejects (SP031)
+    "OPTIONAL { FILTER (?prescriptions > 3) BIND ('many' AS ?label) } OPTIONAL { FILTER (?prescriptions <= 3) BIND ('few' AS ?label) }",
+    "OPTIONAL { BIND ('many' AS ?label) } OPTIONAL { BIND ('few' AS ?label) }",  # the same without FILTER
+    # the variable is bound by a pattern too
+    "OPTIONAL { FILTER (?prescriptions > 3) BIND (?g AS ?label) } GRAPH ?g { ?x sphn:hasCode ?label }",
+    # the FILTER reads a variable the block binds
+    "OPTIONAL { BIND (?prescriptions AS ?n) FILTER (?n > 3) BIND (?g AS ?label) }",
+    # FILTER NOT EXISTS is not a FILTER ( ... ) statement: the text and the algebra disagree, nothing changes
+    "OPTIONAL { FILTER NOT EXISTS { GRAPH ?g { ?d a sphn:Death } } BIND (?g AS ?label) }",
+], ids=["two-blocks-one-variable", "two-plain-blocks-one-variable", "bound-by-a-pattern", "filter-reads-the-block",
+        "not-exists"])
+def test_a_conditional_bind_that_would_change_the_meaning_stays(blocks):
+    query = (f"SELECT ?sex (COUNT(DISTINCT ?label) AS ?n) WHERE {{ {SEX} {PER_PATIENT_PRESCRIPTIONS} {blocks} }} "
+             "GROUP BY ?sex")
     assert apply(rewrite_optional_bind_without_pattern, query)[1] == []
 
 

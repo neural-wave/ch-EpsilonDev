@@ -15,7 +15,9 @@ form, where a rewrite flips the case reliably and no hint is needed:
   OPTIONAL blocks bind leaves the rows that match none of them in an extra group with an empty key:
   FILTER (BOUND(?key)) drops that group (q-050).
 - rewrite_optional_bind_without_pattern: OPTIONAL { BIND(expr AS ?x) } with no pattern cannot see the
-  variables bound outside it, so ?x stays empty on every row: the BIND moves out (q-064).
+  variables bound outside it, so ?x stays empty on every row: the BIND moves out (q-064). With a FILTER
+  in the block, the conditional count OPTIONAL { FILTER(C) BIND(E AS ?x) }, it becomes
+  BIND(IF(C, E, ?unbound_x) AS ?x) (official-10: 0 early births instead of 7; q-071).
 - rewrite_scaled_statistic: ROUND(F * AVG(?x)) / D with F/D >= 100 is the percentage formula applied
   to a plain statistic, 100 times the average: ROUND(10 * AVG(?x)) / 10, and MAX(?x) or MIN(?x) for
   the extremes. A 0/1 indicator (IF(..., 1, 0)) is a share and stays (q-064).
@@ -31,7 +33,9 @@ after the schema rewrites and re-parses after each applied one.
 
 All six were measured at zero hits on the 16 official examples, the 3 team examples and the 45 dev
 reference queries (tests/test_rewrites_aggregation.py repeats that), and on the 17 October dev run no
-rewrite touched a right answer.
+rewrite touched a right answer. The FILTER form of the fourth, replayed on the 134 dev and official
+answers of the four evening runs of 17 October, changes three: q-071 becomes exact, official-10 counts
+its 7 early births (twice), and no right answer changes.
 
 rdflib traps: Variable is a str subclass; a projected GROUP BY key is Extend(?key, __agg_n__) over
 Aggregate_Sample; the __agg_N__ names repeat across sub-selects, so aliases are resolved per Project.
@@ -85,6 +89,9 @@ GROUP_BY_RE = re.compile(r"\bGROUP\s+BY((?:\s+\?\w+)+)", re.IGNORECASE)
 OPTIONAL_RE = re.compile(r"\bOPTIONAL\s*\{", re.IGNORECASE)
 BIND_RE = re.compile(r"\s*BIND\s*\(", re.IGNORECASE)
 FILTER_RE = re.compile(r"\bFILTER\s*\(", re.IGNORECASE)
+STATEMENT_RE = re.compile(r"\s*(BIND|FILTER)\s*\(", re.IGNORECASE)  # the statements a pattern-free OPTIONAL may hold
+BIND_ALIAS_RE = re.compile(r"\bAS\s+[?$](\w+)\s*$", re.IGNORECASE)  # the end of a BIND's parentheses
+VARIABLE_RE = re.compile(r"[?$](\w+)")
 ALIAS_RE = re.compile(r"\s*AS\s+\?(\w+)", re.IGNORECASE)
 SCALED_RE = re.compile(
     r"\bROUND\s*\(\s*(\d+(?:\.\d+)?)\s*\*\s*(AVG|MAX|MIN)\s*\(\s*\?(\w+)\s*\)\s*\)\s*/\s*(\d+(?:\.\d+)?)", re.IGNORECASE
@@ -214,31 +221,60 @@ def rewrite_group_key_bound_only_in_optional(text: str, parsed: ParsedQuery) -> 
 
 # ------------------------------------------------------------------------------ 4. OPTIONAL { BIND(...) } without a pattern
 def rewrite_optional_bind_without_pattern(text: str, parsed: ParsedQuery) -> tuple[str, list[str]]:
-    """Move a BIND out of an OPTIONAL block that holds nothing else: with no pattern the block is
-    evaluated on its own and cannot see the variables bound outside it (rdflib: a LeftJoin whose p2 is
-    an Extend over an empty BGP)."""
+    """Move a BIND out of an OPTIONAL block that holds no pattern: the block is evaluated on its own and
+    cannot see the variables bound outside it (rdflib: a LeftJoin whose p2 is an Extend over an empty BGP).
+
+    A FILTER in the block makes it a conditional count, OPTIONAL { FILTER(C) BIND(E AS ?x) }, which
+    Virtuoso evaluates without the outer rows as well, so ?x stays empty (official-10: 0 early births
+    instead of 7; q-071). Each BIND becomes BIND(IF(C, E, ?unbound_x) AS ?x), the conditional form of the
+    reference queries; a patient graph goes in as STR(?g), because COUNT(DISTINCT ?x) over IF(C, ?g, ...)
+    undercounts in Virtuoso when ?g comes from a sub-select (q-071: 229 patients instead of 244). A block
+    stays when its FILTER reads a variable the block binds, or when a BIND's variable is bound anywhere
+    else too: two blocks that label one variable would bind it twice, which Virtuoso rejects (SP031)."""
     if parsed.kind != "SelectQuery":
         return text, []
-    empty = [node for node in _find(parsed.algebra, "LeftJoin") if _binds_only(node)]
-    if not empty:
+    blocks = [node for node in _find(parsed.algebra, "LeftJoin") if _binds_only(node)]
+    twice = {str(variable) for node in blocks for variable in _block_binds(node) if _binding_sites(parsed.algebra, variable) != 1}
+    blocks = [node for node in blocks if not {str(variable) for variable in _block_binds(node)} & twice]
+    if not blocks:
         return text, []
+    graphs = {node.term for node in _find(parsed.algebra, "Graph") if isinstance(node.term, Variable)}
     masked = _masked(text)
-    rewritten, lifted = text, []
-    for match in reversed(list(OPTIONAL_RE.finditer(masked))):
+    taken = set(VARIABLE_RE.findall(masked))
+    lifted, conditional = [], []  # (start, end, replacement, repair) of the blocks without and with a FILTER
+    for match in OPTIONAL_RE.finditer(masked):
         opening = match.end() - 1
         closing = _matching_brace(masked, opening)
-        if closing < 0 or not _bind_statements_only(masked[opening + 1:closing]):
+        statements = _block_statements(masked, opening + 1, closing) if closing >= 0 else None
+        if not statements or all(keyword != "BIND" for keyword, _, _ in statements):
+            continue
+        if twice and set(_bind_targets(masked, statements)) & twice:
             continue
         inner = text[opening + 1:closing].strip()
-        rewritten = rewritten[:match.start()] + inner + rewritten[closing + 1:]
-        lifted.append(inner)
-    if len(lifted) != len(empty) or _accepted(parsed, rewritten) is None:
+        if all(keyword == "BIND" for keyword, _, _ in statements):
+            lifted.append((match.start(), closing + 1, inner, (
+                f"OPTIONAL {{ {inner} }} has no pattern, so the BIND could not see the variables bound outside the "
+                "block: the BIND now stands on its own")))
+            continue
+        line_start = text.rfind("\n", 0, match.start()) + 1
+        indent = text[line_start:match.start()]
+        replacement = _conditional_binds(text, masked, statements, graphs, taken, "\n" + indent if not indent.strip() else " ")
+        if replacement is not None:
+            conditional.append((match.start(), closing + 1, replacement, (
+                f"OPTIONAL {{ {' '.join(inner.split())} }} has no pattern, so its FILTER and BIND could not see the "
+                f"variables bound outside the block and bound nothing: written as {' '.join(replacement.split())}")))
+    filtered = sum(1 for node in blocks if _filter_of(node) is not None)
+    if len(lifted) != len(blocks) - filtered:
         return text, []
-    return rewritten, [
-        f"OPTIONAL {{ {statement} }} has no pattern, so the BIND could not see the variables bound outside the "
-        "block: the BIND now stands on its own"
-        for statement in reversed(lifted)
-    ]
+    if len(conditional) != filtered:  # a FILTER block the text scan cannot read: the plain blocks still move
+        conditional = []
+    edits = sorted(lifted + conditional)
+    rewritten = text
+    for start, end, replacement, _ in reversed(edits):
+        rewritten = rewritten[:start] + replacement + rewritten[end:]
+    if not edits or _accepted(parsed, rewritten) is None:
+        return text, []
+    return rewritten, [repair for _, _, _, repair in edits]
 
 
 # ------------------------------------------------------------------------ 5. percentage scaling on a plain statistic
@@ -413,15 +449,48 @@ def _only_optional_labels(pattern, key: Variable) -> bool:
 
 
 def _binds_only(left_join) -> bool:
-    """An OPTIONAL that holds only BINDs: no filter, and an Extend chain over an empty BGP."""
-    if isinstance(left_join.expr, CompValue) and left_join.expr.name != "TrueFilter":
-        return False
+    """An OPTIONAL that holds only BINDs, an Extend chain over an empty BGP, and maybe FILTERs (rdflib puts
+    them in the LeftJoin's expression) that read none of the variables those BINDs bind."""
     node = left_join.p2
     if not (isinstance(node, CompValue) and node.name == "Extend"):
         return False
     while isinstance(node, CompValue) and node.name == "Extend":
         node = node.p
-    return isinstance(node, CompValue) and node.name == "BGP" and not node.triples
+    if not (isinstance(node, CompValue) and node.name == "BGP" and not node.triples):
+        return False
+    condition = _filter_of(left_join)
+    return condition is None or not _expression_variables(condition) & _block_binds(left_join)
+
+
+def _filter_of(left_join):
+    """The FILTER of an OPTIONAL block, which rdflib keeps as the LeftJoin's expression; None without one."""
+    condition = left_join.expr
+    return None if condition is None or (isinstance(condition, CompValue) and condition.name == "TrueFilter") else condition
+
+
+def _block_binds(left_join) -> set[Variable]:
+    """The variables the BINDs of an OPTIONAL block bind, for a block that holds only BINDs."""
+    found, node = set(), left_join.p2
+    while isinstance(node, CompValue) and node.name == "Extend":
+        found.add(node.var)
+        node = node.p
+    return found
+
+
+def _binding_sites(algebra, variable: Variable) -> int:
+    """How many triple patterns, BINDs, VALUES blocks and GRAPH clauses bind the variable, in every scope of
+    the query; a sub-select that projects it passes on a binding and makes none."""
+    count = 0
+    for node in _nodes(algebra):
+        if node.name == "BGP":
+            count += sum(1 for triple in node.triples if variable in triple)
+        elif node.name == "Extend" and node.var == variable and not _is_projected_key(node):
+            count += 1
+        elif node.name == "values" and any(variable in row for row in node.res):
+            count += 1
+        elif node.name == "Graph" and node.term == variable:
+            count += 1
+    return count
 
 
 def _indicator_variables(algebra) -> set[Variable]:
@@ -636,18 +705,61 @@ def _matching(masked: str, opening: int, open_char: str, close_char: str) -> int
     return -1
 
 
-def _bind_statements_only(masked: str) -> bool:
-    """True when the (masked) block content is one or more BIND statements and nothing else."""
-    index, found = 0, 0
+def _block_statements(masked: str, start: int, end: int) -> list[tuple[str, int, int]] | None:
+    """(BIND or FILTER, its opening parenthesis, its closing one) for every statement of the (masked) block
+    content between start and end; None when the block holds anything else."""
+    statements, index = [], start
     while True:
-        match = BIND_RE.match(masked, index)
+        match = STATEMENT_RE.match(masked, index, end)
         if match is None:
-            return found > 0 and not masked[index:].strip()
+            return statements if not masked[index:end].strip() else None
         closing = _matching_paren(masked, match.end() - 1)
-        if closing < 0:
-            return False
-        found += 1
+        if closing < 0 or closing >= end:
+            return None
+        statements.append((match.group(1).upper(), match.end() - 1, closing))
         index = _after_dot(masked, closing + 1)
+
+
+def _bind_targets(masked: str, statements: list[tuple[str, int, int]]) -> list[str]:
+    """The variables the BIND statements bind, as far as the text tells."""
+    aliases = (BIND_ALIAS_RE.search(masked, opening + 1, closing) for keyword, opening, closing in statements if keyword == "BIND")
+    return [alias.group(1) for alias in aliases if alias is not None]
+
+
+def _conditional_binds(text: str, masked: str, statements: list[tuple[str, int, int]], graphs: set[Variable],
+                       taken: set[str], separator: str) -> str | None:
+    """BIND (IF(C, E, ?unbound_x) AS ?x) for every BIND (E AS ?x) of a pattern-free OPTIONAL block, C being its
+    FILTERs joined with &&; a patient graph E goes in as STR(E). None when a FILTER reads a variable the
+    block binds: the condition is about the BIND's own result."""
+    binds, conditions, read = [], [], set()
+    for keyword, opening, closing in statements:
+        if keyword == "FILTER":
+            conditions.append(text[opening + 1:closing].strip())
+            read.update(VARIABLE_RE.findall(masked[opening + 1:closing]))
+            continue
+        alias = BIND_ALIAS_RE.search(masked, opening + 1, closing)
+        if alias is None:
+            return None
+        binds.append((text[opening + 1:alias.start()].strip(), alias.group(1)))
+    if read & {name for _, name in binds}:
+        return None
+    condition = conditions[0] if len(conditions) == 1 else " && ".join(f"({condition})" for condition in conditions)
+    written = []
+    for expression, name in binds:
+        plain = re.fullmatch(r"[?$](\w+)", expression)
+        value = f"STR({expression})" if plain and Variable(plain.group(1)) in graphs else expression
+        written.append(f"BIND (IF({condition}, {value}, ?{_fresh_variable(f'unbound_{name}', taken)}) AS ?{name})")
+    return separator.join(written)
+
+
+def _fresh_variable(name: str, taken: set[str]) -> str:
+    """The name, or the name with the first free numeric suffix, marked as taken."""
+    fresh, suffix = name, 1
+    while fresh in taken:
+        suffix += 1
+        fresh = f"{name}_{suffix}"
+    taken.add(fresh)
+    return fresh
 
 
 def _after_dot(masked: str, index: int) -> int:
