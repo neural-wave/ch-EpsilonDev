@@ -54,3 +54,18 @@ It does **not** catch syntax errors or Virtuoso-only errors: `||` between graph 
 - **Recursion limit.** Some queries produce "Recursion limit reached for subject …". Ignore that message.
 
 Santiago has the prototype used for these numbers (a vendored copy and an offline runner) if you want to reproduce them.
+
+## Virtuoso-only errors the judge could catch in code
+
+The query eval on 47 reference questions (`eval/run_query_eval.py`, 2026-10-17) found queries that our parser accepts but Virtuoso rejects. Each one made an allowed request fail, and some were blocked as not compliant. A plain text check before the guard would turn them into a retry with a precise hint:
+
+| Pattern in the query | Virtuoso's error | Hint for the retry |
+|---|---|---|
+| `MEDIAN(`, `OVER (` | syntax error | Not supported: compute it differently (e.g. a subquery) |
+| `UNBOUNDED`, `NULL` | syntax error | Use OPTIONAL with BOUND() or COALESCE() |
+| `PREFIX bif: <http…>` | prefix `bif:` is reserved | Do not declare `bif:` |
+| `xsd:year(` | undefined procedure | Use YEAR() |
+| `\|\|` between graph patterns | syntax error | Use UNION |
+| A selected variable that is neither grouped nor aggregated | SP031 | Add it to GROUP BY or aggregate it |
+
+Query prompt v3 (`src/nl2sparql/agents/prompts.py`) asks the model to avoid all of these. A check in the judge would still catch the ones it writes anyway.

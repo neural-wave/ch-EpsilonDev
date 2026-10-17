@@ -168,6 +168,28 @@ Speed:
   need, and use ORDER BY only when the question asks for a ranking."""
 
 
+# v3 (2026-10-17): v2 plus what the query eval on 47 reference questions showed (dev split only):
+# - the schema cards now list coded values ("code typed as one of ..."): use them instead of guessing;
+# - Virtuoso-only failures: MEDIAN, window functions (OVER), UNBOUNDED, a declared bif: prefix,
+#   xsd:year(), division by zero, bif:datediff on an unbound date;
+# - integer averages (50 instead of 49.6).
+QUERY_SYSTEM_V3 = QUERY_SYSTEM_V2.replace(
+    """- Measured values are Quantity nodes: ?x sphn:hasQuantity ?q . ?q sphn:hasValue ?value .""",
+    """- When a card lists the values of a property, use exactly those values:
+  "code typed as one of Married snomed:87915002 | ..." means ?x sphn:hasCode ?c . ?c a snomed:87915002 ,
+  "= one of sphn-individual:Fatal | ..." means ?x sphn:hasOutcome sphn-individual:Fatal .
+- Measured values are Quantity nodes: ?x sphn:hasQuantity ?q . ?q sphn:hasValue ?value .""",
+).replace(
+    """- There is no NULL: use OPTIONAL with BOUND() or COALESCE().""",
+    """- There is no NULL, no MEDIAN, no window functions (OVER) and no UNBOUNDED. Use OPTIONAL with
+  BOUND() or COALESCE().
+- Do not declare a bif: prefix (it is built in), and use YEAR() or MONTH(), not xsd:year().
+- Divide only by a value that cannot be 0, and call bif:datediff only on dates the pattern requires.
+- Averages and shares: multiply by 1.0 first, so 49.6 does not become 50.""",
+)
+assert "code typed as one of" in QUERY_SYSTEM_V3 and "no MEDIAN" in QUERY_SYSTEM_V3  # both edits applied
+
+
 def render_query_user_v1(text: str, context: Context, feedback: str | None) -> str:
     parts = []
     if context.schema_cards:
@@ -192,7 +214,8 @@ class QueryPrompt:
 INTENT_PROMPTS: dict[str, str] = {"v1": INTENT_SYSTEM_V1, "v2": INTENT_SYSTEM_V2, "v3": INTENT_SYSTEM_V3,
                                   "v4": INTENT_SYSTEM_V4}
 QUERY_PROMPTS: dict[str, QueryPrompt] = {"v1": QueryPrompt(QUERY_SYSTEM_V1, render_query_user_v1),
-                                         "v2": QueryPrompt(QUERY_SYSTEM_V2, render_query_user_v1)}
+                                         "v2": QueryPrompt(QUERY_SYSTEM_V2, render_query_user_v1),
+                                         "v3": QueryPrompt(QUERY_SYSTEM_V3, render_query_user_v1)}
 
 
 def intent_prompt(version: str) -> str:
