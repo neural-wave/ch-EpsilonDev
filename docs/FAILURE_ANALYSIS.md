@@ -36,6 +36,7 @@ Some cases have two causes, so the counts add up to more than the cases.
 - **gen-106** ("patients whose graph name starts with gen_mock_data-1_1050"): the intent agent raised nothing, the guard's R1 caught the literal, the retry hint asked for an aggregated rewrite, the model dropped the filter, and the clean query was marked compliant. The first query could not match anything anyway (graph names start with `http://example.org/graph/`).
 - **intent-035** ("How many patients have at least one identifier recorded?"): the only intent false alarm among 33 raised flags on dev. Overriding the flag when the query is clean would leak gen-033 and gen-040, whose queries were clean too.
 - **gen-119**: the judge's "did you mean sphn:hasSample?" (nearest string to `hasSex`) was followed literally and produced nonsense.
+- **Everything inside `EXISTS` / `NOT EXISTS` was invisible to the guard** (an rdflib quirk, GUARD.md §7): a graph-name filter or an identifier literal inside `NOT EXISTS` was a complete bypass. Found while implementing #13; fixed with it, zero verdict changes on the dev queries.
 
 ### 3.2 Virtuoso rejects a query the judge accepted (module D)
 
@@ -85,6 +86,8 @@ None of the 10 is a Virtuoso limitation of a correct query, except q-013 (a Virt
 
 ## 4. Fixes, ranked by cases covered
 
+**Status, 17 October evening:** every row below is implemented (commit `aab38ed`; 710 tests) except the perf verification of #23's rotated queries and official-03's reference. #16's "rare token" variant was replaced by a co-occurrence rule (the index is 92% German/French labels, so document frequency does not separate generic from specific words). The measured effect is in [PERFORMANCE.md](PERFORMANCE.md).
+
 Module owners: A orchestrator (David), B agents and prompts (Santiago), C context and data (Santiago), D judge (Adrika) and guard (Gayathri). "Cases" are dev cases of this analysis; "FP" is false positives measured on the 56 dev references + 16 examples. Prototypes for the judge and guard items are in `eval/analysis/` (section 7).
 
 | # | Fix | Kind | Module | Cases | Confidence |
@@ -128,10 +131,10 @@ Module owners: A orchestrator (David), B agents and prompts (Santiago), C contex
 
 ## 5. Harness and reference fixes (eval)
 
-- **Numeric-aware comparison** in `eval/run_query_eval.py`: lowercase and strip strings, add an `exact_numbers` outcome (the multiset of numeric cells per row equal, integer tolerance, reference columns ⊆ generated columns) next to the strict `exact`. Rescues q-037, q-049, q-003, q-047, q-050.
+- **Numeric-aware comparison** in `eval/run_query_eval.py`: lowercase and strip strings, add an `exact_numbers` outcome (the multiset of numeric cells per row equal, integer tolerance, reference columns ⊆ generated columns) next to the strict `exact`. Rescues q-037, q-003, q-047 as `exact_numbers` and q-049 as `exact` (label case); q-050 is not rescuable, its generated query returns 10/13/5 patients against 203/192/191 (the year-less code nodes, fix #19).
 - **Keep Virtuoso's error body** (`error.response.text[:300]`) in `execution_error`; today only the HTTP status line survives, which made the error cluster unreadable without re-running.
 - **Perf timing**: `eval/time_on_perf.py` must not use the anytime `timeout` parameter for OPTIONAL + inference shapes, or it reports artifacts (q-013 both sides). Time plain runs with a client deadline and restart the container when a query overruns.
-- **References**: q-052 lacks `?dx a sphn:BilledDiagnosis` (6,018 prescriptions instead of 4,811); official-03 filters `hasRank Principal` although the question says "any diagnosis rank" (277/256/234 patients by sex, not 102/88/78); official-08 omits the generic `sphn:GeneticVariation` class (58 patients). Fix the first two in `eval/query_questions.jsonl` / the official list and re-score.
+- **References**: q-052 lacks `?dx a sphn:BilledDiagnosis` (6,018 prescriptions instead of 4,811); official-03 filters `hasRank Principal` although the question says "any diagnosis rank" (277/256/234 patients by sex, not 102/88/78); official-08 omits the generic `sphn:GeneticVariation` class (58 patients). q-052 is fixed in `eval/query_questions.jsonl` (verified on dev: 15,281 prescriptions, 4,811 for cholera, 405 patients, 31.5%); official-03 is the organizers' own query and stays as given.
 - **Query eval rows** never record `compliance_reason`; the intent eval does not store the model's raw answer. Both would have saved an hour of reproduction.
 - `docs/SPARQL_LLM_VALIDATOR.md`: correct the q-013 entry (duplicate `COUNT(DISTINCT)`, not a literal/IRI comparison).
 
@@ -144,7 +147,9 @@ Module owners: A orchestrator (David), B agents and prompts (Santiago), C contex
 - **Virtuoso silences**: `?date + "P90D"` is NULL, `?date + 90` adds seconds, `BIND ... AS ?alreadyBound` is sometimes ignored, `bif:datediff` on NULL raises DT001, a BIND inside OPTIONAL cannot see outer bindings, a sub-select that reuses an outer variable without projecting it is evaluated per outer row.
 - **Mock-data quirks** that make some official questions degenerate: gestational ages are 10–9,975 "days"; `DrugAdministrationEvent.hasDuration` carries random units (Ms, Hz, ...); `DeathDate.hasYear` values are garbage (`-9979`); cancer ICD codes exist for 2+2 patients only (cancer is only answerable through `sphn:OncologyDiagnosis`, 78 patients); no prescription shares a route with an administration of the same case (official-05's first category is empty on dev); only 31 of 4,437 imaging procedures start inside their own stay.
 - Dev has exactly one AdministrativeCase per patient, which hides "records vs patients" mistakes on stays.
+- **Virtuoso drops GROUP BY groups when a variable predicate is joined with `?o a ?type`** (`?s a <C> ; ?p ?o . ?o a ?type ... GROUP BY ?p ?type`): on dev, Assay.hasSample and Interpretation.hasOutput came back with no type at all and nine link frequency orders were wrong. Profile one fixed property at a time (`scripts/profile_data.py`, `scripts/build_value_sets.py`).
+- `sphn:DeathDate` and `sphn:BirthDate` carry the date as literal parts (hasYear, hasMonth, hasDay); the dateTime of a death is `sphn:Death.hasReportDateTime`. `YEAR()` on a record IRI or on a `bif:datediff` number raises DT001 in Virtuoso.
 
 ## 7. Prototypes
 
-`eval/analysis/` holds the agents' prototypes as they were measured (not wired into the pipeline, no tests except the guard rule): `syntax_diagnose.py` (fix #1: `diagnose()` and `normalize()`), `grouping_hint.py` (#11), `orchestrator_policy.py` (#12), `guard_rule_patch.py` + `test_guard_graph_variable.py` (#13, 20 tests), `intent_postcheck.py` (#21), and three files of judge-check prototypes on the rdflib algebra: `checks_wrong_rows.py` (#3, #7, #8, #10), `checks_same_rows.py` (#3, #5, #6, #7, #19) and `checks_empty.py` (#9, #19). Port each check into `src/nl2sparql/judge.py` with a regression test, keep the hint texts, and measure false positives on the reference queries before enabling it.
+`eval/analysis/` holds the agents' prototypes as they were measured (not wired into the pipeline, no tests except the guard rule): `syntax_diagnose.py` (fix #1: `diagnose()` and `normalize()`), `grouping_hint.py` (#11), `orchestrator_policy.py` (#12), `guard_rule_patch.py` + `test_guard_graph_variable.py` (#13, 20 tests), `intent_postcheck.py` (#21), and three files of judge-check prototypes on the rdflib algebra: `checks_wrong_rows.py` (#3, #7, #8, #10), `checks_same_rows.py` (#3, #5, #6, #7, #19) and `checks_empty.py` (#9, #19). All of them were ported on 17 October: `syntax.py` → `judge_checks/syntax.py`, the judge-check prototypes → `judge_checks/scope.py`, `semantics.py`, `schema.py`, the guard rule → `guard/rules.py` (+ `tests/test_guard_pinning.py`), the policy → `guard/decision.py`, the post-check → `intent_check.py`. The prototypes stay here as the record of what was measured.

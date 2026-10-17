@@ -147,8 +147,8 @@ A visual version with module letters and a "who works where" panel lives on the 
    - Each sees what the other misses: a query cleaned up by the model, or a query that leaks rows on an allowed request.
 3. **Code wherever possible.** Input check, context, judge and guard are deterministic code: milliseconds, zero tokens, same answer every time. The parse plus guard takes about 15 ms per query.
 4. **One LLM call on the critical path.** The intent agent runs in parallel with generation, never as a gate before it.
-5. **One retry per request, shared** by the judge (syntax or unknown terms) and the guard (an allowed request whose query broke a rule).
-6. **A forbidden request is never retried.** A retry could turn it into a clean query, which we would then wrongly mark compliant.
+5. **One retry each for the judge and the guard.** The judge (syntax, unknown terms and the checks in `judge_checks/`) may ask the model again once, and the guard (an allowed request whose query broke a rule) once more, so the query agent runs at most three times per request.
+6. **A forbidden request is never retried.** A retry could turn it into a clean query, which we would then wrongly mark compliant. An R1 violation on the query is treated the same way: the model cannot invent a graph name, a record IRI or identifier digits, so the request named them (`REQUEST_LEVEL_RULES` in `guard/decision.py`).
 7. **A query that breaks a rule is never marked compliant**, even if that costs us a point.
 
 ### How the guard decides
@@ -158,7 +158,8 @@ A visual version with module letters and a "who works where" panel lives on the 
 | OK | OK | Normal case | compliant |
 | flagged | broken | Both agree the request is forbidden | non-compliant, no retry |
 | flagged | OK | The query agent cleaned up a forbidden request | non-compliant, no retry |
-| OK | broken | The query agent made a mistake on an allowed request | 1 retry naming the broken rule; still broken means non-compliant |
+| OK | broken (R1) | The query names a patient graph, a record or an identifier: that came from the request, not from the model | non-compliant, no retry |
+| OK | broken (R2–R5) | The query agent made a mistake on an allowed request | 1 retry naming the broken rule and, for grouping mistakes, what to group by instead; still broken means non-compliant |
 
 `compliance_reason` is built from three parts:
 
@@ -196,8 +197,11 @@ nl2sparql/
 │   ├── llm.py                    OpenAI-compatible client                                 (B)
 │   ├── context/                  examples (BM25), schema cards, terminology index        (C)
 │   ├── guard/                    the five rules + verdict logic                           (D)
-│   ├── judge.py                  syntax, prefixes, terms absent from the data             (D)
-│   ├── sparql/                   Virtuoso-aware parsing shared by guard and judge         (D)
+│   ├── judge.py                  repairs, syntax, terms absent from the data, then the    (D)
+│   │                             checks below
+│   ├── judge_checks/             one module per family: syntax (explains and repairs what
+│   │                             rdflib rejects), scope, semantics, schema                (D)
+│   ├── sparql/                   Virtuoso-aware parsing and prefix fixes, shared by guard and judge (D)
 │   ├── virtuoso.py               small client (scripts, eval, demo only)                  (C)
 │   └── demo/index.html           demo page                                                (E)
 ├── data/                         committed data files (no restricted content)             (C)
@@ -268,7 +272,7 @@ The judged API needs a model server; everything else is in this repository. Four
 3. **Build the local assets** (about a minute): `python scripts/build_assets.py`. It reads the ontologies in your Virtuoso and writes the terminology index and the value sets to `assets/`. They derive from restricted terminologies, so they are not in the repository. This step is optional: without it the API runs with fewer resolved medical codes.
 4. **Run.** `python -m nl2sparql --port 8080`, then `POST http://localhost:8080/nl-to-sparql` with `{"text": "..."}` as in [section 1](#1-the-challenge).
 
-The committed `data/` snapshots describe the mock data as released. If your graph differs, `python scripts/profile_data.py` rebuilds them in about two minutes.
+The committed `data/` snapshots describe the mock data as released. If your graph differs, `python scripts/profile_data.py` rebuilds them in about three minutes (`--cards-only` rebuilds the cards alone in one).
 
 **Agents console:** <http://localhost:8080/agents> shows the full configuration of both agents and their prompts. It can:
 - preview exactly what each model would receive for a question, without calling any model;
@@ -294,14 +298,14 @@ All settings come from environment variables; `.env.example` lists them. Load th
 | `LLM_INTENT_EXTRA_BODY` | inherits `LLM_EXTRA_BODY` | Request fields for the intent model only; `'{}'` sends none |
 | `LLM_INTENT_MAX_TOKENS`, `LLM_QUERY_MAX_TOKENS` | `200`, `1500` | Answer length cap per agent. Tokens are spent only when the answer needs them |
 | `INTENT_PROMPT_VERSION`, `QUERY_PROMPT_VERSION` | `v4`, `v4` | Which prompt version each agent uses (see `src/nl2sparql/agents/prompts.py` and docs/LLM_AGENTS.md §6) |
-| `QUERY_REORDER` | `false` | `true` reorders the query agent's patterns in code (typed codes first) and locks the join order with `DEFINE sql:select-option "order"`, like the organizers' queries. Under measurement |
-| `CONTEXT_EXAMPLES`, `CONTEXT_CARDS`, `CONTEXT_CODES` | `3`, `6`, `5` | How many similar examples, schema cards and code candidates the query agent receives per request |
+| `QUERY_REORDER` | `false` | `true` runs `nl2sparql.sparql.order` after the query agent: when the query has exactly one typed code pattern, inside the first `GRAPH ?g` block, and no UNION, MINUS or sub-select, the pass puts that pattern first, rotates the statement that links to it so `sphn:hasCode ?c` is its first triple, and prepends `DEFINE sql:select-option "order"`; every other query is returned untouched (a forced order is only as good as the whole written query: q-015 went from 0.19 s to 9 s when a `;` chain started with the class pattern). Under measurement |
+| `CONTEXT_EXAMPLES`, `CONTEXT_CARDS`, `CONTEXT_CODES` | `3`, `8`, `5` | How many similar examples, schema cards and code candidates the query agent receives per request |
 | `LLM_TIMEOUT_SECONDS` | `30` | Per LLM call |
 | `LLM_VERIFY_TLS` | `true` | `false` for servers with a self-signed certificate |
 | `LLM_EXTRA_BODY` | empty | JSON merged into every LLM request. For Qwen3.x: `'{"chat_template_kwargs": {"enable_thinking": false}}'` (keep the single quotes) |
 | `VIRTUOSO_ENDPOINT` | `http://localhost:8890/sparql` | Dev only: scripts, `eval --execute`, the demo's dev check |
 | `MAX_INPUT_CHARS` | `2000` | Longer requests get a 400 |
-| `MAX_RETRIES` | `1` | Shared retry budget per request |
+| `MAX_RETRIES` | `1` | Retries per checker: the judge may ask the model again once and the guard once, so the query agent runs at most three times per request |
 | `RETRY_WITH_PREVIOUS_QUERY` | `false` | `true` adds the rejected query to the retry feedback. Measured on 17 October: the model then copies the broken query; fewer retries end valid |
 | `REQUEST_TIMEOUT_SECONDS` | `75` | Total time limit for one pipeline request, including agent calls and retries. Expiry returns HTTP 503; use a positive number of seconds |
 | `RETURN_NONCOMPLIANT_QUERY` | `true` | Hackathon behavior. `false` = a forbidden request returns an empty `sparql_query` |
@@ -396,9 +400,10 @@ scripts/runbox.sh eval --execute --branch guard/my-fix     # eval with the LLM +
 |---|---|---|---|
 | `data/examples.jsonl` | 15 official examples + the worked example from the brief | yes | `python scripts/import_examples.py --release-dir ../hackathon-virtuoso-release` |
 | `data/property_kinds.json` | What each of the 199 properties points to: value, value set or link. The guard relies on it | yes | `python scripts/profile_data.py` (about 2 minutes) |
-| `data/schema_cards.json` | The 164 classes present in the data (the schema defines 214), with their properties | yes | same script |
-| `assets/terminology_index.jsonl` | 38,765 code IRIs with their labels (ICD-10-GM, CHOP, and the SNOMED CT concepts used in the data) | **no**, restricted | `python scripts/build_terminology_index.py` (17 s) |
-| `assets/value_sets.json` | The few coded values each class property uses in the data (55 properties, e.g. civil status, tobacco use, consent); the schema cards show them | **no**, restricted | `python scripts/build_value_sets.py` (35 s) |
+| `data/schema_cards.json` | The 164 classes present in the data (the schema defines 214), with their properties: datatype, every class a link reaches, the terminology of each coded property (ICD-10-GM, CHOP, SNOMED CT or only the generic `sphn:Code`) and the members of each sphn-individual value set, all measured on the data | yes | `python scripts/profile_data.py --cards-only` (1 minute) |
+| `data/team_examples.jsonl` | 3 retrieval-only examples the team wrote (a two-cohort "with cholera vs other patients" comparison, a conditional count with its share, a breakdown with a decade bucket, a braced UNION and `VALUES (?concept ?label)`), each verified on the dev database (row counts in `note`). Loaded by the example bank next to `examples.jsonl`; the eval scripts never read it | yes | by hand; verify on dev before adding |
+| `assets/terminology_index.jsonl` | 38,765 code IRIs with their labels (ICD-10-GM, CHOP, the SNOMED CT concepts used in the data) plus English aliases for the codes the examples use (chop 00.0 therapeutic ultrasound, A00 and its subcodes, E11) | **no**, restricted | `python scripts/build_terminology_index.py` (17 s) |
+| `assets/value_sets.json` | The coded values each class property uses in the data with their labels: 59 properties, coded sets of at most 15 members (civil status, tobacco use, consent) and every sphn-individual set in full; the schema cards show them | **no**, restricted | `python scripts/build_value_sets.py` (1 minute) |
 | `data/guard_corpus.jsonl` | 37 queries the LLM really wrote, with labels and the guard's verdict | yes | `python scripts/export_guard_corpus.py` (run machine, after LLM runs) |
 
 The full guide to the data, with examples, is [docs/DATA.md](docs/DATA.md).
@@ -409,6 +414,10 @@ The terminology-index builder also reads the optional local file
 `assets/english_terminology_labels.jsonl`. Each line must contain
 `{"system": "ICD-10-GM"|"CHOP", "code": "...", "labels": ["..."]}`.
 This file and the generated index are restricted and must never be committed.
+
+A question word matches a label on its own only when it is the whole label or the index shows the other words go with it (co-occurrence in at least 75% of at least two independent entries): "diabetes" finds "Diabetes mellitus", "hospital" no longer finds "Death in hospital". The subcodes of a matched code follow it (A00 → A00.0, A00.1, A00.9).
+
+Every example record carries a `shape` tag (`plain`, `conditional_count`, `two_cohort`, `breakdown`; `scripts/import_examples.py` keeps them). BM25 cannot see shapes, so `ExampleBank.search` puts one `conditional_count` example in the last context slot when the question says how often / how many of / share / percentage / proportion / what fraction / what usually happens, and one `two_cohort` example for than other patients / compared with / versus.
 
 ## 11. Evaluation and baseline numbers
 
@@ -463,7 +472,7 @@ python eval/run_query_eval.py --rescore eval/reports/query-<date>.json   # execu
 | Cause | Requests | Owner |
 |---|---|---|
 | The query does not parse, so the guard cannot check it. Two of these answers were cut off at the 900-token cap | 7 | B |
-| The query groups by the code node of each record instead of the concept (e.g. `GROUP BY ?code` for "the 10 most common diagnoses"). The guard flags it correctly, and the retry does not fix it | 4 | B, plus D for a clearer retry hint |
+| The query groups by the code node of each record instead of the concept (e.g. `GROUP BY ?code` for "the 10 most common diagnoses"). The guard flags it correctly, and the retry does not fix it. Since 17 October the guard's message says how (`?x sphn:hasCode ?code . ?code a ?concept . GROUP BY ?concept`) and the retry sentence no longer suggests a single row | 4 | B, plus D for a clearer retry hint |
 | Intent false alarm ("How many patients have at least one identifier recorded?") | 1 | B |
 
 **Official example timings** (one run each on the run machine; dev: server time through isql, #06 over HTTP; perf: HTTP round trip):
@@ -497,17 +506,20 @@ Query performance is a major lever: even the organizers' own queries can take mi
    - `GROUP BY (expr)` without `AS` loses the expression.
    - `__agg_N__` names repeat across subqueries.
    - `pyparsing` must stay pinned at 3.2.0.
+   - `translateExists` stores the translated `EXISTS` / `NOT EXISTS` pattern as an attribute (`node.graph`); `node.items()` keeps the raw parse tree without its inner filters. Walk `exists_pattern(node)` (`guard/provenance.py`), never the items: until 17 October everything inside `NOT EXISTS` was invisible to the guard.
 8. **Passing our parser does not mean Virtuoso accepts the query.** Two LLM queries failed only in Virtuoso. We may not ask the database at runtime, so the fix has to come from prompts and style rules.
 9. **The SIB `sparql-examples` repo has no SPHN examples.** It covers UniProt, Bgee, Rhea and the like. Reuse its format, not its content.
 10. **Vast's suggested SSH command forwards port 8080**, which clashes with our demo. Use another local port, e.g. `-L 8888:localhost:8080`.
 11. **rdflib's SPARQL parser is not thread-safe.** The orchestrator runs the judge and the guard in worker threads, and two requests parsing at once corrupted the parser for the rest of the process: every later request came back "not compliant". With 4 concurrent requests, 198 of 198 failed. `parse_sparql` now takes a lock, and a test parses from 8 threads at once.
-12. **A client timeout does not stop a Virtuoso query.** Slow queries from an eval kept running and saturated dev Virtuoso (HTTP 503). The query eval runs queries one at a time and can `--rescore` a report. Restart the container if it happens (section 9).
+12. **A client timeout does not stop a Virtuoso query.** Slow queries from an eval kept running and saturated dev Virtuoso (HTTP 503). The query eval runs queries one at a time and can `--rescore` a report. Restart the container if it happens (section 9). The client raises `VirtuosoTimeout` on HTTP 206 / `X-SQL-State: S1TAT` (a partial result from the anytime `timeout` parameter) instead of parsing wrong partial aggregates, and `eval/time_on_perf.py` no longer sends that parameter: it times plain runs with a client deadline (`--timeout-ms`) and restarts the perf container after every overrun.
 13. **On our Vast instance, `supervisorctl restart vllm` keeps the old server alive** on port 18000. Kill it before starting the new model (section 8).
 14. **A bigger model did not fix the SPARQL.** Qwen3.5-9B, Coder-14B and Coder-30B-A3B gave the same exact-result rate. The levers are context (codes, examples) and prompts.
 15. **90% correct verdicts can hide poor SPARQL.** Measure query results against reference queries (`eval/run_query_eval.py`), not only verdicts.
 16. **Do not commit environments or editor settings.** A teammate's `.venv311/` (1,834 files) almost got merged. `.venv*/` and `.vscode/` are git-ignored now.
 17. **A Virtuoso quirk in conditional counts.** `OPTIONAL { GRAPH ?g { … } BIND(… ) }` used for a conditional count returns zeros when the same query also has an `EXISTS` cohort `BIND`, whatever the order. Use `IF(?concept = …, ?x, ?none)` binds instead (reference query q-075).
 18. **The mock data is thin outside cholera.** Billed ICD codes are almost all cholera (778 patients) plus the chapter code (189); other codes have fewer than 10 patients; CHOP is almost all `00.0x`; many SNOMED value sets are random. Questions about other diagnoses return tiny or empty results on both databases.
+19. **rdflib's syntax message names the wrong token.** "Expected SelectQuery, found 'GRAPH'" for a missing parenthesis three lines later, and the model repeats the error on its retry. The judge now rewrites a standard prefix declared with another namespace (`fix_standard_prefixes`), repairs three mistakes with exactly one meaning without a model call (`GROUP BY true`, `GROUP BY` inside the WHERE braces, a UNION branch that is a bare `GRAPH` block) and replaces rdflib's message with hints that name the real error and say what to write instead (`judge_checks/syntax.py`). On the 17 October dev run: 13 of 52 unparseable answers repaired, 36 explained; 0 hints on the examples and the dev references.
+20. **The anytime `timeout` parameter changes Virtuoso's plan.** With it, an OPTIONAL + inference query that answers in 84 ms runs to the deadline and returns HTTP 206 with wrong partial aggregates. Time plain runs.
 
 ## 13. Next steps per module
 
@@ -525,12 +537,11 @@ Most useful first. Measure every change with the evals in [section 11](#11-evalu
 
 **C · Data and context** (Santiago)
 - Add the 21 dev reference queries to the example bank. Measure only on the holdout.
-- Add English labels for ICD-10-GM and CHOP codes (`assets/english_terminology_labels.jsonl`; the builder already reads it). The labels are German and French today, and two needed codes were missed (nationality, therapeutic ultrasound).
+- Add English labels for ICD-10-GM and CHOP codes (`assets/english_terminology_labels.jsonl`; the builder already reads it). An alias layer covers the codes the examples use (therapeutic ultrasound, cholera and its subcodes, E11); the rest of the labels are German and French.
 - Set a server-side query timeout in dev Virtuoso, so evals cannot saturate it.
 
 **D · Guard and judge** (Adrika, Gayathri)
-- Write a retry hint for "grouping by ?code" that says how to fix it: group by the concept class.
-- Find why a query filtering on a graph-name prefix with patient-ID digits passed as compliant (dev question `gen-106`). Two holdout leaks remain unexamined on purpose.
+- gen-106 (a graph-name filter marked compliant) was a retry-policy leak, fixed on 17 October: an R1 violation is never retried. Two holdout leaks remain unexamined on purpose.
 - Catch Virtuoso-only errors in code before the guard. The patterns are in [docs/SPARQL_LLM_VALIDATOR.md](docs/SPARQL_LLM_VALIDATOR.md). Consider SIB's validator, offline.
 - Check whether `GROUP BY ?g` inside a subquery that is aggregated afterwards is a false alarm (official #10).
 

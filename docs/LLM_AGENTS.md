@@ -22,15 +22,15 @@ request ─► input check ─┬─► intent agent (LLM, JSON) ─────
                         │                                                        ▼
                         └─► context ─► query agent (LLM) ─► judge ─────► compliance guard ─► answer
                                          ▲                    │                  │
-                                         └── one retry, with feedback from ──────┘
+                                         └── one retry each, with feedback from ─┘
                                              the judge or the guard
 ```
 
-- **The intent agent** reads only the request text. It answers in JSON with five flags (`asks_for_identifiers`, `single_patient`, `individual_rows`, `whole_graph`, `not_a_select`), a reason and a suggested rephrase. It runs in parallel with the context and the query agent, so its time is hidden: the total time is about the query agent's time.
+- **The intent agent** reads only the request text. It answers in JSON with five flags (`asks_for_identifiers`, `single_patient`, `individual_rows`, `whole_graph`, `not_a_select`), a reason and a suggested rephrase. It runs in parallel with the context and the query agent, so its time is hidden: the total time is about the query agent's time. After the flags come back, `src/nl2sparql/intent_check.py` clears `asks_for_identifiers` on a pure counting request ("how many ...", "count ...", "what share ...") that carries no reveal cue (which, who, list, show, give, their, names, each, per patient, ...); no other flag is touched, and the pipeline records `intent_flag_cleared` in its diagnostics (intent-035, the only intent false alarm on dev; 0 leaks on the 149 dev rows).
 - **The query agent** gets the request and the context (3 similar examples, schema cards, code candidates) and writes one SPARQL query. It translates literally, forbidden parts included, so the guard can judge them.
-- **The judge and the guard are code, not models** (module D, see [GUARD.md](GUARD.md)). The judge checks syntax, prefixes and terms absent from the data. The guard applies the five rules to the query and combines them with the intent flags.
+- **The judge and the guard are code, not models** (module D, see [GUARD.md](GUARD.md)). The judge repairs what needs no model (prefixes, three syntax mistakes, inference on a variable class, a date plus a duration, a typed value-set entry), checks syntax with hints that name the real error, terms absent from the data, and the three families of checks in `judge_checks/` (variable scope, semantics, schema). The guard applies the five rules to the query and combines them with the intent flags.
 
-**Retry rules.** Each request has one retry, shared:
+**Retry rules.** The judge and the guard each have one retry (`MAX_RETRIES` per checker), so the query agent is called at most three times per request:
 - **The judge** asks for it when the query is invalid. The orchestrator first waits for the intent result, because a flagged request gets no retry at all.
 - **The guard** asks for it only when the request is not flagged and the query breaks a rule.
 - **A flagged request** never gets a retry, from the judge or from the guard.
@@ -88,8 +88,10 @@ Both agents also share `LLM_TIMEOUT_SECONDS` and `LLM_VERIFY_TLS`, and the tempe
 
 | Key | Meaning |
 |---|---|
-| `retry_reason` | `judge` or `guard`: who asked for the retry |
-| `first_try_sparql` | The query the retry replaced |
+| `retry_reason` | `judge`, `guard` or `judge+guard`: who asked for a retry |
+| `first_try_sparql` | The first answer; when both checkers retried, the retry the second one rejected is in `rejected_retry_sparql` |
+| `judge_repairs` | What the judge fixed without the model (`GROUP BY true` dropped, a prefix rewritten, ...) |
+| `intent_flag_cleared` | `asks_for_identifiers` was cleared by the counting-request post-check |
 | `judge_errors_first_try`, `guard_violations_first_try` | Why the first try was rejected |
 | `judge_errors_final` | Still invalid after the retry |
 | `cut_off` | Steps whose answer hit the answer cap: `intent`, `query`, `query_retry` |
