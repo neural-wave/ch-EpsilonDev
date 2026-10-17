@@ -1,7 +1,15 @@
-import pytest
+import json
+from pathlib import Path
 
-from conftest import PREFIXES, load_examples
+import pytest
+from rdflib import URIRef
+
+from conftest import DATA_DIR, PREFIXES, load_examples
+from nl2sparql.context import SchemaCards
+from nl2sparql.guard import ComplianceGuard, PropertyKinds
+from nl2sparql.judge import Judge
 from nl2sparql.models import IntentFlags
+from nl2sparql.guard.provenance import Sensitivity
 
 EXAMPLES = load_examples()
 
@@ -48,6 +56,47 @@ def test_crafted_cases(guard, name, compliant, rule, query):
         assert rule in {v.rule for v in violations}
 
 
+# Additional trigger/near-miss pairs for Guard interaction audit
+# These assert: trigger rejects, near-miss accepts, with diagnostic code, reason, and retry behavior
+RULE_TRIGGER_NEAR_MISSES_EXTRA = [
+    # Nested aggregate projection
+    (
+        "R5",
+        PREFIXES + "SELECT ?g WHERE { { SELECT ?g WHERE { GRAPH ?g { ?dx a sphn:BilledDiagnosis } } } }",
+        PREFIXES + "SELECT (COUNT(DISTINCT ?g) AS ?n) WHERE { GRAPH ?g { ?dx a sphn:BilledDiagnosis } }",
+        "nested aggregate projection",
+    ),
+    # Identifier filter / BIND interaction
+    (
+        "R1",
+        PREFIXES + "SELECT (COUNT(DISTINCT ?g) AS ?n) WHERE { { SELECT ?g WHERE { GRAPH ?g { ?s sphn:hasIdentifier ?id } BIND(MD5(STR(?id)) AS ?fingerprint) FILTER(?fingerprint = \"synthetic-hash\") } } }",
+        PREFIXES + "SELECT (COUNT(DISTINCT ?g) AS ?n) WHERE { GRAPH ?g { ?s sphn:hasRank ?rank } }",
+        "identifier filter / BIND",
+    ),
+    # Inverse property path trigger
+    (
+        "R1",
+        PREFIXES + "SELECT (COUNT(DISTINCT ?g) AS ?n) WHERE { GRAPH ?g { \"synthetic-key\" ^sphn:hasIdentifier ?subject } }",
+        PREFIXES + "SELECT (COUNT(DISTINCT ?g) AS ?n) WHERE { GRAPH ?g { \"synthetic-value\" ^sphn:hasValue ?quantity } }",
+        "inverse identifier path",
+    ),
+    # Alternative property path trigger
+    (
+        "R5",
+        PREFIXES + "SELECT (MAX(?id) AS ?x) WHERE { GRAPH ?g { ?record (sphn:hasIdentifier|sphn:hasSharedIdentifier) ?id } }",
+        PREFIXES + "SELECT (COUNT(DISTINCT ?g) AS ?n) WHERE { GRAPH ?g { ?s sphn:hasRank ?rank } GROUP BY ?rank }",
+        "alternative identifier path",
+    ),
+    # Nested graph path filter and aggregate interaction
+    (
+        "R1",
+        PREFIXES + "SELECT (MAX(?identifier) AS ?selected) WHERE { { SELECT ?g ?identifier WHERE { GRAPH ?g { ?record sphn:hasSubjectPseudoIdentifier/sphn:hasIdentifier ?identifier } BIND(SHA256(STR(?identifier)) AS ?fingerprint) FILTER(?fingerprint = \"synthetic-hash\") } } }",
+        PREFIXES + "SELECT ?rank (COUNT(DISTINCT ?g) AS ?patients) WHERE { { SELECT ?g ?rank WHERE { GRAPH ?g { ?record sphn:hasRank ?rank } FILTER(?rank = sphn:Principal) } } GROUP BY ?rank }",
+        "nested graph path filter and aggregate",
+    ),
+]
+
+
 def _example(number: int) -> str:
     return next(e["sparql"] for e in EXAMPLES if e["id"] == f"official-{number:02d}")
 
@@ -91,3 +140,279 @@ GROUPING_CASES = [
 def test_grouping_cases_found_by_the_llm_eval(guard, name, compliant, query):
     violations = guard.check_query(query)
     assert (not violations) == compliant, violations
+
+
+def test_r1_uses_the_supplied_property_classifier_for_literal_lookups():
+    predicate = URIRef("https://biomedit.ch/rdf/sphn-schema/sphn#hasOpaqueKey")
+
+    class SyntheticIdentifierKinds(PropertyKinds):
+        def object_sensitivity(self, candidate):
+            if candidate == predicate:
+                return Sensitivity.IDENTIFIER
+            return super().object_sensitivity(candidate)
+
+    custom_guard = ComplianceGuard(SyntheticIdentifierKinds())
+    query = PREFIXES + (
+        'SELECT (COUNT(DISTINCT ?g) AS ?n) WHERE { GRAPH ?g { '
+        '?record sphn:hasOpaqueKey "synthetic-key" } }'
+    )
+
+    decision = custom_guard.decide(query, IntentFlags())
+
+    assert not decision.compliant
+    assert any(violation.rule == "R1" for violation in decision.violations)
+    assert "looks up the identifier" in decision.reason.lower()
+
+
+IDENTITY_TRANSFORMS = [
+    ("concat", 'CONCAT(STR(?id), "-suffix")'),
+    ("substring", "SUBSTR(STR(?id), 1, 4)"),
+    ("record string", "STR(?record)"),
+    ("md5", "MD5(STR(?id))"),
+    ("sha256", "SHA256(STR(?id))"),
+]
+
+
+@pytest.mark.parametrize("name,expression", IDENTITY_TRANSFORMS, ids=[x[0] for x in IDENTITY_TRANSFORMS])
+def test_identity_transforms_cannot_launder_identifiers(guard, name, expression):
+    if name == "record string":
+        pattern = "?record a sphn:BilledDiagnosis"
+    else:
+        pattern = "?s sphn:hasIdentifier ?id"
+    leaked = PREFIXES + (
+        f"SELECT ({expression} AS ?out) WHERE {{ GRAPH ?g {{ {pattern} }} }}"
+    )
+    violations = guard.check_query(leaked)
+    assert "R5" in {violation.rule for violation in violations}
+    assert any("identifier" in v.message.lower() or "record iri" in v.message.lower()
+               for v in violations if v.rule == "R5")
+
+    aggregated = PREFIXES + (
+        f"SELECT (COUNT(DISTINCT ?g) AS ?n) WHERE {{ GRAPH ?g {{ {pattern} }} "
+        f"BIND({expression} AS ?internal) }}"
+    )
+    assert guard.check_query(aggregated) == []
+
+
+def test_from_named_patient_graph_is_rejected_and_ontology_graph_is_allowed(guard):
+    patient_graph = (
+        "SELECT (COUNT(DISTINCT ?g) AS ?n) "
+        "FROM NAMED <http://example.org/graph/synthetic-person> "
+        "WHERE { GRAPH ?g { ?s ?p ?o } }"
+    )
+    violations = guard.check_query(patient_graph)
+    assert "R1" in {violation.rule for violation in violations}
+    assert any("single patient graph" in v.message for v in violations if v.rule == "R1")
+
+    ontology_graph = (
+        "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> "
+        "SELECT ?label "
+        "FROM NAMED <https://biomedit.ch/rdf/sphn-resource/global> "
+        "WHERE { GRAPH <https://biomedit.ch/rdf/sphn-resource/global> "
+        "{ ?concept rdfs:label ?label } }"
+    )
+    assert guard.check_query(ontology_graph) == []
+
+
+def test_nested_patient_projection_is_safe_only_when_outer_result_aggregates(guard):
+    inner_projection = (
+        "SELECT ?g WHERE { { SELECT ?g WHERE { "
+        "GRAPH ?g { ?dx a sphn:BilledDiagnosis } } } }"
+    )
+    violations = guard.check_query(PREFIXES + inner_projection)
+    assert "R5" in {violation.rule for violation in violations}
+    assert any("identifier" in v.message.lower() or "patient" in v.message.lower()
+               for v in violations if v.rule == "R5")
+
+    outer_aggregate = (
+        "SELECT (COUNT(DISTINCT ?g) AS ?n) WHERE { { SELECT ?g WHERE { "
+        "GRAPH ?g { ?dx a sphn:BilledDiagnosis } } } }"
+    )
+    assert guard.check_query(PREFIXES + outer_aggregate) == []
+
+
+def test_raw_record_iri_projection_triggers_both_row_and_identifier_rules(guard):
+    query = PREFIXES + (
+        "SELECT ?record WHERE { GRAPH ?g { ?record a sphn:BilledDiagnosis } }"
+    )
+    violations = guard.check_query(query)
+    assert {violation.rule for violation in violations} >= {"R2", "R5"}
+    assert any("patient or record identifiers" in v.message for v in violations if v.rule == "R5")
+
+
+@pytest.mark.parametrize("branching", ["OPTIONAL", "UNION"], ids=["optional", "union"])
+def test_identifier_sensitivity_flows_through_optional_and_union(guard, branching):
+    if branching == "OPTIONAL":
+        body = (
+            "GRAPH ?g { ?dx a sphn:BilledDiagnosis } OPTIONAL "
+            "{ GRAPH ?g { ?s sphn:hasIdentifier ?id } }"
+        )
+    else:
+        body = (
+            "{ GRAPH ?g { ?s sphn:hasIdentifier ?id } } UNION "
+            "{ GRAPH ?g { ?s sphn:hasSharedIdentifier ?id } }"
+        )
+    leaked = PREFIXES + f"SELECT (MAX(?id) AS ?x) WHERE {{ {body} }}"
+    violations = guard.check_query(leaked)
+    assert "R5" in {violation.rule for violation in violations}
+    assert any("identifier" in v.message.lower() for v in violations if v.rule == "R5")
+
+    safe = PREFIXES + f"SELECT (COUNT(DISTINCT ?g) AS ?n) WHERE {{ {body} }}"
+    assert guard.check_query(safe) == []
+
+
+def test_nested_filter_and_bind_keep_identifier_sensitivity(guard):
+    leaking = PREFIXES + (
+        "SELECT (COUNT(DISTINCT ?g) AS ?n) WHERE { { SELECT ?g WHERE { "
+        "GRAPH ?g { ?s sphn:hasIdentifier ?id } "
+        "BIND(MD5(STR(?id)) AS ?fingerprint) "
+        'FILTER(?fingerprint = "synthetic-hash") } } }'
+    )
+    decision = guard.decide(leaking, IntentFlags())
+    assert not decision.compliant
+    assert any(violation.rule == "R1" for violation in decision.violations)
+    assert "filters on the identifier" in decision.reason.lower()
+    assert decision.retry_hint
+
+    category_near_miss = PREFIXES + (
+        "SELECT (COUNT(DISTINCT ?g) AS ?n) WHERE { { SELECT ?g WHERE { "
+        "GRAPH ?g { ?s sphn:hasRank ?rank } "
+        "BIND(STR(?rank) AS ?category) "
+        'FILTER(?category = "Principal") } } }'
+    )
+    accepted = guard.decide(category_near_miss, IntentFlags())
+    assert accepted.compliant, accepted.violations
+    assert accepted.reason is None and accepted.retry_hint is None
+
+
+def test_nested_aggregate_is_safe_only_when_patient_level_value_is_not_projected(guard):
+    nested = (
+        "{ SELECT ?g (COUNT(?dx) AS ?perPatient) WHERE { "
+        "GRAPH ?g { ?dx a sphn:BilledDiagnosis } } GROUP BY ?g }"
+    )
+    safe = PREFIXES + (
+        f"SELECT (COUNT(DISTINCT ?g) AS ?patients) WHERE {{ {nested} }}"
+    )
+    assert guard.check_query(safe) == []
+
+    exposed = PREFIXES + f"SELECT ?g ?perPatient WHERE {{ {nested} }}"
+    violations = guard.check_query(exposed)
+    assert {violation.rule for violation in violations} >= {"R2", "R5"}
+    assert any("individual rows" in violation.message for violation in violations if violation.rule == "R2")
+    assert any("patient or record identifiers" in violation.message for violation in violations if violation.rule == "R5")
+
+
+def test_inverse_identifier_path_literal_lookup_triggers_r1(guard):
+    leaking = PREFIXES + (
+        'SELECT (COUNT(DISTINCT ?g) AS ?n) WHERE { GRAPH ?g { '
+        '"synthetic-key" ^sphn:hasIdentifier ?subject } }'
+    )
+    decision = guard.decide(leaking, IntentFlags())
+    assert not decision.compliant
+    assert "R1" in {violation.rule for violation in decision.violations}
+    assert "looks up the identifier" in decision.reason.lower()
+    assert decision.retry_hint
+
+    value_near_miss = PREFIXES + (
+        'SELECT (COUNT(DISTINCT ?g) AS ?n) WHERE { GRAPH ?g { '
+        '"synthetic-value" ^sphn:hasValue ?quantity } }'
+    )
+    accepted = guard.decide(value_near_miss, IntentFlags())
+    assert accepted.compliant and accepted.reason is None and accepted.retry_hint is None
+
+
+def test_alternative_identifier_path_preserves_sensitive_object_kind(guard):
+    leaking = PREFIXES + (
+        "SELECT (MAX(?id) AS ?x) WHERE { GRAPH ?g { "
+        "?record (sphn:hasIdentifier|sphn:hasSharedIdentifier) ?id } }"
+    )
+    violations = guard.check_query(leaking)
+    assert "R5" in {violation.rule for violation in violations}
+
+    category_near_miss = PREFIXES + (
+        "SELECT ?category (COUNT(DISTINCT ?g) AS ?n) WHERE { GRAPH ?g { "
+        "?record (sphn:hasRank|sphn:hasOutcome) ?category } } GROUP BY ?category"
+    )
+    assert guard.check_query(category_near_miss) == []
+
+
+def test_nested_graph_path_filter_and_aggregate_interaction(guard):
+    leaking = PREFIXES + (
+        'SELECT (MAX(?identifier) AS ?selected) WHERE { { SELECT ?g ?identifier WHERE { '
+        'GRAPH ?g { ?record sphn:hasSubjectPseudoIdentifier/sphn:hasIdentifier ?identifier } '
+        'BIND(SHA256(STR(?identifier)) AS ?fingerprint) '
+        'FILTER(?fingerprint = "synthetic-hash") } } }'
+    )
+    decision = guard.decide(leaking, IntentFlags())
+    assert not decision.compliant
+    assert {violation.rule for violation in decision.violations} >= {"R1", "R5"}
+    assert "identifier" in decision.reason.lower()
+    assert decision.retry_hint
+
+    category_near_miss = PREFIXES + (
+        'SELECT ?rank (COUNT(DISTINCT ?g) AS ?patients) WHERE { { SELECT ?g ?rank WHERE { '
+        'GRAPH ?g { ?record sphn:hasRank ?rank } FILTER(?rank = sphn:Principal) } } } '
+        'GROUP BY ?rank'
+    )
+    accepted = guard.decide(category_near_miss, IntentFlags())
+    assert accepted.compliant, accepted.violations
+    assert accepted.reason is None and accepted.retry_hint is None
+
+
+RULE_TRIGGER_NEAR_MISSES = [
+    (
+        "R1",
+        PREFIXES + "SELECT (COUNT(DISTINCT ?g) AS ?n) WHERE { "
+        "VALUES ?g { <http://example.org/graph/synthetic-person> } "
+        "GRAPH ?g { ?dx a sphn:BilledDiagnosis } }",
+        PREFIXES + "SELECT (COUNT(DISTINCT ?g) AS ?n) WHERE { "
+        "VALUES ?concept { <http://example.org/concept/synthetic-category> } "
+        "GRAPH ?g { ?record sphn:hasCode ?concept } }",
+        "single patient graph",
+    ),
+    (
+        "R2",
+        PREFIXES + "SELECT ?dx WHERE { GRAPH ?g { ?dx a sphn:BilledDiagnosis } }",
+        PREFIXES + "SELECT (COUNT(DISTINCT ?g) AS ?n) WHERE { "
+        "GRAPH ?g { ?dx a sphn:BilledDiagnosis } }",
+        "individual rows",
+    ),
+    (
+        "R3",
+        "SELECT (COUNT(*) AS ?n) WHERE { ?s ?p ?o }",
+        PREFIXES + "SELECT (COUNT(DISTINCT ?g) AS ?n) WHERE { "
+        "GRAPH ?g { ?dx a sphn:BilledDiagnosis } }",
+        "whole graph",
+    ),
+    (
+        "R4",
+        PREFIXES + "ASK { GRAPH ?g { ?dx a sphn:BilledDiagnosis } }",
+        PREFIXES + "SELECT (COUNT(DISTINCT ?g) AS ?n) WHERE { "
+        "GRAPH ?g { ?dx a sphn:BilledDiagnosis } }",
+        "ASK query",
+    ),
+    (
+        "R5",
+        PREFIXES + "SELECT (MAX(?id) AS ?x) WHERE { GRAPH ?g { "
+        "?s sphn:hasSubjectPseudoIdentifier ?id } }",
+        PREFIXES + "SELECT (COUNT(DISTINCT ?g) AS ?n) WHERE { "
+        "GRAPH ?g { ?s sphn:hasSubjectPseudoIdentifier ?id } }",
+        "identifiers or record IRIs",
+    ),
+]
+
+
+@pytest.mark.parametrize("rule,trigger,near_miss,reason", RULE_TRIGGER_NEAR_MISSES)
+def test_each_guard_rule_has_reasoned_trigger_and_valid_near_miss(
+    guard, rule, trigger, near_miss, reason
+):
+    rejected = guard.decide(trigger, IntentFlags())
+    assert not rejected.compliant
+    matching = [violation for violation in rejected.violations if violation.rule == rule]
+    assert matching and reason.lower() in " ".join(v.message for v in matching).lower()
+    assert rejected.reason and reason.lower() in rejected.reason.lower()
+    assert rejected.retry_hint and reason.lower() in rejected.retry_hint.lower()
+
+    accepted = guard.decide(near_miss, IntentFlags())
+    assert accepted.compliant and accepted.reason is None
+    assert accepted.retry_hint is None and not accepted.violations

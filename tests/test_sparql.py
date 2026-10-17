@@ -30,6 +30,13 @@ def test_parses_official_example_as_select():
     parsed = parse_sparql(OFFICIAL_EXAMPLE)
     assert parsed.kind == "SelectQuery"
     assert parsed.inference_options == 1
+    assert parsed.defines == ['DEFINE sql:select-option "order"']
+    standard = parse_sparql(
+        f"PREFIX sphn: <{SPHN}> SELECT (COUNT(DISTINCT ?g) AS ?n) "
+        "WHERE { GRAPH ?g { ?d a sphn:BilledDiagnosis } }"
+    )
+    assert standard.kind == "SelectQuery"
+    assert standard.defines == [] and standard.inference_options == 0
 
 
 def test_detects_update_and_other_forms():

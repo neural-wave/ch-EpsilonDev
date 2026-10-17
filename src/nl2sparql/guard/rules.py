@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 from rdflib import Literal, URIRef, Variable
 from rdflib.namespace import RDF
+from rdflib.paths import InvPath
 from rdflib.plugins.sparql.parserutils import CompValue
 
 from nl2sparql.guard.provenance import PropertyKinds, QueryFacts, Sensitivity, analyse, expression_sensitivity
@@ -45,14 +46,16 @@ def check_rules(parsed: ParsedQuery, kinds: PropertyKinds, settings: RuleSetting
         return [Violation("R4", f"The query is a {form} query. Only SELECT queries are allowed.")]
     facts = analyse(parsed.algebra, kinds, settings.ontology_graphs)
     violations: list[Violation] = []
-    violations += _single_patient(facts, settings)
+    violations += _single_patient(facts, kinds, settings)
     violations += _whole_graph(facts)
     if facts.touches_patient_data:
         violations += _projection(parsed, facts)
     return list(dict.fromkeys(violations))  # drop duplicates, keep order
 
 
-def _single_patient(facts: QueryFacts, settings: RuleSettings) -> list[Violation]:
+def _single_patient(
+    facts: QueryFacts, kinds: PropertyKinds, settings: RuleSettings
+) -> list[Violation]:
     found = []
     for iri in sorted(facts.iris):
         text = str(iri)
@@ -62,12 +65,27 @@ def _single_patient(facts: QueryFacts, settings: RuleSettings) -> list[Violation
             found.append(Violation("R1", f"The query targets a single patient record <{text}>."))
     for triple in facts.triples:
         if isinstance(triple.object, Literal) and isinstance(triple.predicate, URIRef):
-            if PropertyKinds().object_sensitivity(triple.predicate) is Sensitivity.IDENTIFIER:
+            if kinds.object_sensitivity(triple.predicate) is Sensitivity.IDENTIFIER:
                 found.append(Violation("R1", f'The query looks up the identifier "{triple.object}".'))
+        elif isinstance(triple.subject, Literal) and _inverse_identifier_path(triple.predicate, kinds):
+            found.append(Violation("R1", f'The query looks up the identifier "{triple.subject}".'))
     for expr in facts.filters:
         for value in _identifier_comparisons(expr, facts):
             found.append(Violation("R1", f"The query filters on the identifier value {value}."))
     return found
+
+
+def _inverse_identifier_path(predicate: object, kinds: PropertyKinds) -> bool:
+    """Return whether an inverse path traverses an identifier-valued predicate."""
+    inverted = False
+    while isinstance(predicate, InvPath):
+        inverted = not inverted
+        predicate = predicate.arg
+    return (
+        inverted
+        and isinstance(predicate, URIRef)
+        and kinds.object_sensitivity(predicate) is Sensitivity.IDENTIFIER
+    )
 
 
 def _identifier_comparisons(expr, facts: QueryFacts):
@@ -118,7 +136,15 @@ def _projection(parsed: ParsedQuery, facts: QueryFacts) -> list[Violation]:
     projected, extends, aggregate_join, group_exprs = _top_projection(parsed.algebra)
     if aggregate_join is None:
         names = ", ".join(f"?{v}" for v in projected)
-        return [Violation("R2", f"The query returns individual rows ({names}) instead of aggregated results.")]
+        found = [Violation("R2", f"The query returns individual rows ({names}) instead of aggregated results.")]
+        identifier_variables = [
+            variable for variable in projected
+            if facts.sensitivity.get(variable, Sensitivity.CONSTANT) >= Sensitivity.INSTANCE
+        ]
+        if identifier_variables:
+            labels = ", ".join(f"?{variable}" for variable in identifier_variables)
+            found.append(Violation("R5", f"The query exposes patient or record identifiers ({labels})."))
+        return found
     group_vars = {expr for expr in group_exprs if isinstance(expr, Variable)}
     exposed = _exposed_group_keys(projected, extends, facts, group_vars)
     found: list[Violation] = []
