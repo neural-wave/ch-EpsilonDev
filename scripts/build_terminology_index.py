@@ -25,6 +25,27 @@ CONCEPT_SYSTEMS = {
     "SNOMED CT": "http://snomed.info/id/",
     "LOINC": "https://loinc.org/rdf/",
 }
+DEFAULT_ENGLISH_LABELS = REPO_ROOT / "assets" / "english_terminology_labels.jsonl"
+
+
+def load_english_labels(path: Path) -> dict[tuple[str, str], set[str]]:
+    """Load a local restricted mapping keyed by terminology system and code."""
+    if not path.exists():
+        return {}
+    labels: dict[tuple[str, str], set[str]] = defaultdict(set)
+    for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+        if not line.strip():
+            continue
+        row = json.loads(line)
+        system = row["system"]
+        code = row["code"]
+        names = row["labels"]
+        if system not in CLASSIFICATIONS:
+            raise ValueError(f"Unsupported terminology system on line {line_number}: {system}")
+        if not isinstance(names, list) or not all(isinstance(name, str) and name.strip() for name in names):
+            raise ValueError(f"labels must be a non-empty list of strings on line {line_number}")
+        labels[(system, code)].update(name.strip() for name in names)
+    return labels
 
 
 def classification_query(namespace: str) -> str:
@@ -52,6 +73,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--endpoint", default=Settings.from_env().virtuoso_endpoint)
     parser.add_argument("--out", type=Path, default=REPO_ROOT / "assets" / "terminology_index.jsonl")
+    parser.add_argument("--english-labels", type=Path, default=DEFAULT_ENGLISH_LABELS)
     args = parser.parse_args()
     labels: dict[tuple[str, str, str], set[str]] = defaultdict(set)
     for system, namespace in CLASSIFICATIONS.items():
@@ -64,6 +86,12 @@ def main() -> None:
         system, namespace = next((s, ns) for s, ns in CONCEPT_SYSTEMS.items() if row["concept"].startswith(ns))
         labels[(row["concept"], row["concept"][len(namespace):], system)].add(row["label"])
     print(f"  concepts used in the data: {len(rows)} labels")
+    english_labels = load_english_labels(args.english_labels)
+    for (system, code), names in english_labels.items():
+        namespace = CLASSIFICATIONS[system]
+        labels[(namespace + code, code, system)].update(names)
+    if english_labels:
+        print(f"  English labels: {sum(len(names) for names in english_labels.values())}")
     args.out.parent.mkdir(parents=True, exist_ok=True)
     with args.out.open("w", encoding="utf-8") as handle:
         for (iri, code, system), names in sorted(labels.items()):
