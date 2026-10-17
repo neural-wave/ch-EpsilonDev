@@ -7,7 +7,7 @@ This guide separates completed local work from real-graph validation. The root [
 | Work | Owner | Status | What the status means |
 | --- | --- | --- | --- |
 | Retrieval, loaders, deterministic behavior, synthetic tests, and local benchmark | You / local contributor | **Complete locally** | Implemented and exercised with synthetic fixtures and checked-in snapshots. |
-| Run final local checks and push/share the branch | You / local contributor | **Before handoff** | Run the commands below on the final working tree, then share the commit SHA and results. |
+| Final local checks and branch handoff | You / local contributor | **Complete** | Focused/full tests and benchmark were rerun; the `guardjudge` branch was pushed. See evidence below. |
 | Dev graph profile, real terminology index, and actual-data evaluation | Santiago | **Pending run-machine access** | No real graph was available in this checkout; these steps have not been verified. |
 | Perf graph measurements | Santiago | **Pending perf access** | No real performance-graph timings have been collected. |
 | Work verified both locally and against real graph data | — | **None yet** | Passing synthetic tests does not establish real-graph compatibility or retrieval quality. |
@@ -26,7 +26,7 @@ The existing real-data integration path is offline: `scripts/profile_data.py` pr
 
 ### Local evidence
 
-**Tested code commit:** `7aca015` (`Refine data and context retrieval`). The focused suite, full suite, and benchmark below were run on this code immediately before the commit. The follow-up commit only records this evidence in the guide.
+**Tested code commit:** `7aca015c48701b70c89eac7c7a7d3d257cbe6d67` (`Refine data and context retrieval`). The focused suite, full suite, and benchmark below were run on this code immediately before the commit. The evidence was recorded in a follow-up guide commit. The pushed branch is `guardjudge`.
 
 ```text
 PYTHONPATH=src .venv311/bin/python -m pytest -q tests/test_context.py
@@ -34,13 +34,16 @@ PYTHONPATH=src .venv311/bin/python -m pytest -q tests/test_context.py
 
 PYTHONPATH=src .venv311/bin/python -m pytest -q
 168 passed, 1 existing Starlette/anyio deprecation warning
+
+PYTHONPATH=src .venv311/bin/python scripts/retrieval_benchmark.py
+14 synthetic cases; 92.9% top-1; 100% top-3 for each of three settings
 ```
 
 The numeric-only synthetic benchmark used 14 fabricated cases. Default and candidate BM25 settings each scored **92.9% top-1** and **100% top-3**; their p50 retrieval latency was **0.0041 ms**, **0.0042 ms**, and **0.0041 ms**. No candidate improved top-1 by the required 5 percentage points, so defaults remain unchanged. Typical and expanded synthetic rendered prompts were **668** and **37,624 characters**. These are local synthetic measurements, not an LLM or real-graph evaluation.
 
-## Remaining work for you — local, no RDF graph required
+## Your local work — complete; no RDF graph required
 
-There is no outstanding local implementation task in the current checklist. Before handing off or pushing, run the final checks against the exact working tree you will share:
+There are no outstanding local implementation or verification tasks in the current checklist. Final checks were run and the branch was pushed. The commands used were:
 
 ```bash
 PYTHONPATH=src .venv311/bin/python -m pytest -q tests/test_context.py
@@ -49,9 +52,9 @@ PYTHONPATH=src .venv311/bin/python scripts/retrieval_benchmark.py
 git diff --check
 ```
 
-- [ ] If any code changes after the recorded evidence, update the test and benchmark results here.
-- [ ] Push/share the branch and provide its actual commit SHA. Do not present the base SHA above as the tested revision.
-- [ ] Do not commit `.env`, generated `assets/` terminology files, graph data, patient-level results, or raw evaluation reports.
+- [x] Reran focused and full tests plus the numeric-only synthetic benchmark after the code changes.
+- [x] Pushed the `guardjudge` branch. The tested code commit is identified above; the evidence-only guide update followed it.
+- [x] Reviewed the committed file list: no `.env`, generated `assets/` terminology files, graph data, patient-level results, or raw evaluation reports were included.
 
 ## Remaining work for Santiago — actual dev RDF graph required
 
