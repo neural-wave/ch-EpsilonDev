@@ -22,6 +22,8 @@
 !data/team_examples.jsonl
 !data/schema_cards.json
 !data/property_kinds.json
+!eval/
+!eval/query_questions.jsonl
 # Exclude generated/private directories even when nested inside an admitted source tree.
 **/node_modules
 **/node_modules/**

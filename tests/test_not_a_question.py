@@ -22,7 +22,8 @@ WEATHER = 'PREFIX sphn: <https://biomedit.ch/rdf/sphn-schema/sphn#>\nSELECT ?dum
     "hey", "Hey!", "heyyy", "hello there", "hi team", "Good morning", "good evening everyone", "hola",
     "thanks", "Thank you so much!", "thx", "ok", "okay", "cool", "yes", "no", "bye", "see you later",
     "how are you?", "hey, how are you?", "Hello! How are you doing today?", "what can you do?", "help",
-    "who are you", "test", "testing", "ping", "what's up", "???", "123", "...", "👋", "  hola  ",
+    "who are you", "test", "testing", "ping", "what's up", "???", "...", "👋", "  hola  ",
+    "thanks so much", "got it", "Danke schön", "merci beaucoup", "is this working?", "how old are you?",
 ])
 def test_small_talk_is_not_a_question(text):
     assert is_small_talk(text)
@@ -33,6 +34,8 @@ def test_small_talk_is_not_a_question(text):
     "test results by sex", "patients by sex", "cholera", "asthma", "How many?", "Which patients have cholera?",
     "thanks, and now split it by year", "ok so how many diagnoses per year", "no cholera patients by age",
     "help me count the patients with diabetes", "What is the average BMI?", "COVID-19 cases in 2021",
+    # Found by an adversarial check: potassium, a leukaemia, a lab test, follow-ups and codes without letters.
+    "K?", "K+", "Hi, K+?", "Hi, ALL?", "no test?", "HI test?", "2020?", "65+", "> 65?", "44054006", "123",
 ])
 def test_data_questions_are_not_small_talk(text):
     assert not is_small_talk(text)

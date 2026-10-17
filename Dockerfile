@@ -22,6 +22,9 @@ RUN python -m pip install --no-cache-dir --no-index --find-links=/wheels nl2spar
 COPY src/ ./src/
 COPY frontend/ ./frontend/
 COPY data/examples.jsonl data/team_examples.jsonl data/schema_cards.json data/property_kinds.json ./data/
+# The 45 dev reference queries are retrieval examples (CONTEXT_DEV_REFERENCES, on by default); without this
+# file they are silently missing from the image. Only its dev rows are read.
+COPY eval/query_questions.jsonl ./eval/query_questions.jsonl
 USER 10001:10001
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
