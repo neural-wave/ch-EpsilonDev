@@ -9,8 +9,8 @@ This guide separates completed local work from real-graph validation. The root [
 | Retrieval, loaders, deterministic behavior, synthetic tests, and local benchmark | You / local contributor | **Complete locally** | Implemented and exercised with synthetic fixtures and checked-in snapshots. |
 | Sanitized RDF profile comparison helper | You / local contributor | **Synthetic tests pass; real profile pending** | The helper is covered with fabricated profile fixtures; it has not been run against an RDF-derived profile. |
 | Final local checks and branch handoff | You / local contributor | **Complete** | The helper’s synthetic tests and full suite pass; the `guardjudge` branch has been pushed. |
-| Dev graph profile, real terminology index, and actual-data evaluation | Santiago | **Pending run-machine access** | No real graph was available in this checkout; these steps have not been verified. |
-| Perf graph measurements | Santiago | **Pending perf access** | No real performance-graph timings have been collected. |
+| Dev graph profile, real terminology index, and actual-data evaluation | Santiago | **Blocked in this checkout** | `.env` is absent and dev port 8890 is closed; no real-graph profile or evaluation was performed. |
+| Perf graph measurements | Santiago | **Blocked in this checkout** | Perf port 8891 is closed; no real performance-graph timings have been collected. |
 | Work verified both locally and against real graph data | — | **None yet** | Passing synthetic tests does not establish real-graph compatibility or retrieval quality. |
 
 The existing real-data integration path is offline: `scripts/profile_data.py` produces local RDF-derived snapshots, and `scripts/build_terminology_index.py` builds a local terminology index. The application reads those files at request time. **Do not add a live Virtuoso connection to `ContextBuilder`, pipeline construction, or `POST /nl-to-sparql`.**
@@ -79,7 +79,7 @@ git diff --check
 
 ## Remaining execution and validation for Santiago — actual dev RDF graph required
 
-**Status:** not run from this checkout. It has no `.env` or generated `assets/` terminology index, and there is no recorded real-graph profile or evaluation. Use the configured run machine and the endpoint/IRIs documented in the root README and [docs/DATA.md](../DATA.md).
+**Current access check (2026-10-17):** `.env` is absent; localhost ports **8890** (dev) and **8891** (perf) are closed. No graph query, profile generation, terminology-index build, or real-data evaluation was run. Continue these steps on Santiago's configured run machine using the endpoint/IRIs documented in the root README and [docs/DATA.md](../DATA.md).
 
 The tools and commands in this section already exist. The open boxes track running them against the real environment, reviewing the results, and making evidence-driven follow-up changes if needed.
 
