@@ -67,7 +67,7 @@ class Settings:
     llm_intent_max_tokens: int = 200
     llm_query_max_tokens: int = 900
     intent_prompt_version: str = "v4"  # won the intent eval on 2026-10-17 (docs/LLM_AGENTS.md section 6)
-    query_prompt_version: str = "v1"
+    query_prompt_version: str = "v2"  # fewer retries and blocked allowed requests than v1 (2026-10-17)
     # Pipeline.
     virtuoso_endpoint: str = "http://localhost:8890/sparql"
     max_input_chars: int = 2000

@@ -206,8 +206,8 @@ nl2sparql/
 |---|---|---|---|---|
 | **A** | Integration | API, orchestrator, factory, config, input check, load test, deployment | `tests/test_pipeline_and_api.py`, `tests/test_input_check.py` | David |
 | **B** | Agents and prompts | `agents/`, `llm.py`, model choice | `tests/test_agents_and_judge.py` | Santiago (models) |
-| **C** | Data and context | `context/`, `scripts/`, `data/`, `infra/`, `virtuoso.py` | `tests/test_context.py` | |
-| **D** | Guard and judge | `guard/`, `judge.py`, `sparql/` | `tests/test_guard.py`, `tests/test_sparql.py` | |
+| **C** | Data and context | `context/`, `scripts/`, `data/`, `infra/`, `virtuoso.py` | `tests/test_context.py` | Santiago |
+| **D** | Guard and judge | `guard/`, `judge.py`, `sparql/` | `tests/test_guard.py`, `tests/test_sparql.py` | Two teammates: judge, compliance guard |
 | **E** | Eval and demo | `eval/`, `demo/`, report and video numbers | `python eval/run_eval.py` | |
 
 **Shared interfaces**: [models.py](src/nl2sparql/models.py) and [agents/base.py](src/nl2sparql/agents/base.py). Change them only after agreeing with the team.
@@ -265,7 +265,7 @@ All settings come from environment variables; `.env.example` lists them. Load th
 | `LLM_INTENT_BASE_URL`, `LLM_INTENT_API_KEY` | shared values | Give the intent agent its own model server |
 | `LLM_INTENT_EXTRA_BODY` | inherits `LLM_EXTRA_BODY` | Request fields for the intent model only; `'{}'` sends none |
 | `LLM_INTENT_MAX_TOKENS`, `LLM_QUERY_MAX_TOKENS` | `200`, `900` | Answer length cap per agent |
-| `INTENT_PROMPT_VERSION`, `QUERY_PROMPT_VERSION` | `v4`, `v1` | Which prompt version each agent uses (see `src/nl2sparql/agents/prompts.py` and docs/LLM_AGENTS.md §6) |
+| `INTENT_PROMPT_VERSION`, `QUERY_PROMPT_VERSION` | `v4`, `v2` | Which prompt version each agent uses (see `src/nl2sparql/agents/prompts.py` and docs/LLM_AGENTS.md §6) |
 | `LLM_TIMEOUT_SECONDS` | `30` | Per LLM call |
 | `LLM_VERIFY_TLS` | `true` | `false` for servers with a self-signed certificate |
 | `LLM_EXTRA_BODY` | empty | JSON merged into every LLM request. For Qwen3.x: `'{"chat_template_kwargs": {"enable_thinking": false}}'` (keep the single quotes) |

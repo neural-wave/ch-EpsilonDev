@@ -71,7 +71,7 @@ Settings come from environment variables (README §7). Each agent has its own:
 | API key | `LLM_INTENT_API_KEY`, falls back to `LLM_API_KEY` | `LLM_API_KEY` |
 | Extra request fields | `LLM_INTENT_EXTRA_BODY`: unset inherits `LLM_EXTRA_BODY`, `'{}'` sends none | `LLM_EXTRA_BODY` |
 | Answer cap | `LLM_INTENT_MAX_TOKENS` (200) | `LLM_QUERY_MAX_TOKENS` (900) |
-| Prompt version | `INTENT_PROMPT_VERSION` (v4) | `QUERY_PROMPT_VERSION` (v1) |
+| Prompt version | `INTENT_PROMPT_VERSION` (v4) | `QUERY_PROMPT_VERSION` (v2) |
 | JSON mode | on | off |
 
 Both agents also share `LLM_TIMEOUT_SECONDS` and `LLM_VERIFY_TLS`, and the temperature is always 0. The console shows the resolved values, with secrets hidden.

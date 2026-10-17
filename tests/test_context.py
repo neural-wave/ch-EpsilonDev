@@ -59,3 +59,28 @@ def test_context_builder_combines_everything():
     context = builder.build("How many patients have a billed diagnosis of cholera, by sex?")
     assert len(context.examples) == 3
     assert any(card.startswith("sphn:BilledDiagnosis") for card in context.schema_cards)
+
+
+def test_terminology_folds_plurals_and_snomed_tags_and_weighs_common_words():
+    index = TerminologyIndex([
+        CodeEntry("http://snomed.info/id/77176002", "77176002", "SNOMED CT", ("Smoker (finding)",)),
+        CodeEntry("http://snomed.info/id/108241001", "108241001", "SNOMED CT", ("Dialysis procedure (procedure)",)),
+        CodeEntry("http://snomed.info/id/371883000", "371883000", "SNOMED CT", ("Outpatient procedure (procedure)",)),
+    ])
+    assert [e.code for e in index.candidates("How many patients are current smokers?")] == ["77176002"]
+    assert [e.code for e in index.candidates("Share of outpatient stays with a billed procedure")] == ["371883000"]
+
+
+def test_schema_cards_show_value_sets_and_rank_question_classes_first(tmp_path):
+    import json
+    value_sets = tmp_path / "value_sets.json"
+    value_sets.write_text(json.dumps({"classes": {
+        "CivilStatus": {"hasCode": [{"value": "snomed:87915002", "label": "Married", "count": 5}]},
+        "AdverseEvent": {"hasOutcome": [{"value": "sphn-individual:Fatal", "label": "Fatal", "count": 3}]},
+    }}))
+    cards = SchemaCards.load(DATA_DIR / "schema_cards.json", value_sets)
+    found = cards.cards_for("What is the civil status breakdown?", k=2,
+                            examples_sparql="?dx a sphn:BilledDiagnosis ; sphn:hasRank ?rank .")
+    assert found[0].startswith("sphn:CivilStatus") and "code typed as one of Married snomed:87915002" in found[0]
+    assert "hasOutcome = one of sphn-individual:Fatal" in cards.render("AdverseEvent")
+    assert cards.cards_for("Patients whose directive says do not resuscitate")[0].startswith("sphn:ResuscitationDirective")

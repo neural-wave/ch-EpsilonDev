@@ -17,7 +17,7 @@ def llm_client(agent: AgentSettings) -> LLMClient:
 
 
 def build_pipeline(settings: Settings, exclude_exact_examples: bool = False) -> Pipeline:
-    schema = SchemaCards.load(settings.data_dir / "schema_cards.json")
+    schema = SchemaCards.load(settings.data_dir / "schema_cards.json", settings.assets_dir / "value_sets.json")
     context_builder = ContextBuilder(
         ExampleBank.load(settings.data_dir / "examples.jsonl"),
         schema,
