@@ -248,6 +248,34 @@ The intent prompt (v4) and the labels in `eval/intent_questions.jsonl` follow th
 
 If module D changes one of them, update both the prompt and the affected labels (group `gray` and their notes), then rerun `python eval/run_intent_eval.py --concurrency 4`. The intent agent and the guard must agree on what is allowed. Otherwise the request text and the query get different verdicts.
 
+### The query agent against reference SPARQL
+
+`python eval/run_query_eval.py --concurrency 4` runs 47 compliant questions through the whole pipeline. That is the 11 official examples, each without its own example in the context, plus 36 questions with a reference query verified on the dev database, split 21 dev / 15 holdout. Both the generated and the reference query then run on the dev Virtuoso, and their results are compared.
+
+**Results (Qwen3.5-9B for both agents, 2026-10-17):**
+
+| | v1 | v2 | v2 + module C | v3 + module C |
+|---|---|---|---|---|
+| Exact result (of 47) | 2 | 2 | 2 | **3** |
+| Query runs on Virtuoso | 62% | 60% | **68%** | **68%** |
+| Valid on the first try | 49% | 57% | 57% | 57% |
+| Allowed questions blocked | 10 | **6** | 10 | 9 |
+| Query agent tokens (median) | 2,593 | 2,711 | 3,159 | 3,383 |
+
+"Module C" means the terminology index plus coded value sets in the schema cards. The codes the reference queries need went from almost none in the context to 96% (dev) and 89% (holdout).
+
+**What limits the query agent now is the model's SPARQL.** On complex questions Qwen3.5-9B writes queries that do not parse, and it does so even when the prompt forbids the construct:
+- `UNION` in the wrong place;
+- unbalanced parentheses;
+- `OVER`;
+- a declared `bif:` prefix.
+
+Six of the nine blocked allowed questions in the last run had such a query, which the guard cannot check, so it answers "not compliant". The other three grouped by patient. One of them (#10, `GROUP BY ?g` inside a subquery that is aggregated afterwards) looks like a guard false alarm, for module D.
+
+**Next:**
+- try a code model for the query agent (see section 7 for how to switch models);
+- better retry hints for syntax errors, from the judge ([SPARQL_LLM_VALIDATOR.md](SPARQL_LLM_VALIDATOR.md)).
+
 ## 7. Changing a model: Apertus for the intent agent
 
 **Why try it:**
