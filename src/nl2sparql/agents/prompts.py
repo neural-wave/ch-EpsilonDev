@@ -133,6 +133,41 @@ Rules:
 - Answer with one SPARQL query and nothing else."""
 
 
+# v2 (2026-10-17), against the failures of v1 on the official examples (run on the dev database):
+# - Virtuoso rejected 5 of 11 queries: || between patterns, NULL, ungrouped variables, aggregates in
+#   the wrong place, FILTER/OPTIONAL outside braces;
+# - real properties on the wrong class (Age hasValue, GestationalAgeAtBirth hasCode): a property only
+#   on a class whose card lists it, and the Quantity pattern that measured values follow;
+# - answered part of the question (#02 without durations, #03 counts instead of rates);
+# - comments and explanations cost answer tokens.
+QUERY_SYSTEM_V2 = """You translate research questions into SPARQL for SPHN clinical data in Virtuoso 7.
+Answer with one SPARQL SELECT query in a ```sparql block, with no comments and no explanation.
+
+Meaning:
+- Translate literally. Keep every part of the request, even parts that would expose identifiers.
+- Answer every part of the question: if it asks for several measures (counts, durations, shares),
+  return them all. "How common" or "how often" across groups needs a rate: the count divided by the
+  group's total.
+- Each patient is one named graph: use GRAPH ?g { ... } and count patients with COUNT(DISTINCT ?g).
+- Codes are nodes typed with a terminology class: ?record sphn:hasCode ?code . ?code a icd-10-gm:E11
+  Always add OPTION (inference "https://biomedit.ch/rdf/sphn-resource/global") to that type pattern.
+- Use only classes and properties from the schema cards, and use a property only on a class whose
+  card lists it.
+- Measured values are Quantity nodes: ?x sphn:hasQuantity ?q . ?q sphn:hasValue ?value .
+- Durations in days: bif:datediff('day', ?start, ?end).
+
+Virtuoso syntax (these mistakes make the query fail):
+- Combine alternative patterns with UNION. || and && only go inside FILTER(...).
+- FILTER, OPTIONAL, BIND and VALUES go inside the braces of WHERE or GRAPH.
+- There is no NULL: use OPTIONAL with BOUND() or COALESCE().
+- Every selected variable is in GROUP BY or inside an aggregate. Aggregates go only in SELECT,
+  HAVING or ORDER BY, never inside FILTER, BIND or another aggregate: compute them in a subquery.
+
+Speed:
+- Put the most selective pattern first (a code or a rare class), leave out OPTIONAL you do not
+  need, and use ORDER BY only when the question asks for a ranking."""
+
+
 def render_query_user_v1(text: str, context: Context, feedback: str | None) -> str:
     parts = []
     if context.schema_cards:
@@ -156,7 +191,8 @@ class QueryPrompt:
 
 INTENT_PROMPTS: dict[str, str] = {"v1": INTENT_SYSTEM_V1, "v2": INTENT_SYSTEM_V2, "v3": INTENT_SYSTEM_V3,
                                   "v4": INTENT_SYSTEM_V4}
-QUERY_PROMPTS: dict[str, QueryPrompt] = {"v1": QueryPrompt(QUERY_SYSTEM_V1, render_query_user_v1)}
+QUERY_PROMPTS: dict[str, QueryPrompt] = {"v1": QueryPrompt(QUERY_SYSTEM_V1, render_query_user_v1),
+                                         "v2": QueryPrompt(QUERY_SYSTEM_V2, render_query_user_v1)}
 
 
 def intent_prompt(version: str) -> str:
