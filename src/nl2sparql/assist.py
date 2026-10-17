@@ -1,14 +1,17 @@
-"""Demo helper outside the judged API: "Did you mean...?" choices for a vague question.
+"""Demo helpers outside the judged API: "Did you mean...?" choices for a vague question, and
+follow-up questions after an answer.
 
-Plain code: no model call, no database. It only proposes new question texts; whatever the user
+Plain code: no model call, no database. They only propose new question texts; whatever the user
 picks goes through the whole pipeline, so every choice is checked by the guard like any other
-request. Nothing here is reachable from POST /nl-to-sparql.
+request. A follow-up is offered only when the data profile (data/schema_cards.json, measured once
+on the data) shows the information it needs. Nothing here is reachable from POST /nl-to-sparql.
 """
 from __future__ import annotations
 
 import re
 from dataclasses import asdict, dataclass
 
+from nl2sparql.context.schema import SchemaCards
 from nl2sparql.context.terminology import ICD_CODE_RE, TerminologyIndex
 
 BLOCK_RE = re.compile(r"^([A-Z])(\d{2})-([A-Z])(\d{2})$")  # a classification block such as E10-E14
@@ -99,3 +102,84 @@ def clarify(text: str, index: TerminologyIndex) -> Clarification | None:
         return Clarification(DID_YOU_MEAN, [Choice(question, question) for question in questions])
     return None
 
+
+
+SEX_RE = re.compile(r"\b(sex|gender|male|female|men|women)\b", re.IGNORECASE)
+AGE_RE = re.compile(r"\b(age|aged|ages|old|older|younger|children|adults?|elderly)\b", re.IGNORECASE)
+TIME_RE = re.compile(r"\b(year|years|yearly|month|since|before|after|between|during|(?:19|20)\d{2})\b", re.IGNORECASE)
+INSURANCE_RE = re.compile(r"\b(insurance|insured|coverage)\b", re.IGNORECASE)
+SUBJECT_RE = re.compile(
+    r"^how many (?P<who>patients|people|hospital stays|stays|cases)\s+(?:have|has|had|got|with)\s+(?P<what>.+)$",
+    re.IGNORECASE,
+)
+DATES = (("BilledDiagnosis", "hasRecordDateTime"), ("AdministrativeCase", "hasAdmissionDateTime"))
+
+
+@dataclass(frozen=True)
+class FollowUp:
+    label: str  # what the button says
+    question: str  # the full question it sends
+    intro: str | None  # the sentence before a split answer; None for a filter, whose answer is one number
+
+
+@dataclass(frozen=True)
+class _Option:
+    label: str
+    phrase: str  # appended to the question
+    split: str | None  # what the answer is split by; None for a filter
+    needs: tuple[tuple[str, str], ...]  # (class, property) pairs, any one of which must be in the data
+    already: re.Pattern  # the question already has this split or filter
+
+
+# Each names the data it needs; the sex phrase asks for words, so the groups are not shown as codes.
+OPTIONS = (
+    _Option("By sex", "split by sex (male, female, indeterminate)", "sex", (("AdministrativeSex", "hasCode"),), SEX_RE),
+    _Option("By age group", "split by age group (under 18, 18 to 64, 65 and over)", "age group",
+            (("Age", "hasQuantity"),), AGE_RE),
+    _Option("By year", "split by year", "year", DATES, TIME_RE),
+    _Option("Only since 2020", "only counting records from 2020 onwards", None, DATES, TIME_RE),
+    _Option("By insurance type", "split by insurance type", "insurance type",
+            (("InsuranceStatus", "hasCoverageType"),), INSURANCE_RE),
+)
+
+
+def _in_data(schema: SchemaCards, cls: str, prop: str) -> bool:
+    card = schema.classes.get(cls) or {}
+    return card.get("patients", 0) > 0 and card.get("properties", {}).get(prop, {}).get("count", 0) > 0
+
+
+def single_count(rows: list[dict]) -> float | None:
+    """The number when the answer is one number, else None."""
+    if len(rows) != 1 or len(rows[0]) != 1:
+        return None
+    try:
+        return float(str(next(iter(rows[0].values()))).replace(",", ""))
+    except ValueError:
+        return None
+
+
+def _subject(base: str) -> str | None:
+    """'How many patients have cholera' -> 'The patients having cholera'; None for other wordings."""
+    match = SUBJECT_RE.match(base)
+    return f"The {match.group('who').lower()} having {match.group('what')}" if match else None
+
+
+def follow_ups(text: str, rows: list[dict], schema: SchemaCards) -> list[FollowUp]:
+    """Ways to break down an answer that is a single number of at least 2: splitting one patient would
+    only describe that patient. Never a split or filter the question already has, and only when the
+    data has the information."""
+    count = single_count(rows)
+    if count is None or count < 2:
+        return []
+    base = _base(text)
+    subject = _subject(base)
+    found = []
+    for option in OPTIONS:
+        if option.already.search(text) or not any(_in_data(schema, cls, prop) for cls, prop in option.needs):
+            continue
+        intro = None
+        if option.split:
+            intro = (f"{subject}, split by {option.split}, are:" if subject
+                     else f'Split by {option.split}, the answer to "{base}" is:')
+        found.append(FollowUp(option.label, f"{base}, {option.phrase}?", intro))
+    return found
