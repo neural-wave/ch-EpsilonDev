@@ -5,7 +5,7 @@ This guide records what is implemented and verified locally, what Santiago needs
 ## Status at a glance
 
 | Area | Status | What the status means |
-|---|---|---|
+| --- | --- | --- |
 | Guard and Judge local implementation | **Done for current offline scope** | Synthetic tests pass, including the R1 classifier wiring and inverse-path regressions. |
 | Local verification | **Passed** | Guard: 68 passed; focused Guard/Judge/SPARQL/pipeline suite: 116 passed; full suite: 133 passed. |
 | Organizer-dependent policy | **Pending** | Do not change behavior for fine-grained grouping, `MIN`/`MAX`, group size, `SERVICE`, or singleton groups until decisions arrive. |
@@ -21,7 +21,7 @@ The **Judge** adds missing prefixes, parses SPARQL (including the supported Virt
 The **Guard** checks the final query and intent flags against R1–R5:
 
 | Rule | Current check |
-|---|---|
+| --- | --- |
 | R1 | Reject identifiable patient targeting, identifier literal lookups, and filters that compare identifier values. |
 | R2 | Reject unaggregated rows and patient- or record-level results. |
 | R3 | Reject unrestricted whole-graph matching. |
