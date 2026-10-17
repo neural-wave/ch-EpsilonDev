@@ -1,33 +1,60 @@
 # NL-to-SPARQL Gateway
 
+![Research question translated into SPARQL and checked for a privacy verdict](docs/readme-hero.svg)
+
 **SIB / SPHN challenge · Neural Wave hackathon 2026 · team master document**
+
+*Research questions in. Privacy-aware SPARQL out.*
 
 A researcher asks a question in English. We translate it into a SPARQL query over SPHN clinical data and decide whether that query respects the privacy rules. Everything sits behind one endpoint, `POST /nl-to-sparql`, uses only open-source models, and never touches a database at request time.
 
 This README is the single source of truth for the team. Read it once end to end before you start, then use the contents to jump around. If you work with an AI coding assistant, it also reads [AGENTS.md](AGENTS.md).
 
-*Last updated: Saturday 17 October 2026, 05:15, after merging modules A, B, C and D. Deadline: **Sunday 18 October, 11:00**.*
+*Team snapshot: Saturday 17 October 2026, 05:15, after merging modules A, B, C and D. Deadline: **Sunday 18 October, 11:00**.*
+
+---
+
+## Start here
+
+| I want to… | Open |
+|---|---|
+| Understand the challenge and privacy rules | [The challenge](#1-the-challenge) → [Jury guidance](#2-what-the-jury-told-us) → [Architecture](#4-architecture-and-design-decisions) |
+| Run the project locally | [Quickstart](#6-getting-started-on-your-computer) → [Configuration](#7-configuration-reference) |
+| Work on a module | [Repository map and owners](#5-repository-map-and-module-owners) → [Module backlog](#13-next-steps-per-module) |
+| Evaluate a change | [Baselines and commands](#11-evaluation-and-baseline-numbers) → [Performance log](docs/PERFORMANCE.md) → [Known pitfalls](#12-things-we-learned-the-hard-way) |
+| Prepare the jury handoff | [Full-system setup](#for-the-jury-the-full-system-on-your-machine) → [Submission checklist](#16-submission-checklist) |
 
 ## Contents
 
-1. [The challenge](#1-the-challenge)
-2. [What the jury told us](#2-what-the-jury-told-us)
-3. [Status today](#3-status-today)
-4. [Architecture and design decisions](#4-architecture-and-design-decisions)
-5. [Repository map and module owners](#5-repository-map-and-module-owners)
-6. [Getting started on your computer](#6-getting-started-on-your-computer)
-7. [Configuration reference](#7-configuration-reference)
-8. [The LLM on the GPU](#8-the-llm-on-the-gpu)
-9. [The run machine](#9-the-run-machine)
-10. [The knowledge base and the data files](#10-the-knowledge-base-and-the-data-files)
-11. [Evaluation and baseline numbers](#11-evaluation-and-baseline-numbers)
-12. [Things we learned the hard way](#12-things-we-learned-the-hard-way)
-13. [Next steps per module](#13-next-steps-per-module)
-14. [Questions for the organizers](#14-questions-for-the-organizers)
-15. [Team rules](#15-team-rules)
-16. [Submission checklist](#16-submission-checklist)
-17. [Glossary](#17-glossary)
-18. [Team](#18-team)
+**Understand the project**
+
+- [01 · The challenge](#1-the-challenge)
+- [02 · What the jury told us](#2-what-the-jury-told-us)
+- [03 · Status today](#3-status-today)
+- [04 · Architecture and design decisions](#4-architecture-and-design-decisions)
+- [05 · Repository map and module owners](#5-repository-map-and-module-owners)
+
+**Build and operate**
+
+- [06 · Getting started on your computer](#6-getting-started-on-your-computer)
+- [07 · Configuration reference](#7-configuration-reference)
+- [08 · The LLM on the GPU](#8-the-llm-on-the-gpu)
+- [09 · The run machine](#9-the-run-machine)
+- [10 · The knowledge base and the data files](#10-the-knowledge-base-and-the-data-files)
+
+**Measure and improve**
+
+- [11 · Evaluation and baseline numbers](#11-evaluation-and-baseline-numbers)
+- [12 · Things we learned the hard way](#12-things-we-learned-the-hard-way)
+- [13 · Next steps per module](#13-next-steps-per-module)
+
+**Coordinate and deliver**
+
+- [14 · Questions for the organizers](#14-questions-for-the-organizers)
+- [15 · Team rules](#15-team-rules)
+- [16 · Submission checklist](#16-submission-checklist)
+- [17 · Glossary](#17-glossary)
+- [18 · Team](#18-team)
 
 ---
 
@@ -93,6 +120,8 @@ Feedback on our design, 16 October:
 - They liked the overall plan.
 
 ## 3. Status today
+
+> **Reading this snapshot:** the table records the merged system early on 17 October. Later measurements and fixes from the same day are in [section 11](#11-evaluation-and-baseline-numbers) and the [performance log](docs/PERFORMANCE.md).
 
 | Area | State |
 |---|---|
@@ -178,6 +207,8 @@ A visual version with module letters and a "who works where" panel lives on the 
 
 ## 5. Repository map and module owners
 
+### Project structure
+
 ```
 nl2sparql/
 ├── README.md                     this document
@@ -209,19 +240,24 @@ nl2sparql/
 │                                 value sets, profile comparison, retrieval benchmark, runbox (C)
 ├── infra/virtuoso/               how to run the two Virtuoso databases                    (C)
 ├── eval/                         labeled questions and the evals: pipeline, intent, query (E)
+├── frontend/                     SIB DOC console: static HTML, CSS and JavaScript         (E)
 ├── tests/                        unit tests, one file per module
 └── docs/                         guides per module, design spec, implementation plan
 ```
 
+### Ownership
+
 | | Module | Owns | Tests | Owner |
 |---|---|---|---|---|
-| **A** | Integration | API, orchestrator, factory, config, input check, load test, deployment | `tests/test_pipeline_and_api.py`, `tests/test_input_check.py` | David |
-| **B** | Agents and prompts | `agents/`, `llm.py`, model choice | `tests/test_agents_and_judge.py` | Santiago |
-| **C** | Data and context | `context/`, `scripts/`, `data/`, `infra/`, `virtuoso.py` | `tests/test_context.py` | Santiago (Adrika hardened the loaders and retrieval) |
-| **D** | Guard and judge | `guard/`, `judge.py`, `sparql/` | `tests/test_guard.py`, `tests/test_sparql.py` | Adrika (judge), Gayathri (compliance guard) |
-| **E** | Eval and demo | `eval/`, `demo/`, report and video numbers | `python eval/run_eval.py` | |
+| **[A](#a--integration-david)** | Integration | API, orchestrator, factory, config, input check, load test, deployment | `tests/test_pipeline_and_api.py`, `tests/test_input_check.py` | David |
+| **[B](#b--agents-and-prompts-santiago)** | Agents and prompts | `agents/`, `llm.py`, model choice | `tests/test_agents_and_judge.py` | Santiago |
+| **[C](#c--data-and-context-santiago)** | Data and context | `context/`, `scripts/`, `data/`, `infra/`, `virtuoso.py` | `tests/test_context.py` | Santiago (Adrika hardened the loaders and retrieval) |
+| **[D](#d--guard-and-judge-adrika-gayathri)** | Guard and judge | `guard/`, `judge.py`, `sparql/` | `tests/test_guard.py`, `tests/test_sparql.py` | Adrika (judge), Gayathri (compliance guard) |
+| **[E](#e--eval-and-demo)** | Eval and demo | `eval/`, `demo/`, `frontend/`, report and video numbers | `python eval/run_eval.py` | Odinaka (frontend) |
 
 **Shared interfaces**: [models.py](src/nl2sparql/models.py) and [agents/base.py](src/nl2sparql/agents/base.py). Change them only after agreeing with the team.
+
+### Further reading
 
 **Guides per topic:**
 - [docs/DATA.md](docs/DATA.md): how the patient graphs look, with examples. For everyone.
@@ -231,9 +267,14 @@ nl2sparql/
 - [docs/SPARQL_LLM_VALIDATOR.md](docs/SPARQL_LLM_VALIDATOR.md): SIB's sparql-llm validator, evaluated offline, and the Virtuoso-only errors the judge could catch. For module D.
 - [docs/LLM_AGENTS.md](docs/LLM_AGENTS.md): the two LLM agents, their configuration, how to measure them, how to change a prompt or a model, and their backlog. For module B.
 - [docs/FRONTEND.md](docs/FRONTEND.md): the endpoint the user interface calls, its fields and the rules the page must keep. For module E.
+- [frontend/README.md](frontend/README.md): how to run the SIB DOC console with the API, a proxy or built-in fixtures. For module E.
 - [docs/PERFORMANCE.md](docs/PERFORMANCE.md): how we measure, the scoreboard of every measured run, where the time and tokens go, and the levers. For everyone who changes anything.
 
+[↑ Back to contents](#contents)
+
 ## 6. Getting started on your computer
+
+### Local quickstart
 
 You need Python 3.11 or newer. You do **not** need Virtuoso or a GPU to work on the code.
 
@@ -245,6 +286,8 @@ cp .env.example .env
 python -m pytest -q                 # all tests should pass
 python -m nl2sparql --port 8080     # API + demo with the stand-in agents (no model)
 ```
+
+### Smoke check
 
 In a second terminal, check that the process is serving requests:
 
@@ -273,6 +316,10 @@ The judged API needs a model server; everything else is in this repository. Four
 4. **Run.** `python -m nl2sparql --port 8080`, then `POST http://localhost:8080/nl-to-sparql` with `{"text": "..."}` as in [section 1](#1-the-challenge).
 
 The committed `data/` snapshots describe the mock data as released. If your graph differs, `python scripts/profile_data.py` rebuilds them in about three minutes (`--cards-only` rebuilds the cards alone in one).
+
+### Consoles and demo
+
+**SIB DOC console:** <http://localhost:8080/console/cli/> is the main user interface; <http://localhost:8080/> redirects there. It is served by the API without a separate build step. See [frontend/README.md](frontend/README.md) for standalone and mock modes.
 
 **Agents console:** <http://localhost:8080/agents> shows the full configuration of both agents and their prompts. It can:
 - preview exactly what each model would receive for a question, without calling any model;
@@ -315,6 +362,8 @@ All settings come from environment variables; `.env.example` lists them. Load th
 
 ## 8. The LLM on the GPU
 
+### Model and hosting
+
 | | |
 |---|---|
 | Provider | Vast.ai, on-demand instance rented by Santiago (about $100 of credit) |
@@ -325,6 +374,8 @@ All settings come from environment variables; `.env.example` lists them. Load th
 | Both agents | Same model, different prompts. Separate it only if the eval says so |
 
 **Turn thinking off.** Qwen3.5 thinks by default. In our first test it spent its whole 600-token budget reasoning and returned nothing (7 s). With thinking off it answered in 1.2 s with 47 tokens. Always set `LLM_EXTRA_BODY='{"chat_template_kwargs": {"enable_thinking": false}}'`.
+
+### Access and operations
 
 **How to reach it.**
 
@@ -339,6 +390,8 @@ All settings come from environment variables; `.env.example` lists them. Load th
 4. Start them again with `supervisorctl start vllm model-ui`.
 
 The full procedure is in [docs/LLM_AGENTS.md](docs/LLM_AGENTS.md). vLLM listens on `127.0.0.1:18000`; Caddy in front adds token auth. Do not add `--api-key` to vLLM.
+
+### Model comparison
 
 **Models compared on 17 October** (query eval: 47 questions with a reference SPARQL; intent eval: 198 questions):
 
@@ -356,6 +409,8 @@ A bigger model did not improve the SPARQL; it only changed speed. `swiss-ai/Aper
 
 We run everything heavy on one computer, **Santiago's laptop**. It has the two Virtuoso databases, the GPU tunnel and the demo. Everyone else codes on their own computer and pushes branches.
 
+### Services
+
 | Service | Where | Notes |
 |---|---|---|
 | Colima (Docker VM) | — | 12 CPUs, 28 GB RAM, 200 GB disk |
@@ -363,6 +418,8 @@ We run everything heavy on one computer, **Santiago's laptop**. It has the two V
 | Virtuoso **perf** | `http://localhost:8891/sparql` | 100,000 patients, container `virtuoso-perf` |
 | GPU tunnel | `localhost:18000` | Reconnects by itself |
 | API + demo | `http://localhost:8080` | Runs `main` with the LLM backend |
+
+### Runbox controls
 
 The control panel is [scripts/runbox.sh](scripts/runbox.sh):
 
@@ -382,17 +439,23 @@ scripts/runbox.sh eval --execute --branch guard/my-fix     # eval with the LLM +
 
 ## 10. The knowledge base and the data files
 
+### Graph model
+
 **How the data is organized in Virtuoso:**
 
 - **One patient = one named graph**, e.g. `http://example.org/graph/gen_mock_data-1_1012502`. Count patients with `COUNT(DISTINCT ?g)`. Exposing `?g` exposes the patient.
 - **The ontologies** (the SPHN schema plus ICD-10-GM, CHOP, SNOMED CT, LOINC, UCUM, ORDO, GENO, SO and OBI, 13.0M triples) are loaded into one graph, `https://biomedit.ch/rdf/sphn-resource/global`, which is also the RDFS inference rule set.
 - **A code is a node typed with a terminology class**: `?dx sphn:hasCode ?code . ?code a icd-10-gm:E11`. Codes in the data carry a year (`icd-10-gm/2022/A00.1`), so matching them needs `OPTION (inference "https://biomedit.ch/rdf/sphn-resource/global")` on that pattern.
 
+### Databases
+
 **The two databases:**
 
 - **Dev:** 10.8M patient triples. Ontologies load in about 4 minutes; patients in 14 s.
 - **Perf:** 611.7M patient triples. Loading took 79 minutes.
 - Setup is in [infra/virtuoso/README.md](infra/virtuoso/README.md). Always query over HTTP: the release's `query.sh` (isql) rejects some valid SPARQL.
+
+### Data catalog
 
 **Data files** (all built from the dev database, none containing terminology content):
 
@@ -415,11 +478,17 @@ The terminology-index builder also reads the optional local file
 `{"system": "ICD-10-GM"|"CHOP", "code": "...", "labels": ["..."]}`.
 This file and the generated index are restricted and must never be committed.
 
+### Retrieval behavior
+
 A question word matches a label on its own only when it is the whole label or the index shows the other words go with it (co-occurrence in at least 75% of at least two independent entries): "diabetes" finds "Diabetes mellitus", "hospital" no longer finds "Death in hospital". The subcodes of a matched code follow it (A00 → A00.0, A00.1, A00.9).
 
 Every example record carries a `shape` tag (`plain`, `conditional_count`, `two_cohort`, `breakdown`; `scripts/import_examples.py` keeps them). BM25 cannot see shapes, so `ExampleBank.search` puts one `conditional_count` example in the last context slot when the question says how often / how many of / share / percentage / proportion / what fraction / what usually happens, and one `two_cohort` example for than other patients / compared with / versus.
 
+[↑ Back to contents](#contents)
+
 ## 11. Evaluation and baseline numbers
+
+### Evaluation commands
 
 Four evals, all run on the run machine (`set -a && source .env && set +a` first):
 
@@ -431,6 +500,8 @@ python eval/run_query_eval.py --concurrency 4         # the query agent against 
 python eval/run_query_eval.py --rescore eval/reports/query-<date>.json   # execute again, no model calls
 ```
 
+### Questions and methodology
+
 **Questions:**
 - **31 shared:** the 16 official examples (`data/examples.jsonl`) plus 15 team questions ([eval/questions.jsonl](eval/questions.jsonl)).
 - **198 labeled:** the 31 above plus 167 intent cases ([eval/intent_questions.jsonl](eval/intent_questions.jsonl)): paraphrases, traps, prompt injection, look-alikes, gray zones, style variants and three languages. 125 of them were written by an agent that never saw our prompts.
@@ -440,6 +511,8 @@ python eval/run_query_eval.py --rescore eval/reports/query-<date>.json   # execu
 - **Splits.** Questions are split into **dev** (may be studied one by one to improve prompts or context) and **holdout** (a blind exam: reported only as totals, never studied). The holdout numbers are our best guess for the jury's hidden list.
 - **Fair test.** An official question never sees its own example in the context.
 - **Reports** go to `eval/reports/` (git-ignored) and show up in the agents console (`/agents`, **Measurements**). [docs/LLM_AGENTS.md](docs/LLM_AGENTS.md) explains every field.
+
+### Pipeline results
 
 **Whole pipeline, 31 shared questions, one at a time:**
 
@@ -460,6 +533,8 @@ python eval/run_query_eval.py --rescore eval/reports/query-<date>.json   # execu
 
 Two identical runs differ by up to 4 holdout points (2 of 49 questions), so a change is judged on all 198 and on which questions flip; the three runs of the fixed system gave 87.8 / 91.8 / 93.9% on the holdout and 96.6 / 95.3 / 97.3% on dev. The full log with every run of the day is [docs/PERFORMANCE.md](docs/PERFORMANCE.md); the case-by-case analysis behind the fixes is [docs/FAILURE_ANALYSIS.md](docs/FAILURE_ANALYSIS.md).
 
+### Agent and load results
+
 **Per agent (17 October):**
 - **Intent agent (prompt v4), holdout:** 93% of forbidden requests detected, 5% false alarms, resists prompt injection, 631 tokens per call; identical numbers in three runs.
 - **Query agent (prompt v4, 1,500-token cap), 87 reference questions, before and after the fixes (run 3):**
@@ -470,6 +545,8 @@ Two identical runs differ by up to 4 holdout points (2 of 49 questions), so a ch
 - **Load test (17 October):** 32 requests, 8 at a time, against the API with the real model: all HTTP 200, p50 3.7 s, p95 11.2 s, 1.33 requests per second, 2,873 tokens on average.
 
   Of the 13 compliant queries in the 31-question run, 8 return rows, 2 return nothing and 3 fail in Virtuoso.
+
+### Blocked requests and query timing
 
 **Why allowed requests end up blocked (dev, 12):**
 
@@ -495,6 +572,8 @@ Two identical runs differ by up to 4 holdout points (2 of 49 questions), so a ch
 | #10 preterm births | 0.15 s | > 30 min (timeout) |
 
 Query performance is a major lever: even the organizers' own queries can take minutes at 100k patients on this machine.
+
+[↑ Back to contents](#contents)
 
 ## 12. Things we learned the hard way
 
@@ -529,29 +608,38 @@ Query performance is a major lever: even the organizers' own queries can take mi
 
 Most useful first. Measure every change with the evals in [section 11](#11-evaluation-and-baseline-numbers) and compare with the numbers there.
 
-**A · Integration** (David)
+### A · Integration (David)
+
 - The load test ran on 17 October (section 11). Repeat it after any change to the orchestrator.
 - The organizers run our repository on their machine ([section 6, "For the jury"](#for-the-jury-the-full-system-on-your-machine)). Still open: whether their machine serves the model or calls ours; ask them, and hand over our endpoint and token with the submission if needed.
 - Install from scratch in a clean environment, then run the tests and the HTTP smoke checks in [section 6](#6-getting-started-on-your-computer).
 
-**B · Agents and prompts** (Santiago). Full backlog in [docs/LLM_AGENTS.md](docs/LLM_AGENTS.md#9-backlog-for-module-b-most-useful-first).
+### B · Agents and prompts (Santiago)
+
+Full backlog in [docs/LLM_AGENTS.md](docs/LLM_AGENTS.md#9-backlog-for-module-b-most-useful-first).
+
 - Two answers (#01, #08) are still cut off at 1,500 tokens: those questions need a shorter query shape, not a bigger cap.
 - Five allowed reference questions are still blocked; the query eval report shows each query and reason.
 - Fix the intent false alarm on counts that mention identifiers.
 
-**C · Data and context** (Santiago)
+### C · Data and context (Santiago)
+
 - Add the 21 dev reference queries to the example bank. Measure only on the holdout.
 - Add English labels for ICD-10-GM and CHOP codes (`assets/english_terminology_labels.jsonl`; the builder already reads it). An alias layer covers the codes the examples use (therapeutic ultrasound, cholera and its subcodes, E11); the rest of the labels are German and French.
 - Set a server-side query timeout in dev Virtuoso, so evals cannot saturate it.
 
-**D · Guard and judge** (Adrika, Gayathri)
+### D · Guard and judge (Adrika, Gayathri)
+
 - gen-106 (a graph-name filter marked compliant) was a retry-policy leak, fixed on 17 October: an R1 violation is never retried. Two holdout leaks remain unexamined on purpose.
 - Catch Virtuoso-only errors in code before the guard. The patterns are in [docs/SPARQL_LLM_VALIDATOR.md](docs/SPARQL_LLM_VALIDATOR.md). Consider SIB's validator, offline.
 - Check whether `GROUP BY ?g` inside a subquery that is aggregated afterwards is a false alarm (official #10).
 
-**E · Eval and demo**
+### E · Eval and demo
+
 - Build a 10-run timing harness on perf: query performance is a main criterion.
 - Polish the demo and prepare the numbers for the report and the video.
+
+[↑ Back to contents](#contents)
 
 ## 14. Questions for the organizers
 
