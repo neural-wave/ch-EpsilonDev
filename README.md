@@ -290,7 +290,7 @@ All settings come from environment variables; `.env.example` lists them. Load th
 | `LLM_INTENT_BASE_URL`, `LLM_INTENT_API_KEY` | shared values | Give the intent agent its own model server |
 | `LLM_INTENT_EXTRA_BODY` | inherits `LLM_EXTRA_BODY` | Request fields for the intent model only; `'{}'` sends none |
 | `LLM_INTENT_MAX_TOKENS`, `LLM_QUERY_MAX_TOKENS` | `200`, `1500` | Answer length cap per agent. Tokens are spent only when the answer needs them |
-| `INTENT_PROMPT_VERSION`, `QUERY_PROMPT_VERSION` | `v4`, `v2` | Which prompt version each agent uses (see `src/nl2sparql/agents/prompts.py` and docs/LLM_AGENTS.md §6) |
+| `INTENT_PROMPT_VERSION`, `QUERY_PROMPT_VERSION` | `v4`, `v4` | Which prompt version each agent uses (see `src/nl2sparql/agents/prompts.py` and docs/LLM_AGENTS.md §6) |
 | `LLM_TIMEOUT_SECONDS` | `30` | Per LLM call |
 | `LLM_VERIFY_TLS` | `true` | `false` for servers with a self-signed certificate |
 | `LLM_EXTRA_BODY` | empty | JSON merged into every LLM request. For Qwen3.x: `'{"chat_template_kwargs": {"enable_thinking": false}}'` (keep the single quotes) |
@@ -443,10 +443,12 @@ python eval/run_query_eval.py --rescore eval/reports/query-<date>.json   # execu
 
 **Per agent (17 October):**
 - **Intent agent (prompt v4), holdout:** 93% of forbidden requests detected, 5% false alarms, resists prompt injection, 631 tokens per call.
-- **Query agent (prompt v2), 47 reference questions:**
-  - 2 return exactly the reference result;
-  - 64% run on Virtuoso;
-  - 57% are valid on the first try.
+- **Query agent (prompt v4, 1,500-token cap), 47 reference questions:**
+  - 3 return exactly the reference result;
+  - 77% run on Virtuoso (87% on the holdout), up from 64% with prompt v2;
+  - 57% are valid on the first try;
+  - 5 allowed questions end up blocked, down from 10 with prompt v2.
+- **Load test (17 October):** 32 requests, 8 at a time, against the API with the real model: all HTTP 200, p50 3.7 s, p95 11.2 s, 1.33 requests per second, 2,873 tokens on average.
 
   Of the 13 compliant queries in the 31-question run, 8 return rows, 2 return nothing and 3 fail in Virtuoso.
 
@@ -504,19 +506,13 @@ Query performance is a major lever: even the organizers' own queries can take mi
 Most useful first. Measure every change with the evals in [section 11](#11-evaluation-and-baseline-numbers) and compare with the numbers there.
 
 **A · Integration** (David)
-- Run the HTTP load test against the LLM backend. It is safe to run now that parsing is thread-safe. Record `invalid_or_failed`, p50/p95 latency, throughput and mean tokens.
-
-  ```bash
-  python -m nl2sparql.load_test --url http://localhost:8080 \
-    --questions eval/questions.jsonl --requests 32 --concurrency 8 --require-llm
-  ```
-
-- Decide where the API runs during judging and how it reaches the model. This depends on the organizers' answer in [section 14](#14-questions-for-the-organizers).
+- The load test ran on 17 October (section 11). Repeat it after any change to the orchestrator.
+- The organizers run our repository on their machine ([section 6, "For the jury"](#for-the-jury-the-full-system-on-your-machine)). Still open: whether their machine serves the model or calls ours; ask them, and hand over our endpoint and token with the submission if needed.
 - Install from scratch in a clean environment, then run the tests and the HTTP smoke checks in [section 6](#6-getting-started-on-your-computer).
 
 **B · Agents and prompts** (Santiago). Full backlog in [docs/LLM_AGENTS.md](docs/LLM_AGENTS.md#9-backlog-for-module-b-most-useful-first).
-- Raise `LLM_QUERY_MAX_TOKENS` from 900 to about 1,500. Six requests had an answer cut off.
-- Write query prompt v4: group by the concept class (`?c a ?concept`), never by the code node.
+- Two answers (#01, #08) are still cut off at 1,500 tokens: those questions need a shorter query shape, not a bigger cap.
+- Five allowed reference questions are still blocked; the query eval report shows each query and reason.
 - Fix the intent false alarm on counts that mention identifiers.
 
 **C · Data and context** (Santiago)

@@ -71,7 +71,7 @@ Settings come from environment variables (README §7). Each agent has its own:
 | API key | `LLM_INTENT_API_KEY`, falls back to `LLM_API_KEY` | `LLM_API_KEY` |
 | Extra request fields | `LLM_INTENT_EXTRA_BODY`: unset inherits `LLM_EXTRA_BODY`, `'{}'` sends none | `LLM_EXTRA_BODY` |
 | Answer cap | `LLM_INTENT_MAX_TOKENS` (200) | `LLM_QUERY_MAX_TOKENS` (1500) |
-| Prompt version | `INTENT_PROMPT_VERSION` (v4) | `QUERY_PROMPT_VERSION` (v2) |
+| Prompt version | `INTENT_PROMPT_VERSION` (v4) | `QUERY_PROMPT_VERSION` (v4) |
 | JSON mode | on | off |
 
 Both agents also share `LLM_TIMEOUT_SECONDS` and `LLM_VERIFY_TLS`, and the temperature is always 0. The console shows the resolved values, with secrets hidden.
@@ -254,15 +254,15 @@ If module D changes one of them, update both the prompt and the affected labels 
 
 **Results (Qwen3.5-9B for both agents, 2026-10-17):**
 
-| | v1 | v2 | v2 + module C | v3 + module C |
-|---|---|---|---|---|
-| Exact result (of 47) | 2 | 2 | 2 | **3** |
-| Query runs on Virtuoso | 62% | 60% | **68%** | **68%** |
-| Valid on the first try | 49% | 57% | 57% | 57% |
-| Allowed questions blocked | 10 | **6** | 10 | 9 |
-| Query agent tokens (median) | 2,593 | 2,711 | 3,159 | 3,383 |
+| | v1 | v2 | v2 + module C | v3 + module C | **v4 + C, 1,500 cap** |
+|---|---|---|---|---|---|
+| Exact result (of 47) | 2 | 2 | 2 | 3 | **3** |
+| Query runs on Virtuoso | 62% | 60% | 68% | 68% | **77%** (holdout 87%) |
+| Valid on the first try | 49% | 57% | 57% | 57% | 57% |
+| Allowed questions blocked | 10 | 6 | 10 | 9 | **5** |
+| Query agent tokens (median) | 2,593 | 2,711 | 3,159 | 3,383 | 3,369 |
 
-"Module C" means the terminology index plus coded value sets in the schema cards. The codes the reference queries need went from almost none in the context to 96% (dev) and 89% (holdout).
+"Module C" means the terminology index plus coded value sets in the schema cards. The last column was measured on the merged system (17 October, 13:00); v4 adds "group by the concept class, never by the code node" and "one short SELECT", and the answer cap went from 900 to 1,500 tokens. It is the default: it halves the blocked allowed questions without a loss elsewhere, for 7% more query tokens. #01 and #08 are still cut off at 1,500. The codes the reference queries need went from almost none in the context to 96% (dev) and 89% (holdout).
 
 **What limits the query agent now is the model's SPARQL.** On complex questions Qwen3.5-9B writes queries that do not parse, and it does so even when the prompt forbids the construct:
 - `UNION` in the wrong place;
