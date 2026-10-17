@@ -216,6 +216,7 @@ nl2sparql/
 
 **Guides per topic:**
 - [docs/DATA.md](docs/DATA.md): how the patient graphs look, with examples. For everyone.
+- [docs/data-and-context/README.md](docs/data-and-context/README.md): context module checklist, split between local tests and real-graph validation.
 - [docs/GUARD.md](docs/GUARD.md): how the compliance guard works, its tools and its backlog. For module D.
 
 ## 6. Getting started on your computer

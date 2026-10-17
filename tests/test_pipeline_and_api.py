@@ -60,7 +60,8 @@ def test_compliant_request_end_to_end():
 def test_pipeline_rejects_empty_profile_snapshots(tmp_path, snapshot_name, payload):
     (tmp_path / "examples.jsonl").write_text("", encoding="utf-8")
     (tmp_path / "schema_cards.json").write_text(
-        '{"classes": {"Example": {"properties": {}}}, "schema_terms": ["Example"]}',
+        '{"classes": {"Example": {"instances": 1, "patients": 1, "properties": {}}}, '
+        '"schema_terms": ["Example"]}',
         encoding="utf-8",
     )
     (tmp_path / "property_kinds.json").write_text(
@@ -84,6 +85,31 @@ def test_pipeline_rejects_malformed_profile_snapshot(tmp_path):
         encoding="utf-8",
     )
     with pytest.raises(ValueError, match="Could not load RDF profile snapshots"):
+        build_pipeline(Settings(data_dir=tmp_path, assets_dir=tmp_path, log_path=None))
+
+
+@pytest.mark.parametrize("filename,payload", [
+    ("examples.jsonl", "{bad json}\n"),
+    ("terminology_index.jsonl", '{"iri": "x"}\n'),
+])
+def test_pipeline_reports_malformed_optional_context_file(tmp_path, filename, payload):
+    (tmp_path / "examples.jsonl").write_text("", encoding="utf-8")
+    (tmp_path / "schema_cards.json").write_text(
+        '{"classes": {"Example": {"instances": 1, "patients": 1, "properties": {}}}, '
+        '"schema_terms": ["Example"]}',
+        encoding="utf-8",
+    )
+    (tmp_path / "property_kinds.json").write_text(
+        '{"https://example.test/property": {"kind": "literal", "count": 1}}',
+        encoding="utf-8",
+    )
+    if filename == "examples.jsonl":
+        (tmp_path / filename).write_text(payload, encoding="utf-8")
+        (tmp_path / "terminology_index.jsonl").write_text("", encoding="utf-8")
+    else:
+        (tmp_path / "examples.jsonl").write_text("", encoding="utf-8")
+        (tmp_path / filename).write_text(payload, encoding="utf-8")
+    with pytest.raises(ValueError, match=rf"{tmp_path / filename}"):
         build_pipeline(Settings(data_dir=tmp_path, assets_dir=tmp_path, log_path=None))
 
 

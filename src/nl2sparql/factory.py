@@ -12,10 +12,20 @@ from nl2sparql.orchestrator import Pipeline
 
 def build_pipeline(settings: Settings, exclude_exact_examples: bool = False) -> Pipeline:
     schema, property_kinds = _load_profile_snapshots(settings.data_dir)
+    examples_path = settings.data_dir / "examples.jsonl"
+    terminology_path = settings.assets_dir / "terminology_index.jsonl"
+    try:
+        examples = ExampleBank.load(examples_path)
+    except (OSError, TypeError, ValueError) as error:
+        raise ValueError(f"Could not load context file {examples_path}: {error}") from error
+    try:
+        terminology = TerminologyIndex.load(terminology_path)
+    except (OSError, TypeError, ValueError) as error:
+        raise ValueError(f"Could not load context file {terminology_path}: {error}") from error
     context_builder = ContextBuilder(
-        ExampleBank.load(settings.data_dir / "examples.jsonl"),
+        examples,
         schema,
-        TerminologyIndex.load(settings.assets_dir / "terminology_index.jsonl"),
+        terminology,
         exclude_exact_examples=exclude_exact_examples,
     )
     if settings.backend == "llm":

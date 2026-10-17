@@ -19,6 +19,11 @@ def fold(text: str) -> str:
     return "".join(ch for ch in decomposed if not unicodedata.combining(ch))
 
 
+def normalize_text(text: str) -> str:
+    """Fold case and accents and collapse whitespace for exact-text comparisons."""
+    return " ".join(fold(text).split())
+
+
 def tokenize(text: str) -> list[str]:
     return [token for token in TOKEN_RE.findall(fold(text)) if token not in STOPWORDS]
 
