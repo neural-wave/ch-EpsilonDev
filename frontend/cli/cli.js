@@ -243,8 +243,8 @@
   };
   const STAGE_LABEL = { retrieve: "retrieve", template: "template", llm: "model", validate: "validate", compliance: "rules" };
 
-  async function ask(question) {
-    if (live) return askLive(question);
+  async function ask(question, opts = {}) {
+    if (live) return askLive(question, opts);
     const e = entry("ask", question);
     const p = add(e, '<div class="progress">starting</div>');
     const t0 = performance.now();
@@ -312,12 +312,17 @@
     return s.replace(/^.*[\/#]/, "");
   }
 
+  // "1 patient matches", "767 patients match": the count decides singular or plural.
+  const isOne = (v) => Number(String(v).replace(/,/g, "")) === 1;
+  const patientsWord = (v) => (isOne(v) ? "patient" : "patients");
+
   function sentence(question, res, result, fixture) {
     if (fixture && fixture.answer && result) return fixture.answer.replace("{0}", result.rows[0] ? result.rows[0][0] : "");
     if (!result || !result.rows.length) return "The query ran but returned no rows.";
     if (result.rows.length === 1 && result.columns.length === 1) {
+      const v = result.rows[0][0];
       const term = KNOWN_TERMS.find((t) => question.toLowerCase().includes(t));
-      return term ? `${result.rows[0][0]} patients have ${term}.` : `${result.rows[0][0]} patients match.`;
+      return term ? `${v} ${patientsWord(v)} ${isOne(v) ? "has" : "have"} ${term}.` : `${v} ${patientsWord(v)} ${isOne(v) ? "matches" : "match"}.`;
     }
     return `${result.rows.length} groups. The largest is ${readable(result.rows[0][0], res.trace && res.trace.candidate_codes)} with ${result.rows[0][1]}.`;
   }
@@ -480,8 +485,15 @@
     });
   }
 
-  async function askLive(question) {
+  // opts.final: the question came from a "Did you mean" choice or a follow-up, so it is not checked again.
+  // opts.intro: a follow-up's sentence for its split answer.
+  async function askLive(question, opts = {}) {
     const e = entry("ask", question);
+    if (!opts.final) {
+      let c = null;
+      try { c = await SQ.backend.clarify(question); } catch (err) { c = null; } // an older backend: just ask
+      if (c && c.choices && c.choices.length) { reportClarify(e, c); return; }
+    }
     const stop = thinking(e);
     const from = e.children.length - 1; // first child added after the loader
     try {
@@ -491,7 +503,7 @@
       }
       stop();
       last = { question, res: d };
-      reportLive(e, question, d);
+      reportLive(e, question, d, opts);
       e.dataset.hid = remember(question, d.is_compliant ? "allow" : "block", d);
       if (!d.is_compliant) rejectPending = true;
     } catch (err) {
@@ -508,7 +520,7 @@
     if (rows.length === 1 && d.columns.length === 1) {
       const v = rows[0][0];
       const col = d.columns[0];
-      return /^(count|countresult|n|total|patients?)$/i.test(col) ? `${nice(v)} patients match.` : `${nice(v)} ${humanCol(col)}.`;
+      return /^(count|countresult|n|total|patients?)$/i.test(col) ? `${nice(v)} ${patientsWord(v)} ${isOne(v) ? "matches" : "match"}.` : `${nice(v)} ${humanCol(col)}.`;
     }
     return `${rows.length} ${rows.length === 1 ? "row" : "groups"}. The first is ${rows[0][0]}${rows[0].length > 1 ? `, with ${nice(rows[0][1])} ${humanCol(d.columns[1])}` : ""}.`;
   }
@@ -516,7 +528,9 @@
   // Result rows as a table; the main numeric column gets a bar so groups compare at a glance.
   function resultTable(columns, rows) {
     const toNum = (v) => { const n = parseFloat(String(v).replace(/[,\s%]/g, "")); return Number.isFinite(n) ? n : null; };
-    const numCols = columns.map((_, i) => i).filter((i) => rows.every((r) => String(r[i]).trim() === "" || toNum(r[i]) !== null));
+    // A year is a label, not a quantity: no thousands separator (2021, not 2,021) and no bar.
+    const numCols = columns.map((_, i) => i).filter((i) => !/year/i.test(columns[i])
+      && rows.every((r) => String(r[i]).trim() === "" || toNum(r[i]) !== null));
     const barCol = numCols.find((i) => i > 0) ?? numCols[0];
     const max = barCol === undefined ? 0 : Math.max(0, ...rows.map((r) => toNum(r[barCol]) || 0));
     const head = columns.map((c, i) => `<th${numCols.includes(i) ? ' class="num"' : ""}>${esc(humanCol(c))}</th>`).join("");
@@ -530,7 +544,33 @@
     return `<table class="tbl result-tbl"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
   }
 
-  function reportLive(e, question, d) {
+  // Buttons that send a new question through the whole pipeline; data-final skips the vagueness check.
+  // A follow-up also carries the sentence that introduces its split answer (data-intro).
+  function choiceButtons(choices) {
+    return `<div class="choice-row">${choices.map((c) =>
+      `<button type="button" class="choice-btn" data-ask="${esc(c.question)}" data-final="1"${c.intro ? ` data-intro="${esc(c.intro)}"` : ""}>${esc(c.label)}</button>`).join("")}</div>`;
+  }
+
+  // "The patients having cholera, split by sex, are: 1 – male, 1 – female." The group column is the
+  // first that is not all numbers (the first column when all are, as for years), the count the last
+  // numeric column besides it.
+  function splitSentence(intro, rows) {
+    const isNum = (v) => String(v).trim() !== "" && Number.isFinite(Number(String(v).replace(/,/g, "")));
+    const columns = [...Array(rows[0].length).keys()];
+    const group = columns.find((i) => !rows.every((r) => isNum(r[i]))) ?? 0;
+    const count = columns.filter((i) => i !== group && rows.every((r) => isNum(r[i]))).pop();
+    if (count === undefined) return null;
+    return `${intro} ${rows.map((r) => `${nice(r[count])} – ${readable(r[group], [])}`).join(", ")}.`;
+  }
+
+  function reportClarify(e, c) {
+    add(e, `<div class="clarify"><span class="suggest-label">${esc(c.prompt || "Did you mean…")}</span>
+      ${choiceButtons(c.choices)}
+      <span class="dim small-note">Pick one, so the answer counts what you mean instead of a guess.</span></div>`);
+  }
+
+  // opts.intro: the question came from a follow-up, and its split answer is read out in one sentence.
+  function reportLive(e, question, d, opts = {}) {
     const tm = d.timings_ms || {};
     const meta = fmtMs(tm.total || 0);
 
@@ -544,12 +584,14 @@
       const countedHtml = counted ? `<p class="counted"><span class="counted-label">Counted</span><span>${esc(counted)}</span></p>` : "";
       if (d.executed && rows.length === 1 && d.columns.length === 1) {
         const col = d.columns[0];
-        const label = /^(count|countresult|n|total|patients?)$/i.test(col) ? "patients match your question" : humanCol(col);
+        const label = /^(count|countresult|n|total|patients?)$/i.test(col)
+          ? (isOne(rows[0][0]) ? "patient matches your question" : "patients match your question") : humanCol(col);
         add(e, `<div class="answer is-result">${verdictLine}
           <div class="result-hero"><span class="result-number">${esc(nice(rows[0][0]))}</span><span class="result-label">${esc(label)}</span></div>${countedHtml}</div>`);
       } else if (d.executed && rows.length) {
+        const text = (opts.intro && splitSentence(opts.intro, rows)) || answerSentence(d, rows);
         add(e, `<div class="answer is-result">${verdictLine}
-          <p class="answer-text">${esc(answerSentence(d, rows))}</p>
+          <p class="answer-text">${esc(text)}</p>
           ${resultTable(d.columns, rows.slice(0, 50))}
           ${rows.length > 50 ? `<p class="text dim">Showing 50 of ${rows.length} rows.</p>` : ""}${countedHtml}</div>`);
       } else if (d.executed) {
@@ -559,6 +601,9 @@
         add(e, `<div class="answer is-result">${verdictLine}
           <div class="result-empty"><p class="result-empty-title">No results on this machine</p>
             <p class="result-empty-text">The question is allowed, but the numbers come from the patient database, which is not connected here. Ask on the machine where the database runs to see them.${d.execution_error ? ` <span class="dim">(${esc(d.execution_error)})</span>` : ""}</p></div>${countedHtml}</div>`);
+      }
+      if (d.follow_ups && d.follow_ups.length) {
+        add(e, `<div class="clarify"><span class="suggest-label">Break this down?</span>${choiceButtons(d.follow_ups)}</div>`);
       }
     } else {
       // The backend appends its suggestion to the reason; it is shown separately below.
@@ -727,7 +772,7 @@
 
   // ---------- input ----------
 
-  async function handle(raw) {
+  async function handle(raw, opts = {}) {
     const text = raw.trim();
     if (!text) return;
     history.push(text);
@@ -745,7 +790,7 @@
         const e = entry("cmd", text);
         await cmd.fn(e, rest.join(" "));
       } else {
-        await ask(text);
+        await ask(text, opts);
       }
     } finally {
       busy = false;
@@ -858,7 +903,7 @@
   // Clickable example and attack rows, and suggested questions
   out.addEventListener("click", (e) => {
     const sug = e.target.closest("[data-ask]");
-    if (sug && !busy) return handle(sug.dataset.ask);
+    if (sug && !busy) return handle(sug.dataset.ask, { final: sug.dataset.final === "1", intro: sug.dataset.intro });
     const row = e.target.closest("tr[data-try]");
     if (row && !busy) handle(`try ${row.dataset.try}`);
   });

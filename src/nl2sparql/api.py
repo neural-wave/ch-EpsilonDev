@@ -6,6 +6,7 @@ The pipeline is database-agnostic: nothing behind /nl-to-sparql connects to a da
 """
 from __future__ import annotations
 
+from dataclasses import asdict
 from importlib import resources
 
 from fastapi import FastAPI, Request
@@ -13,9 +14,10 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from nl2sparql.agents.console import build_console_router
+from nl2sparql.assist import clarify, follow_ups
 from nl2sparql.config import REPO_ROOT, Settings
 from nl2sparql.factory import build_pipeline
-from nl2sparql.input_check import InputError
+from nl2sparql.input_check import InputError, normalize_text
 from nl2sparql.orchestrator import Pipeline, PipelineError
 from nl2sparql.virtuoso import VirtuosoClient
 
@@ -69,6 +71,20 @@ def create_app(pipeline: Pipeline | None = None, settings: Settings | None = Non
             return RedirectResponse("/console/cli/")
         return resources.files("nl2sparql").joinpath("demo/index.html").read_text(encoding="utf-8")
 
+    @app.post("/demo/clarify")
+    async def demo_clarify(request: Request):
+        """"Did you mean...?" choices for a vague question, before it is asked. Code only: no model call."""
+        try:
+            body = await request.json()
+        except ValueError:
+            return JSONResponse({"error": "The body must be JSON with a 'text' field."}, status_code=400)
+        try:
+            text = normalize_text(body.get("text") if isinstance(body, dict) else None, settings.max_input_chars)
+        except InputError as error:
+            return JSONResponse({"error": str(error)}, status_code=400)
+        found = clarify(text, pipeline.context_builder.terminology)
+        return found.to_json() if found else {"prompt": None, "choices": []}
+
     @app.post("/demo/ask")
     async def demo_ask(request: Request):
         result, error = await run(request)
@@ -85,6 +101,7 @@ def create_app(pipeline: Pipeline | None = None, settings: Settings | None = Non
             "tokens_by_step": result.tokens_by_step,
             "diagnostics": result.diagnostics,
             "executed": False,
+            "follow_ups": [],
         }
         # Optional dev check, outside the system: run a compliant query on the local Virtuoso to see
         # the result and its execution time. The pipeline itself never touches a database.
@@ -94,6 +111,10 @@ def create_app(pipeline: Pipeline | None = None, settings: Settings | None = Non
                 answer.update(executed=True, columns=rows.columns, rows=rows.rows[:200], execution_ms=round(rows.elapsed_ms, 1))
             except Exception as error:  # the demo still shows the translation
                 answer["execution_error"] = str(error)[:300]
+        if answer["executed"]:  # ways to break the answer down, when it is one number of at least 2
+            text = (await request.json())["text"]  # the run above validated the body
+            found = follow_ups(text, answer["rows"], pipeline.context_builder.schema)
+            answer["follow_ups"] = [asdict(follow_up) for follow_up in found]
         return answer
 
     return app
