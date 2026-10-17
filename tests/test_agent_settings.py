@@ -73,7 +73,7 @@ def test_context_sizes_come_from_the_environment(env):
 
 
 @pytest.mark.parametrize("value,expected", [
-    (None, False), ("", False), ("  ", False), ("true", True), ("1", True), ("YES", True),
+    (None, True), ("", True), ("  ", True), ("true", True), ("1", True), ("YES", True),
     ("false", False), ("0", False), ("no", False), ("off", False),
 ])
 def test_dev_references_flag_comes_from_the_environment(env, value, expected):
@@ -96,9 +96,10 @@ def test_dev_references_reach_the_example_bank_only_with_the_flag(env, tmp_path)
         settings = replace(Settings.from_env(), data_dir=DATA_DIR, log_path=None)
         return [item.id for item in build_pipeline(settings).context_builder.examples.examples]
 
+    env.setenv("CONTEXT_DEV_REFERENCES", "false")
     official_and_team = bank_ids()
-    assert len(official_and_team) == 19  # off by default
-    env.setenv("CONTEXT_DEV_REFERENCES", "true")
+    assert len(official_and_team) == 19
+    env.setenv("CONTEXT_DEV_REFERENCES", "true")  # the default since 17 October
     with_references = bank_ids()
     assert with_references[:19] == official_and_team and len(with_references) == 64
     env.setattr(factory, "DEV_REFERENCES_PATH", tmp_path / "missing.jsonl")  # a machine without eval/

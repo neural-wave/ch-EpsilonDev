@@ -33,11 +33,13 @@ def test_config_shows_both_agents_and_hides_secrets(client):
     assert intent["json_mode"] is True and query["json_mode"] is False
     assert intent["max_answer_tokens"] == 200 and query["max_answer_tokens"] == 1500
     assert "secret-token-123" not in str(config) and intent["api_key"].startswith("set (")
-    assert config["context"]["examples_in_bank"] == 19 and config["pipeline"]["schema_classes_loaded"] == 164
+    assert config["context"]["examples_in_bank"] == 64 and config["pipeline"]["schema_classes_loaded"] == 164
 
 
 def test_config_counts_the_dev_references_in_the_bank(client):
-    assert client.get("/agents/config").json()["context"]["dev_references_in_bank"] == 0
+    assert client.get("/agents/config").json()["context"]["dev_references_in_bank"] == 45  # on by default
+    without = TestClient(create_app(settings=Settings(data_dir=DATA_DIR, log_path=None, context_dev_references=False)))
+    assert without.get("/agents/config").json()["context"]["dev_references_in_bank"] == 0
     with_references = TestClient(create_app(settings=Settings(data_dir=DATA_DIR, log_path=None, context_dev_references=True)))
     context = with_references.get("/agents/config").json()["context"]
     assert context["dev_references_in_bank"] == 45 and context["examples_in_bank"] == 19 + 45

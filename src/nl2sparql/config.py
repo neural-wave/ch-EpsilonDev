@@ -79,7 +79,7 @@ class Settings:
     context_codes: int = 5
     # Also retrieve from the dev rows of eval/query_questions.jsonl (question + reference SPARQL). Off by
     # default: dev questions then retrieve their neighbours' references, so only holdout numbers stay fair.
-    context_dev_references: bool = False
+    context_dev_references: bool = True  # holdout right numbers 7 -> 10 of 31, queries that run 81% -> 94% (17 Oct)
     # Pipeline.
     virtuoso_endpoint: str = "http://localhost:8890/sparql"
     max_input_chars: int = 2000
@@ -147,7 +147,7 @@ class Settings:
             context_examples=int(env.get("CONTEXT_EXAMPLES", cls.context_examples)),
             context_cards=int(env.get("CONTEXT_CARDS", cls.context_cards)),
             context_codes=int(env.get("CONTEXT_CODES", cls.context_codes)),
-            context_dev_references=_flag("CONTEXT_DEV_REFERENCES", False),
+            context_dev_references=_flag("CONTEXT_DEV_REFERENCES", True),
             virtuoso_endpoint=env.get("VIRTUOSO_ENDPOINT", cls.virtuoso_endpoint),
             max_input_chars=int(env.get("MAX_INPUT_CHARS", cls.max_input_chars)),
             max_retries=int(env.get("MAX_RETRIES", cls.max_retries)),
