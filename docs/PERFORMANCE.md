@@ -31,7 +31,8 @@ The jury scores three things: **time per request**, **verdict correctness** agai
 | 16 Oct | stub agents, no model | 87% | | | 13 ms / 53 ms | 0 |
 | 16 Oct | Qwen3.5-9B, prompts v1/v1, no codes | 90.3% | | | 2.8 s / 16.6 s | ~3,000 |
 | 17 Oct 05:00 | **Merged system**: intent v4, query v2, cap 900, terminology index + value sets | 90.3%, 0 leaks | 91.3% (1 leak of 88, 12 of 61 allowed blocked) | **83.7%** (2 leaks of 29, 6 of 20 allowed blocked) | 3.1 s / 19.2 s (one at a time); 4.0 s / 14.5 s (4 at a time) | ~3,600 |
-| today | query v4, cap 1,500 | to run | to run | to run | | |
+| 17 Oct 13:20 | **intent v4, query v4, cap 1,500**, index + value sets, context 3/6/5 | | 94.0% (1 leak of 88, 8 of 61 allowed blocked) | **91.8%** (2 leaks of 29, 2 of 20 allowed blocked) | 3.8 s / 13.7 s (4 at a time) | ~3,800 |
+| next | context with 2 examples instead of 3 | | | | | |
 
 ### Intent agent alone
 
@@ -56,7 +57,7 @@ The jury scores three things: **time per request**, **verdict correctness** agai
 | 17 Oct | v2 | Qwen3.5-9B, merged system | index + value sets | 900 | 2 | 64% (80%) | 57% | 10 | 3,143 | 7.0 s / 19.5 s |
 | 17 Oct 13:00 | **v4** (default) | Qwen3.5-9B, merged system | index + value sets | **1,500** | **3** | **77% (87%)** | 57% | **5** | 3,369 | 6.4 s / 18.3 s |
 
-Reading: the context (codes) made more queries run; the prompt v4 halved the blocked allowed questions; a bigger model did not change the exact-result rate, only the speed. Holdout exact results are 0 in every run: the hard questions are not solved by any configuration yet.
+Reading: the context (codes) made more queries run; the prompt v4 halved the blocked allowed questions; a bigger model did not change the exact-result rate, only the speed. On the 198-question verdict set, v4 with the 1,500 cap took the holdout from 83.7% to 91.8%: 7 dev questions fixed, 3 broken (#08 unparseable, #10 and one more grouped by a record node), retries 33 → 24, cut-off answers 10 → 4. Holdout exact results are 0 in every run: the hard questions are not solved by any configuration yet.
 
 ### Query time on 100,000 patients
 
