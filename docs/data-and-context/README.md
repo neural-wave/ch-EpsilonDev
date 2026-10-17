@@ -8,7 +8,7 @@ This guide separates completed local work from real-graph validation. The root [
 | --- | --- | --- | --- |
 | Retrieval, loaders, deterministic behavior, synthetic tests, and local benchmark | You / local contributor | **Complete locally** | Implemented and exercised with synthetic fixtures and checked-in snapshots. |
 | Sanitized RDF profile comparison helper | You / local contributor | **Synthetic tests pass; real profile pending** | The helper is covered with fabricated profile fixtures; it has not been run against an RDF-derived profile. |
-| Final local checks and branch handoff | You / local contributor | **Tests complete; guide push pending** | The helper’s synthetic tests and full suite pass; the code and test commits are ready, with this evidence update to follow. |
+| Final local checks and branch handoff | You / local contributor | **Complete** | The helper’s synthetic tests and full suite pass; the `guardjudge` branch has been pushed. |
 | Dev graph profile, real terminology index, and actual-data evaluation | Santiago | **Pending run-machine access** | No real graph was available in this checkout; these steps have not been verified. |
 | Perf graph measurements | Santiago | **Pending perf access** | No real performance-graph timings have been collected. |
 | Work verified both locally and against real graph data | — | **None yet** | Passing synthetic tests does not establish real-graph compatibility or retrieval quality. |
@@ -47,7 +47,7 @@ PYTHONPATH=src .venv311/bin/python scripts/retrieval_benchmark.py
 
 The numeric-only synthetic benchmark used 14 fabricated cases. Default and candidate BM25 settings each scored **92.9% top-1** and **100% top-3**; their p50 retrieval latency was **0.0041 ms**, **0.0042 ms**, and **0.0041 ms**. No candidate improved top-1 by the required 5 percentage points, so defaults remain unchanged. Typical and expanded synthetic rendered prompts were **668** and **37,624 characters**. These are local synthetic measurements, not an LLM or real-graph evaluation.
 
-The retrieval benchmark was last run before the profile comparison helper was added; the helper does not change retrieval behavior. Its comparison logic was exercised by the three synthetic tests above, but its CLI has not yet been run against generated snapshots.
+The retrieval benchmark was last run before the profile comparison helper was added; the helper does not change retrieval behavior. Its comparison logic was exercised by the three synthetic tests above. **Santiago must still run the CLI against a profile generated from the actual dev graph** as described below.
 
 ## Your local work — complete; no RDF graph required
 
@@ -62,12 +62,14 @@ git diff --check
 ```
 
 - [x] Ran the profile-comparison focused tests and full suite; results are recorded above.
-- [ ] Push the helper, synthetic tests, and this evidence update to `guardjudge`.
+- [x] Pushed the helper and synthetic tests on `guardjudge`; this guide records the handoff requirements.
 - [x] Confirmed the helper and fixtures contain only aggregate-reporting logic and synthetic profile data; no `.env`, generated `assets/` terminology files, graph data, patient-level results, or raw evaluation reports were added.
 
 ## Remaining work for Santiago — actual dev RDF graph required
 
 **Status:** not run from this checkout. It has no `.env` or generated `assets/` terminology index, and there is no recorded real-graph profile or evaluation. Use the configured run machine and the endpoint/IRIs documented in the root README and [docs/DATA.md](../DATA.md).
+
+**Required real-data test for the new helper:** the three passing unit tests use fabricated profile files only. They do not validate the CLI with Santiago's RDF-derived snapshots. Santiago must run the workflow below on the configured dev graph and record the sanitized aggregate result before marking profile freshness complete.
 
 ### Dev graph and metadata
 
@@ -80,7 +82,9 @@ git diff --check
   python scripts/compare_data_profile.py --profile-dir "$profile_dir"
   ```
 
-- [ ] Confirm the profile is non-empty; review the comparison script's aggregate counts for differences in classes, properties, kinds, and schema terms. Do not paste raw profile files or entry-level diffs into shared reports.
+- [ ] Confirm the CLI outcome: exit code **0** means the snapshots match; **1** means profile drift was found; **2** means a file is missing, malformed, or empty. Investigate exit code 1 on the run machine before refreshing snapshots.
+- [ ] Review aggregate additions/removals/changes for properties, classes, class-property pairs, and schema terms. Do not paste raw profile files or entry-level diffs into shared reports.
+- [ ] Run `PYTHONPATH=src python -m pytest -q tests/test_profile_comparison.py` on the pushed branch to confirm its synthetic tests still pass in the run-machine environment. This complements the real-profile CLI run; neither substitutes for the other.
 - [ ] Refresh committed snapshots only when the graph profile supports the change, then rerun focused and full local tests.
 - [ ] Keep profiling an offline maintenance action; never call it from the API request path.
 
