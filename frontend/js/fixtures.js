@@ -858,18 +858,5 @@ WHERE {
     };
   }
 
-  // Authored demo semantics; these labels never infer semantics for live responses.
-  const rolesByFixture = {
-    "c-diabetes": ["numeric_measure"],
-    "c-cholera-sex": ["category", "patient_count", "patient_count", "numeric_measure"],
-    "c-preterm": ["category", "numeric_measure", "numeric_measure", "numeric_measure", "numeric_measure"],
-    "c-cancer": ["category", "patient_count", "numeric_measure"],
-    "c-routes": ["category", "patient_count", "numeric_measure", "numeric_measure", "numeric_measure"],
-    "la-born-abroad": ["patient_count", "patient_count", "numeric_measure"],
-    "la-variants": ["category", "patient_count", "numeric_measure", "numeric_measure", "numeric_measure"],
-    "la-ultrasound": ["category", "category", "patient_count", "numeric_measure"],
-    "la-admissions": ["category", "numeric_measure", "numeric_measure", "numeric_measure"],
-  };
-  const RESULT_METADATA = Object.fromEntries(FIXTURES.filter((f) => f.run).map((f) => [f.id, f.run.columns.map((name, i) => ({name, role:rolesByFixture[f.id]?.[i] || "unknown", kind:"demo_fixture"}))]));
-  SQ.fixtures = { RESULT_METADATA, RULES, FIXTURES, TERMS, ICD, toResponse, lineOf, bench: buildBench() };
+  SQ.fixtures = { RULES, FIXTURES, TERMS, ICD, toResponse, lineOf, bench: buildBench() };
 })();

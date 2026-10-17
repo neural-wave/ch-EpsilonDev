@@ -2,7 +2,6 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="referrer" content="no-referrer">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SIB DOC Console</title>
   <meta name="description" content="Console interface for the secure NL-to-SPARQL service.">
@@ -23,8 +22,6 @@
   <script src="../js/ui.js" defer></script>
   <script src="intro.js" defer></script>
   <script src="precheck.js" defer></script>
-  <script src="../js/policy.js" defer></script>
-  <script src="../js/result.js" defer></script>
   <script src="cli.js" defer></script>
 </head>
 <body class="is-empty">
@@ -33,10 +30,9 @@
       <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16"/><path d="M9 4v16"/></svg>
     </button>
     <a class="brand" href="./" id="home-logo" aria-label="SIB DOC home">
-      <img class="brand-sib" src="assets/sib-emblem.png" alt="SIB Swiss Institute of Bioinformatics" width="784" height="592" onerror="this.style.display='none';document.getElementById('brand-text').hidden=false">
+      <img class="brand-sib" src="assets/sib-emblem.png" alt="SIB Swiss Institute of Bioinformatics" width="784" height="592">
       <span class="brand-sep" aria-hidden="true"></span>
-      <img class="brand-sphn" src="assets/sphn-logo.png" alt="SPHN Swiss Personalized Health Network" width="585" height="419" onerror="this.style.display='none'">
-      <span class="brand-text" id="brand-text" hidden>SIB DOC</span>
+      <img class="brand-sphn" src="assets/sphn-logo.png" alt="SPHN Swiss Personalized Health Network" width="585" height="419">
     </a>
     <span class="chip" id="mode-chip">Mock</span>
     <nav class="top-links" aria-label="Views">
@@ -53,12 +49,10 @@
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
         <span>New question</span>
       </button>
-      <label class="link-btn snapshot-import">Import snapshot<input type="file" id="snapshot-import" disabled accept=".json,application/json"></label>
       <h2 class="side-label">Previous questions</h2>
       <ol class="hist" id="hist"></ol>
       <p class="hist-empty" id="hist-empty">Questions you ask appear here, saved in this browser.</p>
       <div class="side-foot">
-        <p class="hist-empty">Saved questions and results stay in this browser. Clear history on shared devices.</p>
         <button class="link-btn" type="button" id="clear-hist">Clear history</button>
       </div>
     </aside>
@@ -74,7 +68,6 @@
       </section>
 
       <div class="dock" id="dock">
-        <div class="privacy"><strong>Only aggregate results are shown</strong><span id="privacy-policy" role="status">Loading privacy policy…</span><button type="button" id="retry-privacy-policy" hidden>Retry privacy policy</button></div>
         <form class="ask" id="prompt-form" autocomplete="off">
           <span class="badge badge-ask" aria-hidden="true">ASK</span>
           <label class="visually-hidden" for="cmd">Question or command</label>

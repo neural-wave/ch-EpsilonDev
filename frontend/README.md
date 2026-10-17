@@ -5,11 +5,6 @@ Ask a question in plain English; the console shows the result if it is allowed, 
 
 ## Run
 
-The API serves this folder itself: start the backend (`python -m nl2sparql --port 8080`) and open
-http://localhost:8080/console/cli/ (http://localhost:8080/ redirects there). Same origin, so no proxy and no CORS.
-
-To work on the files without the backend running, or against a backend on another machine:
-
 ```
 QG_BACKEND=http://127.0.0.1:8080 python3 dev_server.py
 ```
@@ -20,7 +15,7 @@ Add `?mock=1` to use built-in fixtures without a backend, `?intro=1` to replay t
 
 ## Layout
 
-- `cli/`: the console (`index.html`, `cli.css`, `cli.js`, `intro.js`, `precheck.js`, `assets/`: the SIB and SPHN logos; the root `.gitignore` ignores every `assets/` folder for the restricted terminology files and re-includes this one by name).
+- `cli/`: the console (`index.html`, `cli.css`, `cli.js`, `intro.js`, `precheck.js`, `assets/`).
 - `js/`: shared config, API client (`api.js`), fixtures for mock mode, UI helpers.
 - `css/tokens.css`: colour and type tokens.
 
