@@ -226,6 +226,7 @@ nl2sparql/
 - [docs/guard-and-judge/README.md](docs/guard-and-judge/README.md): what was verified locally in the guard and the judge, and what needs the run machine.
 - [docs/SPARQL_LLM_VALIDATOR.md](docs/SPARQL_LLM_VALIDATOR.md): SIB's sparql-llm validator, evaluated offline, and the Virtuoso-only errors the judge could catch. For module D.
 - [docs/LLM_AGENTS.md](docs/LLM_AGENTS.md): the two LLM agents, their configuration, how to measure them, how to change a prompt or a model, and their backlog. For module B.
+- [docs/FRONTEND.md](docs/FRONTEND.md): the endpoint the user interface calls, its fields and the rules the page must keep. For module E.
 
 ## 6. Getting started on your computer
 
