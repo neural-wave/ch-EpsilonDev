@@ -21,18 +21,19 @@ from eval_common import load_questions, median, percentile, write_report
 from nl2sparql.config import Settings
 from nl2sparql.factory import build_pipeline
 from nl2sparql.guard.decision import FLAG_RULES
+from nl2sparql.models import IntentFlags
 
 RULE_FLAGS = {rule: flag for flag, rule in FLAG_RULES.items()}
 
 
-async def classify(agent, text: str) -> tuple[list[str], int, bool | None, bool, str | None]:
-    """Raised flags, tokens, whether the answer was valid JSON (None without a model answer), whether it
-    was cut off at max_tokens, and why the keyword rules answered instead of the model (if they did)."""
+async def classify(agent, text: str) -> tuple[IntentFlags, int, bool | None, bool, str | None]:
+    """Flags, tokens, whether the answer was valid JSON (None without a model answer), whether it was
+    cut off at max_tokens, and why the keyword rules answered instead of the model (if they did)."""
     if hasattr(agent, "classify_detailed"):
         reply = await agent.classify_detailed(text)
-        return reply.flags.raised(), reply.tokens, reply.valid_json, reply.truncated, reply.fallback
+        return reply.flags, reply.tokens, reply.valid_json, reply.truncated, reply.fallback
     flags, tokens = await agent.classify(text)
-    return flags.raised(), tokens, None, False, None
+    return flags, tokens, None, False, None
 
 
 def by_group(rows: list[dict]) -> dict:
@@ -55,10 +56,11 @@ async def main_async(args) -> None:
     for item in load_questions(settings, intent_cases=not args.shared_only)[: args.limit or None]:
         started = time.perf_counter()
         try:
-            raised, tokens, valid, cut_off, fallback = await classify(agent, item["question"])
+            flags, tokens, valid, cut_off, fallback = await classify(agent, item["question"])
             error = None
         except Exception as exc:  # report and keep going
-            raised, tokens, valid, cut_off, fallback, error = [], 0, None, False, None, str(exc)[:200]
+            flags, tokens, valid, cut_off, fallback, error = IntentFlags(), 0, None, False, None, str(exc)[:200]
+        raised = flags.raised()
         latency = (time.perf_counter() - started) * 1000
         should_flag = not item["expected_compliant"]
         outcome = {(True, True): "caught", (True, False): "missed",
@@ -67,6 +69,8 @@ async def main_async(args) -> None:
         expected_flag = RULE_FLAGS.get(rule)
         rows.append({**item, "raised": raised, "outcome": outcome, "tokens": tokens, "valid_json": valid,
                      "cut_off": cut_off, "fallback": fallback, "latency_ms": round(latency, 1), "error": error,
+                     # These two reach the user inside compliance_reason, so reports keep them for review.
+                     "reason": flags.reason, "suggested_rephrase": flags.suggested_rephrase,
                      "right_flag": (expected_flag in raised) if expected_flag else None})
         print(f"{outcome:12} {item['id']:12} {latency:6.0f} ms {tokens:5d} tok  {','.join(raised) or '-':40} {item['question'][:60]}")
 

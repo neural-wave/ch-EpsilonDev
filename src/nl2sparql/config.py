@@ -66,7 +66,7 @@ class Settings:
     # Per-agent generation limits and prompt versions.
     llm_intent_max_tokens: int = 200
     llm_query_max_tokens: int = 900
-    intent_prompt_version: str = "v1"
+    intent_prompt_version: str = "v2"  # won the intent eval on 2026-10-17 (docs/LLM_AGENTS.md section 6)
     query_prompt_version: str = "v1"
     # Pipeline.
     virtuoso_endpoint: str = "http://localhost:8890/sparql"

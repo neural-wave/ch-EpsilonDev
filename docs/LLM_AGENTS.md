@@ -71,7 +71,7 @@ Settings come from environment variables (README §7). Each agent has its own:
 | API key | `LLM_INTENT_API_KEY`, falls back to `LLM_API_KEY` | `LLM_API_KEY` |
 | Extra request fields | `LLM_INTENT_EXTRA_BODY`: unset inherits `LLM_EXTRA_BODY`, `'{}'` sends none | `LLM_EXTRA_BODY` |
 | Answer cap | `LLM_INTENT_MAX_TOKENS` (200) | `LLM_QUERY_MAX_TOKENS` (900) |
-| Prompt version | `INTENT_PROMPT_VERSION` (v1) | `QUERY_PROMPT_VERSION` (v1) |
+| Prompt version | `INTENT_PROMPT_VERSION` (v2) | `QUERY_PROMPT_VERSION` (v1) |
 | JSON mode | on | off |
 
 Both agents also share `LLM_TIMEOUT_SECONDS` and `LLM_VERIFY_TLS`, and the temperature is always 0. The console shows the resolved values, with secrets hidden.
@@ -158,7 +158,7 @@ That makes 73 questions, 42 forbidden and 31 allowed. Its summary breaks results
 | Tokens per request | 0 | ~2,100 median, ~3,000 mean |
 | Requests that used the retry | — | about a third (21 of 66 measured) |
 | Intent eval, 31 shared questions: detection / false alarms / right flag | 93.3% / 0% / 90% | 93.3% / 0% (from the request log; it missed #13) |
-| Intent eval, all 73 questions: detection / false alarms / right flag | 73.8% / 3.2% / 70.3% | not run yet (backlog item 1) |
+| Intent eval, all 73 questions: detection / false alarms / right flag | 73.8% / 3.2% / 70.3% | v1: 90.5% / 0% / 91.9%<br>**v2: 100% / 0% / 100%** (the default) |
 
 ### Where the tokens go
 
@@ -180,8 +180,27 @@ Measured with the real tokenizers on our 31 questions, for a typical request of 
 | Version | What it is | Prompt tokens |
 |---|---|---|
 | v1 | First draft: the five flags in one line each | 260 |
-| v2 | Fixes v1's failures, in full sentences:<br>• a clearer whole_graph (totals, dumps, overviews; counting patients is fine);<br>• "raise only the flags that apply";<br>• defense against prompt injection;<br>• judges every part of the request;<br>• an explicit list of allowed asks | 489 |
+| **v2** (default) | Fixes v1's failures, in full sentences:<br>• a clearer whole_graph (totals, dumps, overviews; counting patients is fine);<br>• "raise only the flags that apply";<br>• defense against prompt injection;<br>• judges every part of the request;<br>• an explicit list of allowed asks | 489 |
 | v3 | The rules of v2 in fewer words, to see whether the extra tokens buy accuracy | 396 |
+
+**Intent eval, Qwen3.5-9B, all 73 questions (2026-10-17):**
+
+| | Keyword rules | v1 | **v2** | v3 |
+|---|---|---|---|---|
+| Forbidden detected (of 42) | 31 (73.8%) | 38 (90.5%) | **42 (100%)** | 42 (100%) |
+| False alarms (of 31 allowed) | 1 | 0 | **0** | 1 (#035, "at least one identifier recorded") |
+| Right flag raised | 70.3% | 91.9% | **100%** | 100% |
+| Forbidden questions with extra flags | — | 16 | **3** | 14 |
+| Invalid JSON, cut off, fallback | — | 0 | **0** | 0 |
+| Tokens per call (median) | 0 | 314 | **554** | 469 |
+| Latency p50 / p95 | — | 1.3 / 1.6 s | **1.4 / 1.8 s** | 1.6 / 1.8 s |
+
+- **v1 missed:** #13 and #007 ("how many triples"), the same ask behind an injection (#023), and grouping by exact date (#041).
+- **v2 missed nothing** and resisted all seven injection attempts.
+- **v2 costs 240 more tokens per request than v1,** about 8–11% of a request's total. Correctness is a main criterion and tokens a minor one, so v2 is the default.
+- **The latency is still hidden:** the intent agent runs in parallel with the query agent, which takes longer.
+
+**Caveat:** v2 was written after seeing these questions. A fresh set, written by someone who has not read the prompt, is the honest check of how it does on the jury's hidden list.
 
 1. **Add a version, never edit an old one.** Write `INTENT_SYSTEM_V2` or `QUERY_SYSTEM_V2` (and its `render_query_user_v2` if the user message changes) next to v1, and register it in `INTENT_PROMPTS` or `QUERY_PROMPTS`. Old reports then stay comparable.
 2. **Preview it.** Start the API with `INTENT_PROMPT_VERSION=v2` (or `QUERY_PROMPT_VERSION=v2`) and check **Preview prompts** on `/agents`.
@@ -242,8 +261,8 @@ This step runs on the GPU and needs the instance owner's OK. It takes about 15�
 
 ## 9. Backlog for module B (most useful first)
 
-1. **Pick the intent prompt.** On the GPU, run `run_intent_eval.py` with `INTENT_PROMPT_VERSION` set to v1, v2 and v3. Keep the cheapest version with the best detection and no more false alarms, and make it the default.
-2. **Apertus comparison** for the intent agent, with the winning prompt ([section 7](#7-changing-a-model-apertus-for-the-intent-agent)).
+1. **Held-out check of intent prompt v2.** Have someone who has not read the prompt write ~20 new questions (forbidden and allowed), add them to `eval/intent_questions.jsonl` and run the intent eval.
+2. **Apertus comparison** for the intent agent, with prompt v2 ([section 7](#7-changing-a-model-apertus-for-the-intent-agent)).
 3. **Per-agent pipeline baseline.** Run `run_eval.py` with Qwen for the per-agent split and the cut-off counts.
 4. **Fewer retries.** Read the first tries in the pipeline report, then write query prompt v2 with the fixes.
 5. **Fewer query tokens.** Use fewer or shorter examples and only the schema cards the question needs (with module C).
