@@ -569,7 +569,7 @@
     }
 
     if (d.is_compliant) {
-      add(e, `<p class="verdict-small"><span class="badge badge-sm badge-allow">ALLOWED</span><span>${meta} · ${esc(d.tokens_consumed || 0)} tokens</span></p>`);
+      add(e, `<p class="verdict-small"><span class="badge badge-sm badge-allow">ALLOWED</span><span>${meta}</span></p>`);
       if (opts.intro && d.result_status === "released" && d.rows && d.rows.length && d.columns) {
         const rows = d.rows.map((r) => d.columns.map((c) => (r[c] == null ? "" : r[c])));
         const sentence = splitSentence(opts.intro, rows);
