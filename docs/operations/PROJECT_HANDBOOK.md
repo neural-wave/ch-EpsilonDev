@@ -659,7 +659,7 @@ By **Sunday 18 October, 11:00**:
 
 ## 19. CI/CD and container delivery
 
-The [Project CI/CD workflow](../../.github/workflows/tests.yml) replaces the previous Python-only test
+The [SIB Doc CI/CD workflow](../../.github/workflows/tests.yml) replaces the previous Python-only test
 workflow. Delivery is to **GitHub Container Registry (GHCR) only**, as selected by the team.
 It does not deploy to Santiago's laptop, start Virtuoso or a model, create a tunnel, administer
 the GPU, or run real-data evaluations. The deployable application is the container image;
@@ -672,36 +672,59 @@ building a Python wheel alone does not include the repository's frontend/data la
 | Pull request, including a fork | All CI jobs | Never; no registry login or package-write credentials |
 | Push to `main` | All CI jobs | After all gates pass |
 | Push a version tag such as `v0.1.0` or `v0.1.0-rc.1` | All CI jobs | After all gates pass; malformed version tags fail publication |
-| Actions → Project CI/CD → Run workflow | All CI jobs | Off by default; select **publish** on `main` or a version tag to enable |
+| Actions → SIB Doc CI/CD → Run workflow | All CI jobs | Off by default; select **publish** on `main` or a version tag to enable |
 
 The jobs are:
 
-1. **Release-file boundary**: reject tracked credentials/private/generated paths by filename and
-   compile Python sources. The two approved frontend logos and `.env.example` are allowed.
+1. **Workflow, scripts and release-file boundary**: reject tracked credentials/private/generated
+   paths by filename, compile Python sources, check shell syntax without running infrastructure,
+   and validate Actions syntax/expressions with actionlint 1.7.12. The downloaded Linux binary
+   is checked against its pinned SHA-256 before execution. The two approved frontend logos and `.env.example` are allowed.
    This is a filename boundary, not a complete secrets/content or licensing audit.
 2. **Python (3.11 / 3.12)**: install `requirements.txt`, check dependencies, and run all unit/API
    tests. JUnit reports are retained for seven days.
-3. **Node and Chromium (desktop + phone)**: check frontend JavaScript syntax, run Node tests,
-   install the locked Playwright dependency, and run desktop and 390×844 phone browser projects.
+3. **Frontend syntax and Node tests**: check frontend and browser JavaScript syntax and run the
+   Node unit tests independently of Python installation and browser downloads.
+4. **Chromium (desktop + phone)**: install the locked Playwright dependency and run desktop
+   and 390×844 phone browser projects against the stub API.
    Light/dark charts, privacy gating, query-free provenance, history, exports, and comparisons use
    synthetic fixtures. JUnit, HTML reports, screenshots, and traces are retained for seven days.
-4. **Container (AMD64 / ARM64)**: build each architecture with [Dockerfile](../../Dockerfile), then
+5. **Container (AMD64 / ARM64)**: build each architecture with [Dockerfile](../../Dockerfile), then
    smoke-test the exact image with stand-in agents in both developer and public-console modes.
    Checks include the non-root user, health, console scripts/logos, fixed judged API contract,
    forbidden-request behavior, public-mode endpoint blocking, and private-file exclusions.
    No `/demo/ask` database execution is used. ARM64 is tested under QEMU on the hosted runner.
-5. **CI required checks**: a stable aggregate gate fails if any required job fails, is cancelled,
+6. **CI required checks**: a stable aggregate gate fails if any required job fails, is cancelled,
    or is skipped. Use this check for branch protection/rulesets.
-6. **Publish tested multi-platform image to GHCR**: download the already-tested image archives,
+7. **Publish tested multi-platform image to GHCR**: download the already-tested image archives,
    authenticate, push their platform manifests, and create the combined image tags. It never
    rebuilds the application during publication. Intermediate tested-image archives expire after
    one day; PR/check-only runs do not upload them.
+
+```mermaid
+flowchart LR
+    R[Workflow, scripts and release boundary] --> P[Python 3.11 / 3.12]
+    R --> F[Frontend syntax and Node tests]
+    R --> B[Chromium desktop / phone]
+    R --> C[Build and smoke-test AMD64 / ARM64]
+    R --> G[CI required checks]
+    P --> G
+    F --> G
+    B --> G
+    C --> G
+    G --> D[Eligible release: publish tested images to GHCR]
+```
 
 GitHub-hosted Linux runners need internet access to install public dependencies and images;
 they do not need `.env`, patient data, restricted assets, a model, Virtuoso, GPU credentials, or SSH.
 Actions are pinned to verified commit hashes and checkout does not persist credentials. Token
 permissions default to `contents: read`; only the publishing job receives `packages: write`.
 There is no `pull_request_target` workflow executing contributor code with release credentials.
+
+The Python matrix matches the currently pinned rdflib 7.1.1 dependency: Python 3.14 must not be
+added until that dependency is upgraded and verified. Live LLM accuracy, database execution and
+performance evaluations remain separate run-machine checks; CI validates their source and offline
+regressions without contacting those services.
 
 ### Santiago / repository administrator setup
 
@@ -836,11 +859,12 @@ Pending live checks remain pending until supported by real-service evidence in
 
 ### Verification status of this automation change
 
-Local checks passed: **810 Python tests**, **16 Node tests**, **88 desktop/phone browser tests**,
-`actionlint` **1.7.12**, tracked-file boundary checks, and Python wheel assembly. The helper tests
-exercise application checks with simulated Docker transport; they do not execute an image.
-The main README's local links were checked. Python was tested locally on 3.11; the 3.12 matrix
-is configured for Actions.
+Local checks passed on 18 October 2026: **1,693 Python tests**, **16 Node tests**,
+**90 desktop/phone browser tests**, `actionlint` **1.7.12**, dependency compatibility checks,
+tracked-file boundary checks, Python compilation, and shell/JavaScript syntax checks. The Python
+suite includes release-gate and shell-parsing regressions. The helper tests exercise application
+checks with simulated Docker transport; they do not execute an image. Local verification used
+Python 3.11 and Node 24; Python 3.12 and Node 22 are configured for Actions.
 
 **Pending:** actual AMD64/ARM64 Docker builds/smoke checks and the first GHCR publication. Docker
 is installed on this workstation but its daemon is stopped; it was not started because it may host

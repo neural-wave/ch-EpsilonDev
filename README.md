@@ -1,4 +1,4 @@
-# Secure NL-to-SPARQL for SPHN clinical knowledge graphs
+# SIB Doc
 
 A researcher writes a question in English. This gateway translates it to SPARQL over Swiss Personalized Health Network (SPHN) clinical graphs and decides whether the requested query follows five privacy rules. The judged endpoint, `POST /nl-to-sparql`, returns a query and a compliance verdict without connecting to a database. The optional researcher console can execute a compliant query against a separately configured development Virtuoso instance.
 
@@ -265,7 +265,7 @@ python -m pip install -r requirements.txt
 python -m pytest -q
 ```
 
-The local Python suite passed **1,686 tests** on this checkout with one third-party deprecation warning. Unit/API tests use local fixtures; they do not reproduce the live model or database measurements.
+The local Python suite passed **1,693 tests** on this checkout with one third-party deprecation warning. Unit/API tests use local fixtures; they do not reproduce the live model or database measurements.
 
 ### Check the HTTP contract without a model
 
@@ -332,7 +332,7 @@ The project also serves a researcher console at `/console/cli/`, an agent-inspec
 
 `/demo/ask` may execute a compliant query against a configured development Virtuoso endpoint. The team-mode default (`DEMO_SHOW_DETAILS=true`) may return a permitted query and diagnostics to that internal console. `DEMO_SHOW_DETAILS=false` hides those details, and the separate `DEMO_PUBLIC_MODE=true` also blocks developer/judged routes and disables the structured request archive. Public mode requires an explicitly set positive `DEMO_MIN_GROUP_SIZE`. By default this threshold is **disabled**. The optional suppression withholds an entire result when a group is too small; it is a demo release policy, not a new judged-query rule. The console does not supply authentication, TLS or protection against inference by repeated aggregate requests. The [privacy review](docs/PRIVACY_REVIEW.md) describes this boundary and the [validation record](docs/RESULTS_VALIDATION.md) distinguishes synthetic UI checks from checks with an actual model and database.
 
-[Project CI/CD](.github/workflows/tests.yml) is configured to test Python 3.11/3.12, frontend and browser behavior, and AMD64/ARM64 container images before publishing tested images to GitHub Container Registry on an eligible main-branch push or version tag. It builds an image; it does not deploy a model, Virtuoso or a public service. The container defaults to the stub backend, includes the public data and dev reference examples, and excludes restricted `assets/` and credentials. The [historical operations handbook, section 19](docs/operations/PROJECT_HANDBOOK.md#19-cicd-and-container-delivery) gives the delivery details. Repository configuration is evidence that the workflow exists; it is not a claim that a particular image has already been built or published.
+[SIB Doc CI/CD](.github/workflows/tests.yml) validates the workflow, shell scripts and release-file boundary, then tests Python 3.11/3.12, frontend JavaScript, desktop/phone browser behavior, and AMD64/ARM64 container images. Only after all required checks pass can it publish the tested images to GitHub Container Registry on an eligible main-branch push, version tag, or explicitly enabled manual run. It builds an image; it does not deploy a model, Virtuoso or a public service. The container defaults to the stub backend, includes the public data and dev reference examples, and excludes restricted `assets/` and credentials. The [operations handbook, section 19](docs/operations/PROJECT_HANDBOOK.md#19-cicd-and-container-delivery) gives the triggers, jobs, administrator setup and local verification commands. Repository configuration is evidence that the workflow exists; it is not a claim that a particular image has already been built or published.
 
 ## Repository and documentation map
 

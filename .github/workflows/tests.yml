@@ -1,4 +1,4 @@
-name: Project CI/CD
+name: SIB Doc CI/CD
 
 on:
   pull_request:
@@ -25,6 +25,7 @@ defaults:
     shell: bash
 
 env:
+  CI: 'true'
   NL2SPARQL_BACKEND: stub
   DEMO_PUBLIC_MODE: 'false'
   DEMO_MIN_GROUP_SIZE: disabled
@@ -33,7 +34,7 @@ env:
 
 jobs:
   repository:
-    name: Release-file boundary
+    name: Workflow, scripts and release-file boundary
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -45,6 +46,19 @@ jobs:
           python-version: '3.12'
       - run: python scripts/ci/check_release_files.py
       - run: python -m compileall -q src scripts eval
+      - name: Validate shell scripts without starting services
+        run: git ls-files -z '*.sh' | xargs -0 -r -n1 bash -n
+      - name: Validate GitHub Actions workflows
+        env:
+          ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+        run: |
+          archive="$RUNNER_TEMP/actionlint.tar.gz"
+          curl --fail --silent --show-error --location --retry 3 \
+            https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz \
+            --output "$archive"
+          echo "$ACTIONLINT_SHA256  $archive" | sha256sum --check
+          tar -xzf "$archive" -C "$RUNNER_TEMP" actionlint
+          "$RUNNER_TEMP/actionlint" -color
 
   pytest:
     name: Python (${{ matrix.python }})
@@ -79,7 +93,23 @@ jobs:
           if-no-files-found: ignore
 
   frontend:
-    name: Node and Chromium (desktop + phone)
+    name: Frontend syntax and Node tests
+    needs: repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22'
+      - name: Validate frontend and browser JavaScript syntax
+        run: git ls-files -z 'frontend/*.js' 'tests/*.js' 'tests/*.cjs' | xargs -0 -r -n1 node --check
+      - run: node --test tests/frontend/*.test.cjs
+
+  browser:
+    name: Chromium (desktop + phone)
     needs: repository
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -98,9 +128,6 @@ jobs:
           cache: npm
           cache-dependency-path: tests/browser/package-lock.json
       - run: python -m pip install -r requirements.txt
-      - name: Validate frontend JavaScript syntax
-        run: find frontend -type f -name '*.js' -print0 | xargs -0 -n1 node --check
-      - run: node --test tests/frontend/*.test.cjs
       - run: npm ci --prefix tests/browser
       - run: npm exec --prefix tests/browser -- playwright install --with-deps chromium
       - name: Synthetic browser regressions (no model or database)
@@ -174,7 +201,7 @@ jobs:
   ci:
     name: CI required checks
     if: ${{ always() }}
-    needs: [repository, pytest, frontend, container]
+    needs: [repository, pytest, frontend, browser, container]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
