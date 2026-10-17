@@ -421,7 +421,7 @@ python eval/run_query_eval.py --rescore eval/reports/query-<date>.json   # execu
 **Questions:**
 - **31 shared:** the 16 official examples (`data/examples.jsonl`) plus 15 team questions ([eval/questions.jsonl](eval/questions.jsonl)).
 - **198 labeled:** the 31 above plus 167 intent cases ([eval/intent_questions.jsonl](eval/intent_questions.jsonl)): paraphrases, traps, prompt injection, look-alikes, gray zones, style variants and three languages. 125 of them were written by an agent that never saw our prompts.
-- **47 with a reference query:** the 11 compliant official examples plus 36 questions ([eval/query_questions.jsonl](eval/query_questions.jsonl)) whose reference SPARQL was verified on the dev database.
+- **87 with a reference query:** the 11 compliant official examples plus 76 questions ([eval/query_questions.jsonl](eval/query_questions.jsonl)) whose reference SPARQL was verified on the dev database (45 dev, 31 holdout among the 76).
 
 **Rules of the evals:**
 - **Splits.** Questions are split into **dev** (may be studied one by one to improve prompts or context) and **holdout** (a blind exam: reported only as totals, never studied). The holdout numbers are our best guess for the jury's hidden list.
@@ -502,6 +502,8 @@ Query performance is a major lever: even the organizers' own queries can take mi
 14. **A bigger model did not fix the SPARQL.** Qwen3.5-9B, Coder-14B and Coder-30B-A3B gave the same exact-result rate. The levers are context (codes, examples) and prompts.
 15. **90% correct verdicts can hide poor SPARQL.** Measure query results against reference queries (`eval/run_query_eval.py`), not only verdicts.
 16. **Do not commit environments or editor settings.** A teammate's `.venv311/` (1,834 files) almost got merged. `.venv*/` and `.vscode/` are git-ignored now.
+17. **A Virtuoso quirk in conditional counts.** `OPTIONAL { GRAPH ?g { … } BIND(… ) }` used for a conditional count returns zeros when the same query also has an `EXISTS` cohort `BIND`, whatever the order. Use `IF(?concept = …, ?x, ?none)` binds instead (reference query q-075).
+18. **The mock data is thin outside cholera.** Billed ICD codes are almost all cholera (778 patients) plus the chapter code (189); other codes have fewer than 10 patients; CHOP is almost all `00.0x`; many SNOMED value sets are random. Questions about other diagnoses return tiny or empty results on both databases.
 
 ## 13. Next steps per module
 

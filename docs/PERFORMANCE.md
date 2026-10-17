@@ -11,7 +11,7 @@ The jury scores three things: **time per request**, **verdict correctness** agai
 | Whole pipeline, shared set | `python eval/run_eval.py --execute` | 31 (16 official + 15 team) | Verdicts, latency, tokens per step, retries | GPU, dev Virtuoso |
 | Whole pipeline, labeled set | `python eval/run_eval.py --intent-cases --concurrency 4` | 198 (31 + 167 intent cases) | **The verdict metric**, split dev / holdout | GPU |
 | Intent agent alone | `python eval/run_intent_eval.py --concurrency 4` | 198 | Detection, false alarms, right flag, tokens, latency | GPU |
-| Query agent vs reference SPARQL | `python eval/run_query_eval.py --concurrency 4` | 47 (11 official + 36 verified) | Exact result, runs on Virtuoso, first-try validity, blocked allowed, query tokens | GPU, dev Virtuoso |
+| Query agent vs reference SPARQL | `python eval/run_query_eval.py --concurrency 4` | 87 (11 official + 76 verified; 47 until 17 Oct 14:00) | Exact result, runs on Virtuoso, first-try validity, blocked allowed, query tokens | GPU, dev Virtuoso |
 | Query time on 100,000 patients | `python eval/time_on_perf.py eval/reports/query-<date>.json --runs 2` | The queries of a query report | Seconds vs the reference query, timeouts | perf Virtuoso |
 | Load | `python -m nl2sparql.load_test --url http://localhost:8080 --questions eval/questions.jsonl --requests 32 --concurrency 8 --require-llm` | 15 | Failures, p50/p95, throughput | GPU, running API |
 
