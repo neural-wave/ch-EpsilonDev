@@ -1,20 +1,38 @@
-# NL-to-SPARQL Gateway
+<div align="center">
+  <h1>NL-to-SPARQL Gateway</h1>
+  <p><strong>Research questions in. Privacy-aware SPARQL out.</strong></p>
+  <p>SIB / SPHN challenge · Neural Wave hackathon 2026 · team master document</p>
+  <p>
+    <a href="#6-getting-started-on-your-computer">Quickstart</a> ·
+    <a href="#1-the-challenge">The challenge</a> ·
+    <a href="#4-architecture-and-design-decisions">Architecture</a> ·
+    <a href="#11-evaluation-and-baseline-numbers">Evaluation</a> ·
+    <a href="#16-submission-checklist">Submission checklist</a>
+  </p>
+  <img src="docs/readme-hero.svg" alt="Research question translated into SPARQL and checked for a privacy verdict" width="960">
+</div>
 
-![Research question translated into SPARQL and checked for a privacy verdict](docs/readme-hero.svg)
-
-**SIB / SPHN challenge · Neural Wave hackathon 2026 · team master document**
-
-*Research questions in. Privacy-aware SPARQL out.*
-
-A researcher asks a question in English. We translate it into a SPARQL query over SPHN clinical data and decide whether that query respects the privacy rules. Everything sits behind one endpoint, `POST /nl-to-sparql`, uses only open-source models, and never touches a database at request time.
+> A researcher asks a question in English. We translate it into a SPARQL query over SPHN clinical data and decide whether that query respects the privacy rules. Everything sits behind one endpoint, `POST /nl-to-sparql`, uses only open-source models, and never touches a database at request time.
 
 This README is the single source of truth for the team. Read it once end to end before you start, then use the contents to jump around. If you work with an AI coding assistant, it also reads [AGENTS.md](AGENTS.md).
 
-*Team snapshot: Saturday 17 October 2026, 05:15, after merging modules A, B, C and D. Deadline: **Sunday 18 October, 11:00**.*
+> **Team snapshot:** Saturday 17 October 2026, 05:15, after merging modules A, B, C and D.
+>
+> **Deadline:** Sunday 18 October 2026, 11:00.
 
 ---
 
 ## Start here
+
+### Project at a glance
+
+| | |
+|---|---|
+| **What it does** | Turns a research question into SPARQL and checks the query against five privacy rules. |
+| **Where to start** | Follow the [local quickstart](#local-quickstart); Python 3.11+ is enough. |
+| **Request-time database access** | None. The API is database-agnostic; Virtuoso is only used offline for scripts, evaluation and the optional demo check. |
+| **Main endpoint** | `POST /nl-to-sparql` |
+| **Team snapshot** | Modules A–D merged; deadline Sunday 18 October 2026, 11:00. |
 
 | I want to… | Open |
 |---|---|
@@ -60,16 +78,22 @@ This README is the single source of truth for the team. Read it once end to end 
 
 ## 1. The challenge
 
-**Context.** In the Swiss Personalized Health Network (SPHN), every hospital keeps its patient data as an RDF knowledge graph in its own triplestore. Researchers rarely write SPARQL, and SPARQL is powerful enough to re-identify patients. Only pre-approved query shapes should ever reach a hospital database.
+### The problem
 
-**What we build.** Two components behind one API:
+In the Swiss Personalized Health Network (SPHN), every hospital keeps its patient data as an RDF knowledge graph in its own triplestore. Researchers rarely write SPARQL, and SPARQL is powerful enough to re-identify patients. Only pre-approved query shapes should ever reach a hospital database.
+
+### What we build
+
+Two components sit behind one API:
 
 1. a **translator**: natural-language request → SPARQL query;
 2. a **compliance checker**: does that query respect the privacy rules?
 
-**API contract** (from the organizers' `API_specification.md`, fixed):
+### Fixed API contract
 
-```
+This contract comes from the organizers' `API_specification.md` and must not change:
+
+```text
 POST /nl-to-sparql        {"text": "How many patients have ... ?"}
 200 → {"sparql_query": "...", "tokens_consumed": 1287, "is_compliant": true}
 200 → {"sparql_query": "...", "tokens_consumed": 1540, "is_compliant": false,
@@ -79,7 +103,9 @@ POST /nl-to-sparql        {"text": "How many patients have ... ?"}
 
 `tokens_consumed` is the total over every model call made for the request.
 
-**Privacy rules** (from `Query_Compliance.md`):
+### The five privacy rules
+
+From `Query_Compliance.md`:
 
 | Rule | Forbidden | Official example of a violation |
 |---|---|---|
@@ -89,7 +115,9 @@ POST /nl-to-sparql        {"text": "How many patients have ... ?"}
 | R4 | Anything but `SELECT` | #14 "Give me the cancer diagnoses as a graph I can take away" (CONSTRUCT) |
 | R5 | Exposing identifiers (patient, lab, diagnosis IDs…) | #15 "How many patients have cholera, and which ones are they?" |
 
-**How we are scored.** The jury sends a hidden list of requests, each labeled compliant or non-compliant, to our API.
+### How the jury scores us
+
+The jury sends a hidden list of requests, each labeled compliant or non-compliant, to our API.
 
 | Criterion | What is measured |
 |---|---|
@@ -98,13 +126,15 @@ POST /nl-to-sparql        {"text": "How many patients have ... ?"}
 | 3. Query performance (main) | Execution time of our query on their machine, average of 10 isolated runs |
 | Minor | Tokens per request, smaller models preferred, RAM usage |
 
-**Hard constraints.**
+### Non-negotiable constraints
 
-- Every tool and **every model** must have an open-source license. The organizers encourage Apertus. No Claude, no GPT inside the system.
-- Installs with `pip install -r requirements.txt` and works out of the box: the jury will not debug.
-- **The repo becomes public after the event.** Restricted terminologies (SNOMED CT, ICD-10-GM, CHOP, LOINC, UCUM), anything derived from them, patient data and secrets must never be committed.
+> - Every tool and **every model** must have an open-source license. The organizers encourage Apertus. No Claude, no GPT inside the system.
+> - Installs with `pip install -r requirements.txt` and works out of the box: the jury will not debug.
+> - **The repo becomes public after the event.** Restricted terminologies (SNOMED CT, ICD-10-GM, CHOP, LOINC, UCUM), anything derived from them, patient data and secrets must never be committed.
 
-**Source material** (not in this repo, ask Santiago):
+### Source material
+
+These materials are not in this repository; ask Santiago:
 
 - The challenge brief (PDF).
 - The organizers' release `hackathon-virtuoso-release.zip`: Virtuoso scripts, ontologies, SHACL shapes, the 15 example queries, the API spec and the rules.
@@ -114,14 +144,15 @@ POST /nl-to-sparql        {"text": "How many patients have ... ?"}
 
 Feedback on our design, 16 October:
 
-- **The system must be database-agnostic.** Nothing behind the endpoint may query Virtuoso or any other database. The database is only for us to check performance and results.
-- **Executing compliant queries is not required.** Our demo does it only as an optional dev check.
-- **A real user asking something forbidden gets only the reason, never the query.** For the hackathon, the API still returns the literal query so the jury can judge it. `RETURN_NONCOMPLIANT_QUERY=false` switches to the real behavior.
+> **The key architecture constraint:** nothing behind the endpoint may query Virtuoso or any other database. Database execution is only for offline checks.
+
+- Executing compliant queries is not required. Our demo does it only as an optional dev check.
+- A real user asking something forbidden gets only the reason, never the query. For the hackathon, the API still returns the literal query so the jury can judge it. `RETURN_NONCOMPLIANT_QUERY=false` switches to the real behavior.
 - They liked the overall plan.
 
 ## 3. Status today
 
-> **Reading this snapshot:** the table records the merged system early on 17 October. Later measurements and fixes from the same day are in [section 11](#11-evaluation-and-baseline-numbers) and the [performance log](docs/PERFORMANCE.md).
+> **Snapshot, not live status:** this table records the merged system early on 17 October. Later measurements and fixes from the same day are in [section 11](#11-evaluation-and-baseline-numbers) and the [performance log](docs/PERFORMANCE.md).
 
 | Area | State |
 |---|---|
@@ -138,7 +169,10 @@ Feedback on our design, 16 October:
 
 ## 4. Architecture and design decisions
 
-```
+<details>
+<summary>Show the request-flow diagram</summary>
+
+```text
 POST /nl-to-sparql {"text"}                                           ┌──────────────────────┐
   │                                                                   │ Knowledge base       │
   ▼                                                                   │ Virtuoso, RDF graph  │
@@ -164,6 +198,8 @@ Compliance guard (code): 5 rules on the final query ────────┘ 
   ├─ compliant     → run on Virtuoso, show the aggregate
   └─ non-compliant → nothing runs, show the reason and "Ask this instead"
 ```
+
+</details>
 
 A visual version with module letters and a "who works where" panel lives on the team diagram page: <https://claude.ai/artifact/9noDnsmYxSdoF37BMZAcxd>. It is private, so ask Santiago to share it with you. The full design spec is in [docs/specs/2026-10-16-nl-to-sparql-design.md](docs/specs/2026-10-16-nl-to-sparql-design.md).
 
@@ -209,7 +245,10 @@ A visual version with module letters and a "who works where" panel lives on the 
 
 ### Project structure
 
-```
+<details>
+<summary>Expand the repository tree</summary>
+
+```text
 nl2sparql/
 ├── README.md                     this document
 ├── AGENTS.md, CLAUDE.md          context for AI coding assistants
@@ -245,6 +284,8 @@ nl2sparql/
 └── docs/                         guides per module, design spec, implementation plan
 ```
 
+</details>
+
 ### Ownership
 
 | | Module | Owns | Tests | Owner |
@@ -276,7 +317,7 @@ nl2sparql/
 
 ### Local quickstart
 
-You need Python 3.11 or newer. You do **not** need Virtuoso or a GPU to work on the code.
+> **Just want to run the project?** Python 3.11+ is all you need. You do **not** need Virtuoso or a GPU to work on the code.
 
 ```bash
 git clone <repo-url> nl2sparql && cd nl2sparql
@@ -287,9 +328,9 @@ python -m pytest -q                 # all tests should pass
 python -m nl2sparql --port 8080     # API + demo with the stand-in agents (no model)
 ```
 
-### Smoke check
+### Check that it works
 
-In a second terminal, check that the process is serving requests:
+In a second terminal, run these checks:
 
 ```bash
 curl -fsS http://localhost:8080/health
@@ -299,13 +340,19 @@ curl -i -s localhost:8080/nl-to-sparql -H 'Content-Type: application/json' \
   -d '{"text": "How many lab tests has patient 0042 had?"}'
 ```
 
-`/health` should report `{"status":"ok","backend":"stub"}`. The allowed request returns the fixed API fields; the forbidden request still returns HTTP 200 with `is_compliant: false` and `compliance_reason`. The stub check verifies wiring and the HTTP contract, not translation quality.
+| Check | Expected result |
+|---|---|
+| `/health` | `{"status":"ok","backend":"stub"}` |
+| Allowed request | The fixed API fields |
+| Forbidden request | HTTP 200 with `is_compliant: false` and `compliance_reason` |
 
-**Without a model** (`NL2SPARQL_BACKEND=stub`), the intent agent uses keyword rules and the query agent copies the SPARQL of the most similar example. It is not a translator; it only lets the pipeline run end to end. **To use the real LLM**, see [section 8](#8-the-llm-on-the-gpu).
+The stub check verifies wiring and the HTTP contract, not translation quality.
+
+> **About the stub backend:** with `NL2SPARQL_BACKEND=stub`, the intent agent uses keyword rules and the query agent copies the SPARQL of the most similar example. It is not a translator; it only lets the pipeline run end to end. To use the real LLM, see [section 8](#8-the-llm-on-the-gpu).
 
 ### For the jury: the full system on your machine
 
-The judged API needs a model server; everything else is in this repository. Four steps:
+The judged API needs a model server; everything else is in this repository. Follow these four steps:
 
 1. **Install.** Python 3.11 or newer, then `python -m pip install -r requirements.txt`.
 2. **Configure.** Copy `.env.example` to `.env` and set:
@@ -317,22 +364,24 @@ The judged API needs a model server; everything else is in this repository. Four
 
 The committed `data/` snapshots describe the mock data as released. If your graph differs, `python scripts/profile_data.py` rebuilds them in about three minutes (`--cards-only` rebuilds the cards alone in one).
 
-### Consoles and demo
+### Explore the consoles
 
 **SIB DOC console:** <http://localhost:8080/console/cli/> is the main user interface; <http://localhost:8080/> redirects there. It is served by the API without a separate build step. See [frontend/README.md](frontend/README.md) for standalone and mock modes.
 
-**Agents console:** <http://localhost:8080/agents> shows the full configuration of both agents and their prompts. It can:
+**Agents console** (<http://localhost:8080/agents>) shows the full configuration of both agents and their prompts. It can:
 - preview exactly what each model would receive for a question, without calling any model;
 - run one question and show what each agent did (with the LLM backend, this calls the model);
 - list every saved eval report, with a scoreboard of the jury's criteria.
 
-**Runs page:** <http://localhost:8080/agents/runs> charts the main metrics over every run and compares two runs question by question (what got fixed, what broke), with a note per run saying what it tested. `python eval/run_all.py --label "what changed"` runs all four evals for the current configuration and writes that note.
+**Runs page** (<http://localhost:8080/agents/runs>) charts the main metrics over every run and compares two runs question by question (what got fixed, what broke), with a note per run saying what it tested. `python eval/run_all.py --label "what changed"` runs all four evals for the current configuration and writes that note.
 
 See [docs/LLM_AGENTS.md](docs/LLM_AGENTS.md).
 
 ## 7. Configuration reference
 
-All settings come from environment variables; `.env.example` lists them. Load them with `set -a && source .env && set +a`.
+All settings come from environment variables; [`.env.example`](.env.example) lists them. Load them with `set -a && source .env && set +a`.
+
+> **Most-used settings:** `NL2SPARQL_BACKEND` selects `stub` or `llm`; `LLM_BASE_URL` and `LLM_QUERY_MODEL` connect to the model; `LLM_EXTRA_BODY` disables Qwen thinking; `REQUEST_TIMEOUT_SECONDS` caps the whole request.
 
 | Variable | Default | What it does |
 |---|---|---|
@@ -345,7 +394,7 @@ All settings come from environment variables; `.env.example` lists them. Load th
 | `LLM_INTENT_EXTRA_BODY` | inherits `LLM_EXTRA_BODY` | Request fields for the intent model only; `'{}'` sends none |
 | `LLM_INTENT_MAX_TOKENS`, `LLM_QUERY_MAX_TOKENS` | `200`, `1500` | Answer length cap per agent. Tokens are spent only when the answer needs them |
 | `INTENT_PROMPT_VERSION`, `QUERY_PROMPT_VERSION` | `v4`, `v4` | Which prompt version each agent uses (see `src/nl2sparql/agents/prompts.py` and docs/LLM_AGENTS.md §6) |
-| `QUERY_REORDER` | `true` | `true` runs `nl2sparql.sparql.order` after the query agent: when the query has exactly one typed code pattern, inside the first `GRAPH ?g` block, and no UNION, MINUS or sub-select, the pass puts that pattern first, rotates the statement that links to it so `sphn:hasCode ?c` is its first triple, and prepends `DEFINE sql:select-option "order"`; every other query is returned untouched (a forced order is only as good as the whole written query: q-015 went from 0.19 s to 9 s when a `;` chain started with the class pattern). On by default since 17 Oct: on 100,000 patients the four run-1 queries it rewrites gave identical rows on dev and q-021 went from 0.44 s to 0.06 s, the others within 0.1 s |
+| `QUERY_REORDER` | `true` | Applies the guarded query-ordering optimization described below; other queries are left untouched. |
 | `CONTEXT_EXAMPLES`, `CONTEXT_CARDS`, `CONTEXT_CODES` | `3`, `8`, `5` | How many similar examples, schema cards and code candidates the query agent receives per request |
 | `LLM_TIMEOUT_SECONDS` | `30` | Per LLM call |
 | `LLM_VERIFY_TLS` | `true` | `false` for servers with a self-signed certificate |
@@ -359,6 +408,15 @@ All settings come from environment variables; `.env.example` lists them. Load th
 | `GPU_SSH_HOST`, `GPU_SSH_PORT` | — | Run machine only, for the tunnel (ask Santiago) |
 | `API_PORT` | `8080` | Port used by `scripts/runbox.sh` |
 | `NL2SPARQL_DATA_DIR`, `NL2SPARQL_ASSETS_DIR`, `NL2SPARQL_LOG_PATH`, `NL2SPARQL_REPORTS_DIR` | `data/`, `assets/`, `logs/requests.jsonl`, `eval/reports/` | Where data, built assets, the request log and the eval reports live |
+
+<details open>
+<summary>How <code>QUERY_REORDER</code> works and what we measured</summary>
+
+When enabled, `nl2sparql.sparql.order` runs after the query agent. It only rewrites a query with exactly one typed code pattern, inside the first `GRAPH ?g` block, and no UNION, MINUS or sub-select. It puts that pattern first, rotates the statement that links to it so `sphn:hasCode ?c` is its first triple, and prepends `DEFINE sql:select-option "order"`. Every other query is returned untouched.
+
+A forced order is only as good as the whole written query: q-015 went from 0.19 s to 9 s when a `;` chain started with the class pattern. The option has been on by default since 17 October. On 100,000 patients, the four run-1 queries it rewrites gave identical rows on dev; q-021 went from 0.44 s to 0.06 s, and the others stayed within 0.1 s.
+
+</details>
 
 ## 8. The LLM on the GPU
 
@@ -441,23 +499,27 @@ scripts/runbox.sh eval --execute --branch guard/my-fix     # eval with the LLM +
 
 ### Graph model
 
-**How the data is organized in Virtuoso:**
+The graph model has three rules worth keeping in mind:
 
-- **One patient = one named graph**, e.g. `http://example.org/graph/gen_mock_data-1_1012502`. Count patients with `COUNT(DISTINCT ?g)`. Exposing `?g` exposes the patient.
-- **The ontologies** (the SPHN schema plus ICD-10-GM, CHOP, SNOMED CT, LOINC, UCUM, ORDO, GENO, SO and OBI, 13.0M triples) are loaded into one graph, `https://biomedit.ch/rdf/sphn-resource/global`, which is also the RDFS inference rule set.
-- **A code is a node typed with a terminology class**: `?dx sphn:hasCode ?code . ?code a icd-10-gm:E11`. Codes in the data carry a year (`icd-10-gm/2022/A00.1`), so matching them needs `OPTION (inference "https://biomedit.ch/rdf/sphn-resource/global")` on that pattern.
+1. **One patient = one named graph**, e.g. `http://example.org/graph/gen_mock_data-1_1012502`. Count patients with `COUNT(DISTINCT ?g)`. Exposing `?g` exposes the patient.
+2. **Ontologies live in one graph.** The SPHN schema plus ICD-10-GM, CHOP, SNOMED CT, LOINC, UCUM, ORDO, GENO, SO and OBI (13.0M triples) are loaded into `https://biomedit.ch/rdf/sphn-resource/global`, which is also the RDFS inference rule set.
+3. **Codes are typed nodes and include a year.** For example: `?dx sphn:hasCode ?code . ?code a icd-10-gm:E11`. Since codes carry a year (`icd-10-gm/2022/A00.1`), matching them needs `OPTION (inference "https://biomedit.ch/rdf/sphn-resource/global")` on that pattern.
 
 ### Databases
 
-**The two databases:**
+| Database | Size and load time |
+|---|---|
+| **Dev** | 10.8M patient triples. Ontologies load in about 4 minutes; patients in 14 s. |
+| **Perf** | 611.7M patient triples. Loading took 79 minutes. |
 
-- **Dev:** 10.8M patient triples. Ontologies load in about 4 minutes; patients in 14 s.
-- **Perf:** 611.7M patient triples. Loading took 79 minutes.
-- Setup is in [infra/virtuoso/README.md](infra/virtuoso/README.md). Always query over HTTP: the release's `query.sh` (isql) rejects some valid SPARQL.
+Setup is in [infra/virtuoso/README.md](infra/virtuoso/README.md). Always query over HTTP: the release's `query.sh` (isql) rejects some valid SPARQL.
 
 ### Data catalog
 
 **Data files** (all built from the dev database, none containing terminology content):
+
+<details open>
+<summary>Show the complete data and assets catalog</summary>
 
 | File | What | Committed | Rebuild |
 |---|---|---|---|
@@ -469,9 +531,11 @@ scripts/runbox.sh eval --execute --branch guard/my-fix     # eval with the LLM +
 | `assets/value_sets.json` | The coded values each class property uses in the data with their labels: 59 properties, coded sets of at most 15 members (civil status, tobacco use, consent) and every sphn-individual set in full; the schema cards show them | **no**, restricted | `python scripts/build_value_sets.py` (1 minute) |
 | `data/guard_corpus.jsonl` | 37 queries the LLM really wrote, with labels and the guard's verdict | yes | `python scripts/export_guard_corpus.py` (run machine, after LLM runs) |
 
+</details>
+
 The full guide to the data, with examples, is [docs/DATA.md](docs/DATA.md).
 
-Both `assets/` files are read once, when the API starts. They are optional: without them the query agent gets no code candidates or values, and the API still works. Build them on any machine that has the dev database.
+> **Restricted generated assets:** both `assets/` files are read once, when the API starts. They are optional: without them the query agent gets no code candidates or values, and the API still works. Build them on any machine that has the dev database. Never commit these assets.
 
 The terminology-index builder also reads the optional local file
 `assets/english_terminology_labels.jsonl`. Each line must contain
@@ -480,13 +544,15 @@ This file and the generated index are restricted and must never be committed.
 
 ### Retrieval behavior
 
-A question word matches a label on its own only when it is the whole label or the index shows the other words go with it (co-occurrence in at least 75% of at least two independent entries): "diabetes" finds "Diabetes mellitus", "hospital" no longer finds "Death in hospital". The subcodes of a matched code follow it (A00 → A00.0, A00.1, A00.9).
+**Code labels:** a question word matches a label on its own only when it is the whole label or the index shows the other words go with it (co-occurrence in at least 75% of at least two independent entries). For example, "diabetes" finds "Diabetes mellitus", while "hospital" no longer finds "Death in hospital". The subcodes of a matched code follow it (A00 → A00.0, A00.1, A00.9).
 
-Every example record carries a `shape` tag (`plain`, `conditional_count`, `two_cohort`, `breakdown`; `scripts/import_examples.py` keeps them). BM25 cannot see shapes, so `ExampleBank.search` puts one `conditional_count` example in the last context slot when the question says how often / how many of / share / percentage / proportion / what fraction / what usually happens, and one `two_cohort` example for than other patients / compared with / versus.
+**Example shapes:** every example record carries a `shape` tag (`plain`, `conditional_count`, `two_cohort`, `breakdown`; `scripts/import_examples.py` keeps them). BM25 cannot see shapes, so `ExampleBank.search` puts one `conditional_count` example in the last context slot when the question says how often / how many of / share / percentage / proportion / what fraction / what usually happens, and one `two_cohort` example for than other patients / compared with / versus.
 
 [↑ Back to contents](#contents)
 
 ## 11. Evaluation and baseline numbers
+
+> **Evaluate both sides of the system:** a correct privacy verdict does not guarantee a correct or fast SPARQL query. Use the pipeline eval for verdicts and the query eval for result quality and execution.
 
 ### Evaluation commands
 
@@ -500,14 +566,15 @@ python eval/run_query_eval.py --concurrency 4         # the query agent against 
 python eval/run_query_eval.py --rescore eval/reports/query-<date>.json   # execute again, no model calls
 ```
 
-### Questions and methodology
+### Evaluation set and methodology
 
-**Questions:**
-- **31 shared:** the 16 official examples (`data/examples.jsonl`) plus 15 team questions ([eval/questions.jsonl](eval/questions.jsonl)).
-- **198 labeled:** the 31 above plus 167 intent cases ([eval/intent_questions.jsonl](eval/intent_questions.jsonl)): paraphrases, traps, prompt injection, look-alikes, gray zones, style variants and three languages. 125 of them were written by an agent that never saw our prompts.
-- **87 with a reference query:** the 11 compliant official examples plus 76 questions ([eval/query_questions.jsonl](eval/query_questions.jsonl)) whose reference SPARQL was verified on the dev database (45 dev, 31 holdout among the 76).
+| Evaluation set | Contents |
+|---|---|
+| **31 shared** | The 16 official examples (`data/examples.jsonl`) plus 15 team questions ([eval/questions.jsonl](eval/questions.jsonl)). |
+| **198 labeled** | The 31 above plus 167 intent cases ([eval/intent_questions.jsonl](eval/intent_questions.jsonl)): paraphrases, traps, prompt injection, look-alikes, gray zones, style variants and three languages. 125 were written by an agent that never saw our prompts. |
+| **87 reference queries** | The 11 compliant official examples plus 76 questions ([eval/query_questions.jsonl](eval/query_questions.jsonl)) whose reference SPARQL was verified on the dev database (45 dev, 31 holdout among the 76). |
 
-**Rules of the evals:**
+**How to read the results:**
 - **Splits.** Questions are split into **dev** (may be studied one by one to improve prompts or context) and **holdout** (a blind exam: reported only as totals, never studied). The holdout numbers are our best guess for the jury's hidden list.
 - **Fair test.** An official question never sees its own example in the context.
 - **Reports** go to `eval/reports/` (git-ignored) and show up in the agents console (`/agents`, **Measurements**). [docs/LLM_AGENTS.md](docs/LLM_AGENTS.md) explains every field.
@@ -577,6 +644,11 @@ Query performance is a major lever: even the organizers' own queries can take mi
 
 ## 12. Things we learned the hard way
 
+The recurring themes are: trust the data over the published schema, parse SPARQL through the shared locked parser, and measure real query execution separately from privacy verdicts.
+
+<details open>
+<summary>Read all 20 implementation and operations lessons</summary>
+
 1. **The 2026.1 schema does not match the data.** The schema says `sphn:hasRankCode`; the data uses `sphn:hasRank` with `sphn-individual:Principal`/`Secondary`/… The data wins. The judge flags terms absent from the data and suggests the right one.
 2. **Codes carry a year.** Without the inference option, `icd-10-gm:A00` matches nothing.
 3. **ICD-10-GM and CHOP labels are in German and French**, while requests come in English. SNOMED labels are English.
@@ -604,9 +676,11 @@ Query performance is a major lever: even the organizers' own queries can take mi
 19. **rdflib's syntax message names the wrong token.** "Expected SelectQuery, found 'GRAPH'" for a missing parenthesis three lines later, and the model repeats the error on its retry. The judge now rewrites a standard prefix declared with another namespace (`fix_standard_prefixes`), repairs three mistakes with exactly one meaning without a model call (`GROUP BY true`, `GROUP BY` inside the WHERE braces, a UNION branch that is a bare `GRAPH` block) and replaces rdflib's message with hints that name the real error and say what to write instead (`judge_checks/syntax.py`). On the 17 October dev run: 13 of 52 unparseable answers repaired, 36 explained; 0 hints on the examples and the dev references.
 20. **The anytime `timeout` parameter changes Virtuoso's plan.** With it, an OPTIONAL + inference query that answers in 84 ms runs to the deadline and returns HTTP 206 with wrong partial aggregates. Time plain runs.
 
+</details>
+
 ## 13. Next steps per module
 
-Most useful first. Measure every change with the evals in [section 11](#11-evaluation-and-baseline-numbers) and compare with the numbers there.
+**How to use this backlog:** start at the top of your module's list. Measure every change with the evals in [section 11](#11-evaluation-and-baseline-numbers) and compare with the numbers there.
 
 ### A · Integration (David)
 
@@ -658,6 +732,8 @@ Full backlog in [docs/LLM_AGENTS.md](docs/LLM_AGENTS.md#9-backlog-for-module-b-m
 
 ## 15. Team rules
 
+> **Before opening a pull request:** run the tests, measure the behavior change, and include the eval summary.
+
 1. **One branch per module and topic**, named `integration/…`, `agents/…`, `data/…`, `guard/…` or `eval/…`. Merge into `main` through a pull request; GitHub runs the tests on every pull request.
 2. **Before asking for a merge:** `python -m pytest -q` passes, and the eval on the run machine does not get worse. Paste the eval summary in the pull request.
 3. **Every bug fix comes with a regression test.** See `GROUPING_CASES` in [tests/test_guard.py](tests/test_guard.py).
@@ -669,7 +745,7 @@ Full backlog in [docs/LLM_AGENTS.md](docs/LLM_AGENTS.md#9-backlog-for-module-b-m
 
 ## 16. Submission checklist
 
-By **Sunday 18 October, 11:00**:
+> **Deadline: Sunday 18 October, 11:00.**
 
 - [ ] Code pushed to the organizers' repo `NW_26_<Company>_<Team>`. One member is added as collaborator and invites the rest.
 - [ ] README for the jury: overview, how to run, dependencies, **full names and roles of all members**.
