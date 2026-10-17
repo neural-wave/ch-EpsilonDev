@@ -1,0 +1,121 @@
+/* Design tokens: Swiss clinical.
+   Interface is black, white and cool grey. Green and red carry meaning only:
+   green = allowed (compliant), red = blocked (non-compliant). Nothing else uses them. */
+
+:root {
+  --paper: #ffffff;
+  --panel: #f3f5f6;
+  --panel-strong: #e7ebed;
+  --rule: #d3d8dc;
+  --ink: #000000;
+  --ink-2: #464c52;
+  --ink-3: #676e75;
+
+  --allow: #00764f;
+  --allow-bg: #e3f2ec;
+  --block: #da291c;
+  --block-bg: #fcebe9;
+  --block-text: #b3221a; /* small red text on --block-bg, 5.8:1 */
+
+  /* Stage colours for timing bars: greys only, so they never read as verdicts */
+  --stage-1: #b9c0c6;
+  --stage-2: #000000;
+  --stage-3: #6f777e;
+  --stage-4: #2f3438;
+  --stage-5: #959ca3;
+
+  /* SPARQL syntax: no red or green */
+  --syn-kw: #000000;
+  --syn-var: #1f56a8;
+  --syn-iri: #6a4a9c;
+  --syn-str: #8a5300;
+  --syn-num: #1f56a8;
+  --syn-com: #676e75;
+
+  /* Chart series: validated categorical slot 1 (dataviz reference palette) */
+  --series-1: #2a78d6;
+
+  --font-sans: "Helvetica Neue", Helvetica, Arial, system-ui, sans-serif;
+  --font-mono: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+
+  /* Type scale (roughly a 4:3 progression) */
+  --t-12: 0.75rem;
+  --t-14: 0.875rem;
+  --t-16: 1rem;
+  --t-21: 1.3125rem;
+  --t-28: 1.75rem;
+  --t-37: 2.3125rem;
+  --t-verdict: clamp(3rem, 7vw, 5.5rem);
+
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 16px;
+  --s-4: 24px;
+  --s-5: 32px;
+  --s-6: 48px;
+  --s-7: 64px;
+
+  --radius: 6px;
+  --gutter: 24px;
+  --max: 1280px;
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #131517;
+    --panel: #1c1f22;
+    --panel-strong: #262a2e;
+    --rule: #33393e;
+    --ink: #f4f6f7;
+    --ink-2: #bcc3c9;
+    --ink-3: #939ba2;
+    --allow: #3fc895;
+    --allow-bg: #12291f;
+    --block: #ff6255;
+    --block-bg: #331513;
+    --block-text: #ff6255;
+    --stage-1: #59616a;
+    --stage-2: #f4f6f7;
+    --stage-3: #8e979f;
+    --stage-4: #c9cfd4;
+    --stage-5: #6d757d;
+    --syn-kw: #f4f6f7;
+    --syn-var: #8ab4ff;
+    --syn-iri: #c3a6f2;
+    --syn-str: #f0b65c;
+    --syn-num: #8ab4ff;
+    --syn-com: #939ba2;
+    --series-1: #3987e5;
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --paper: #131517;
+  --panel: #1c1f22;
+  --panel-strong: #262a2e;
+  --rule: #33393e;
+  --ink: #f4f6f7;
+  --ink-2: #bcc3c9;
+  --ink-3: #939ba2;
+  --allow: #3fc895;
+  --allow-bg: #12291f;
+  --block: #ff6255;
+  --block-bg: #331513;
+  --block-text: #ff6255;
+  --stage-1: #59616a;
+  --stage-2: #f4f6f7;
+  --stage-3: #8e979f;
+  --stage-4: #c9cfd4;
+  --stage-5: #6d757d;
+  --syn-kw: #f4f6f7;
+  --syn-var: #8ab4ff;
+  --syn-iri: #c3a6f2;
+  --syn-str: #f0b65c;
+  --syn-num: #8ab4ff;
+  --syn-com: #939ba2;
+  --series-1: #3987e5;
+  color-scheme: dark;
+}
