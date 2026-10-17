@@ -56,6 +56,7 @@ def build_pipeline(settings: Settings, exclude_exact_examples: bool = False) -> 
         guard=ComplianceGuard(property_kinds),
         max_input_chars=settings.max_input_chars,
         max_retries=settings.max_retries,
+        retry_with_previous_query=settings.retry_with_previous_query,
         log_path=settings.log_path,
         request_timeout_seconds=settings.request_timeout_seconds,
     )

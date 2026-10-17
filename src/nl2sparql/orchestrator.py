@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 # Added to the retry feedback when the query agent's answer hit its max_tokens limit mid-query.
 CUT_OFF_FEEDBACK = "Your previous answer was cut off at the length limit. Write a shorter query and no explanation."
+PREVIOUS_QUERY_CHARS = 2500  # how much of the rejected query the retry feedback carries
 
 
 class PipelineError(RuntimeError):
@@ -53,7 +54,8 @@ class _Run:
 class Pipeline:
     def __init__(self, intent_agent: IntentAgent, query_agent: QueryAgent, context_builder: ContextBuilder,
                  judge: Judge, guard: ComplianceGuard, max_input_chars: int = 2000, max_retries: int = 1,
-                 log_path: Path | None = None, request_timeout_seconds: float = 75.0):
+                 log_path: Path | None = None, request_timeout_seconds: float = 75.0,
+                 retry_with_previous_query: bool = True):
         if not math.isfinite(request_timeout_seconds) or request_timeout_seconds <= 0:
             raise ValueError("REQUEST_TIMEOUT_SECONDS must be a positive finite number.")
         self.intent_agent = intent_agent
@@ -65,6 +67,7 @@ class Pipeline:
         self.max_retries = max_retries
         self.log_path = log_path
         self.request_timeout_seconds = request_timeout_seconds
+        self.retry_with_previous_query = retry_with_previous_query
 
     async def run(self, raw_text: str) -> PipelineResult:
         deadline = asyncio.get_running_loop().time() + self.request_timeout_seconds
@@ -106,7 +109,7 @@ class Pipeline:
             run.diagnostics["guard_violations_first_try"] = [f"{v.rule}: {v.message}" for v in decision.violations]
             run.diagnostics["first_try_sparql"] = sparql
             try:
-                candidate_sparql = await self._generate(text, context, decision.retry_hint, run, intent_task)
+                candidate_sparql = await self._generate(text, context, self._feedback(decision.retry_hint, sparql), run, intent_task)
                 candidate_decision = await asyncio.to_thread(
                     self._timed, run, "guard_retry", lambda: self.guard.decide(candidate_sparql, flags)
                 )
@@ -166,13 +169,19 @@ class Pipeline:
         if verdict.errors and run.retries_left > 0 and not (await intent_task).flagged and run.take_retry("judge"):
             run.diagnostics["judge_errors_first_try"] = verdict.errors
             run.diagnostics["first_try_sparql"] = verdict.sparql
-            retry_feedback = " ".join(([CUT_OFF_FEEDBACK] if cut_off else []) + verdict.errors)
+            retry_feedback = self._feedback(" ".join(([CUT_OFF_FEEDBACK] if cut_off else []) + verdict.errors), verdict.sparql)
             sparql, _ = await self._ask_query_agent(text, context, retry_feedback, "query_retry", run)
             verdict = await asyncio.to_thread(self.judge.check, sparql)
         if verdict.errors:
             run.diagnostics["judge_errors_final"] = verdict.errors
         run.timings["generate" if feedback is None else "generate_retry"] = round((time.perf_counter() - started) * 1000, 1)
         return verdict.sparql
+
+    def _feedback(self, reason: str, rejected_sparql: str) -> str:
+        """What the query agent is told on a retry: the reason and, by default, the query it rejected."""
+        if not self.retry_with_previous_query:
+            return reason
+        return f"{reason}\nThe rejected query was:\n{rejected_sparql[:PREVIOUS_QUERY_CHARS]}"
 
     async def _ask_query_agent(self, text: str, context: Context, feedback: str | None, step: str,
                                run: _Run) -> tuple[str, bool]:

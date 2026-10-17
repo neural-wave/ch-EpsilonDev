@@ -76,6 +76,8 @@ class Settings:
     virtuoso_endpoint: str = "http://localhost:8890/sparql"
     max_input_chars: int = 2000
     max_retries: int = 1
+    # The retry feedback includes the rejected query, so the model fixes it instead of starting over.
+    retry_with_previous_query: bool = True
     # Hackathon: the jury asked for the literal query of forbidden requests so they can judge it.
     # In real use a forbidden request returns only the reason (set RETURN_NONCOMPLIANT_QUERY=false).
     return_noncompliant_query: bool = True
@@ -138,6 +140,7 @@ class Settings:
             virtuoso_endpoint=env.get("VIRTUOSO_ENDPOINT", cls.virtuoso_endpoint),
             max_input_chars=int(env.get("MAX_INPUT_CHARS", cls.max_input_chars)),
             max_retries=int(env.get("MAX_RETRIES", cls.max_retries)),
+            retry_with_previous_query=_flag("RETRY_WITH_PREVIOUS_QUERY", True),
             return_noncompliant_query=_flag("RETURN_NONCOMPLIANT_QUERY", True),
             data_dir=_path("NL2SPARQL_DATA_DIR", REPO_ROOT / "data"),
             assets_dir=_path("NL2SPARQL_ASSETS_DIR", REPO_ROOT / "assets"),

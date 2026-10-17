@@ -299,6 +299,7 @@ All settings come from environment variables; `.env.example` lists them. Load th
 | `VIRTUOSO_ENDPOINT` | `http://localhost:8890/sparql` | Dev only: scripts, `eval --execute`, the demo's dev check |
 | `MAX_INPUT_CHARS` | `2000` | Longer requests get a 400 |
 | `MAX_RETRIES` | `1` | Shared retry budget per request |
+| `RETRY_WITH_PREVIOUS_QUERY` | `true` | The retry feedback includes the rejected query (up to 2,500 characters), so the model fixes it instead of writing a new one |
 | `REQUEST_TIMEOUT_SECONDS` | `75` | Total time limit for one pipeline request, including agent calls and retries. Expiry returns HTTP 503; use a positive number of seconds |
 | `RETURN_NONCOMPLIANT_QUERY` | `true` | Hackathon behavior. `false` = a forbidden request returns an empty `sparql_query` |
 | `GPU_SSH_HOST`, `GPU_SSH_PORT` | — | Run machine only, for the tunnel (ask Santiago) |
