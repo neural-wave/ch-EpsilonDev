@@ -232,8 +232,7 @@ function renderRun(d) {
         ${row("Its reason", d.intent.reason ? esc(d.intent.reason) : dash)}
         ${row("Tokens", num(k.intent ?? 0))}
         ${row("Time", msec(t.intent))}
-        ${row("Problems", lines([dg.intent_error && `error: ${dg.intent_error}`,
-                                 dg.intent_invalid_json && "the answer was not the expected JSON",
+        ${row("Problems", lines([dg.intent_invalid_json && "the answer was not the expected JSON",
                                  cut.includes("intent") && "the answer was cut off at max tokens"]) || none)}
       </table></div>
       <div class="card"><h3>Query agent</h3><table>
@@ -373,7 +372,7 @@ function pipelineRows(rows) {
       const got = r.is_compliant == null ? dash
         : `<span class="${r.correct_verdict ? "good" : "bad"}">${r.is_compliant ? "compliant" : "blocked"}${leak ? " · LEAK" : ""}</span>`;
       const problems = [r.error && `error: ${r.error}`, dg.cut_off && `cut off: ${dg.cut_off.join(", ")}`,
-        dg.intent_invalid_json && "intent: invalid JSON", dg.intent_error && `intent error: ${dg.intent_error}`,
+        dg.intent_invalid_json && "intent: invalid JSON",
         ...(dg.judge_errors_final || []).map(e => `still invalid: ${e}`),
         r.execution_error && `Virtuoso: ${r.execution_error}`,
         r.executed_rows != null && `Virtuoso: ${plural(r.executed_rows, "row")} in ${msText(r.execution_ms)}`];

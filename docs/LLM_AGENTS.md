@@ -31,9 +31,9 @@ request ─► input check ─┬─► intent agent (LLM, JSON) ─────
 - **The judge and the guard are code, not models** (module D, see [GUARD.md](GUARD.md)). The judge checks syntax, prefixes and terms absent from the data. The guard applies the five rules to the query and combines them with the intent flags.
 
 **Retry rules.** Each request has one retry, shared:
-- **The judge** asks for it when the query is invalid. It happens before the intent result is known.
+- **The judge** asks for it when the query is invalid. The orchestrator first waits for the intent result, because a flagged request gets no retry at all.
 - **The guard** asks for it only when the request is not flagged and the query breaks a rule.
-- **A flagged request** never gets a guard retry.
+- **A flagged request** never gets a retry, from the judge or from the guard.
 
 The retry is decided by code, not by the agents. The judge or the guard finds the problem, and the orchestrator calls the query agent again. The query agent only sees the feedback added to its prompt. Module B's part of the retry is how well the model corrects itself and how many tokens that costs.
 
@@ -94,7 +94,8 @@ Both agents also share `LLM_TIMEOUT_SECONDS` and `LLM_VERIFY_TLS`, and the tempe
 | `judge_errors_final` | Still invalid after the retry |
 | `cut_off` | Steps whose answer hit the answer cap: `intent`, `query`, `query_retry` |
 | `intent_invalid_json` | The intent answer was not the expected JSON. All flags read as false |
-| `intent_error` | The intent call failed. All flags read as false |
+
+**If the intent call itself fails** (an exception, e.g. the model server is down), the whole request fails with HTTP 503: the verdict needs the flags. Module A decided this.
 
 When the query agent's answer was cut off and the judge rejects it, the retry feedback starts with *"Your previous answer was cut off at the length limit. Write a shorter query and no explanation."*
 
@@ -208,15 +209,17 @@ This step runs on the GPU and needs the instance owner's OK. It takes about 15�
 ## 8. Known issues
 
 1. **About a third of requests use the retry,** mostly asked by the judge for invalid SPARQL on complex questions (#01, #08). Every retry is another ~1,800-token call and seconds of latency. `first_try_sparql` and `judge_errors_first_try` in the pipeline report show what went wrong.
-2. **The judge retry also runs for requests the intent agent will flag,** because the intent result arrives in parallel. That spends query-agent tokens on a forbidden request, but it also gives the jury a valid query to judge. When to retry is decided by the judge and the orchestrator (modules D and A), not by the agents.
-3. **An unusable intent answer reads as "no flags".** This covers invalid JSON, a cut-off answer or a failed call. The request then relies on the guard's check of the query alone. It is visible now (`intent_invalid_json`, `cut_off`, `intent_error`) but not handled.
-4. **Some valid queries still fail or return nothing:**
+2. **An unusable intent answer reads as "no flags", and a failed intent call fails the whole request.**
+   - Invalid JSON or a cut-off answer reads as "no flags", so the request relies on the guard's check of the query alone. It is visible (`intent_invalid_json`, `cut_off`) but not handled.
+   - An exception (e.g. the model server is down) answers HTTP 503.
+   - The agent itself should fall back to the keyword rules instead (backlog item 6).
+3. **Some valid queries still fail or return nothing:**
    - #05 and #10 fail only in Virtuoso.
    - #06 and #09 return no rows on dev.
 
    The fix has to come from prompts and judge style rules (with module D), since the pipeline may not query the database.
-5. **p95 latency is 16.6 s,** driven by retries on long queries. vLLM decodes at most 8 requests at once.
-6. **Three possible guard false alarms (#01, #07, #08) lower the measured accuracy.** They belong to module D ([GUARD.md](GUARD.md)).
+4. **p95 latency is 16.6 s,** driven by retries on long queries. vLLM decodes at most 8 requests at once.
+5. **Three possible guard false alarms (#01, #07, #08) lower the measured accuracy.** They belong to module D ([GUARD.md](GUARD.md)).
 
 ## 9. Backlog for module B (most useful first)
 
@@ -225,4 +228,4 @@ This step runs on the GPU and needs the instance owner's OK. It takes about 15�
 3. **Fewer retries.** Read the first tries in the pipeline report, then write query prompt v2 with the fixes.
 4. **Fewer query tokens.** Use fewer or shorter examples and only the schema cards the question needs (with module C).
 5. **Intent prompt v2.** Cover prompt injection and the gray zones, with new questions in `eval/questions.jsonl` (with module E).
-6. **Unusable intent answers.** Decide between one retry and failing closed (issue 3).
+6. **Plan B inside the intent agent.** When the model fails or answers unusable JSON, use the keyword rules (no tokens, instant) instead of failing the request or reading "no flags" (issue 2).

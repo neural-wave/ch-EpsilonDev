@@ -43,4 +43,5 @@ def build_pipeline(settings: Settings, exclude_exact_examples: bool = False) -> 
         max_input_chars=settings.max_input_chars,
         max_retries=settings.max_retries,
         log_path=settings.log_path,
+        request_timeout_seconds=settings.request_timeout_seconds,
     )

@@ -93,7 +93,7 @@ Feedback on our design, 16 October:
 
 | Area | State |
 |---|---|
-| Every component of the design | Built, wired end to end, 90 tests, CI on pull requests |
+| Every component of the design | Built and wired end to end; the test suite runs locally and in pull-request CI |
 | LLM | Connected: Qwen3.5-9B served by vLLM on a Vast.ai RTX 5090 |
 | Quality (31 test questions) | 90% verdicts correct, **0 forbidden requests marked compliant**, 2.8 s median latency |
 | Knowledge base | Two local Virtuoso databases: dev (2,000 patients) and perf (100,000 patients) |
@@ -181,6 +181,7 @@ nl2sparql/
 │   ├── orchestrator.py           the pipeline: parallel calls, shared retry, timings     (A)
 │   ├── factory.py, config.py     wiring from settings                                     (A)
 │   ├── input_check.py            normalize text, reject empty/oversized                   (A)
+│   ├── load_test.py              concurrent HTTP check of the judged endpoint             (A)
 │   ├── models.py                 shared types                                         (shared)
 │   ├── agents/                   intent + query agents, LLM and stand-in versions        (B)
 │   │   ├── base.py               agent interfaces                                     (shared)
@@ -203,7 +204,7 @@ nl2sparql/
 
 | | Module | Owns | Tests | Owner |
 |---|---|---|---|---|
-| **A** | Integration | API, orchestrator, factory, config, input check, deployment | `tests/test_pipeline_and_api.py`, `tests/test_input_check.py` | |
+| **A** | Integration | API, orchestrator, factory, config, input check, load test, deployment | `tests/test_pipeline_and_api.py`, `tests/test_input_check.py` | David |
 | **B** | Agents and prompts | `agents/`, `llm.py`, model choice | `tests/test_agents_and_judge.py` | Santiago (models) |
 | **C** | Data and context | `context/`, `scripts/`, `data/`, `infra/`, `virtuoso.py` | `tests/test_context.py` | |
 | **D** | Guard and judge | `guard/`, `judge.py`, `sparql/` | `tests/test_guard.py`, `tests/test_sparql.py` | |
@@ -223,16 +224,23 @@ You need Python 3.11 or newer. You do **not** need Virtuoso or a GPU to work on 
 ```bash
 git clone <repo-url> nl2sparql && cd nl2sparql
 python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 cp .env.example .env
 python -m pytest -q                 # all tests should pass
 python -m nl2sparql --port 8080     # API + demo with the stand-in agents (no model)
 ```
 
+In a second terminal, check that the process is serving requests:
+
 ```bash
+curl -fsS http://localhost:8080/health
 curl -s localhost:8080/nl-to-sparql -H 'Content-Type: application/json' \
   -d '{"text": "How many patients have a billed diagnosis of cholera, by sex?"}'
+curl -i -s localhost:8080/nl-to-sparql -H 'Content-Type: application/json' \
+  -d '{"text": "How many lab tests has patient 0042 had?"}'
 ```
+
+`/health` should report `{"status":"ok","backend":"stub"}`. The allowed request returns the fixed API fields; the forbidden request still returns HTTP 200 with `is_compliant: false` and `compliance_reason`. The stub check verifies wiring and the HTTP contract, not translation quality.
 
 **Without a model** (`NL2SPARQL_BACKEND=stub`), the intent agent uses keyword rules and the query agent copies the SPARQL of the most similar example. It is not a translator; it only lets the pipeline run end to end. **To use the real LLM**, see [section 8](#8-the-llm-on-the-gpu).
 
@@ -264,6 +272,7 @@ All settings come from environment variables; `.env.example` lists them. Load th
 | `VIRTUOSO_ENDPOINT` | `http://localhost:8890/sparql` | Dev only: scripts, `eval --execute`, the demo's dev check |
 | `MAX_INPUT_CHARS` | `2000` | Longer requests get a 400 |
 | `MAX_RETRIES` | `1` | Shared retry budget per request |
+| `REQUEST_TIMEOUT_SECONDS` | `75` | Total time limit for one pipeline request, including agent calls and retries. Expiry returns HTTP 503; use a positive number of seconds |
 | `RETURN_NONCOMPLIANT_QUERY` | `true` | Hackathon behavior. `false` = a forbidden request returns an empty `sparql_query` |
 | `GPU_SSH_HOST`, `GPU_SSH_PORT` | — | Run machine only, for the tunnel (ask Santiago) |
 | `API_PORT` | `8080` | Port used by `scripts/runbox.sh` |
@@ -419,10 +428,17 @@ Query performance is a major lever: even the organizers' own queries can take mi
 ## 13. Next steps per module
 
 **A · Integration**
-- Decide where the API runs during judging. It depends on the organizers' answer: their hardware or our endpoint.
-- Load test against vLLM's 8 concurrent sequences.
-- Install from scratch in a clean environment before submitting.
-- Finish the README for the jury.
+- Decide where the API runs during judging and how it reaches the model. This depends on the organizers' answer in [section 14](#14-questions-for-the-organizers); no deployment mode is confirmed yet.
+- Run the HTTP load test against the LLM backend on the run machine. The command below sends eight concurrent API requests. Each request can make both agent calls concurrently, so model calls may queue at vLLM's eight-sequence limit. The tool calls only `/health` and `POST /nl-to-sparql`; it does not execute SPARQL.
+
+  ```bash
+  python -m nl2sparql.load_test --url http://localhost:8080 \
+    --questions eval/questions.jsonl --requests 32 --concurrency 8 --require-llm
+  ```
+
+  Record `invalid_or_failed`, p50/p95 latency, throughput and mean tokens. The command is ready, but the eight-request LLM load run is still pending.
+- Install from scratch in a clean environment before submitting, then run the tests and the HTTP smoke checks in [section 6](#6-getting-started-on-your-computer).
+- Finish the jury README after the deployment answer arrives and all teammates confirm their full names and roles in [section 18](#18-team). The stub instructions above are for local development; judging needs the configured LLM backend.
 
 **B · Agents and prompts** (Santiago). Full backlog in [docs/LLM_AGENTS.md](docs/LLM_AGENTS.md#9-backlog-for-module-b-most-useful-first).
 - Per-agent baseline on the GPU, then the Apertus comparison for the intent agent.
@@ -511,7 +527,7 @@ By **Sunday 18 October, 11:00**:
 | Santiago Figueroa Luchetti | Architecture and backend | Architecture, B (agents and models), run machine |
 | Adrika | Backend | |
 | Gayathri | Backend | |
-| David | Backend | |
+| David | Backend | A (integration) |
 | Odinaka | Frontend | |
 
 Pick your module in [section 5](#5-repository-map-and-module-owners) and write it here and in the owner column there.

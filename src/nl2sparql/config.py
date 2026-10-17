@@ -55,7 +55,8 @@ class Settings:
     llm_api_key: str = "not-needed"
     llm_query_model: str = ""
     llm_timeout_seconds: float = 30.0
-    llm_verify_tls: bool = True  # set LLM_VERIFY_TLS=false for self-signed certificates
+    request_timeout_seconds: float = 75.0  # whole request, retries included; expiry answers HTTP 503
+    llm_verify_tls: bool = True  # set LLM_VERIFY_TLS=false for self-signed certificates (Vast.ai)
     llm_extra_body: dict = field(default_factory=dict)  # LLM_EXTRA_BODY, JSON merged into every request
     # Intent agent overrides (empty or None = use the shared value).
     llm_intent_model: str = ""
@@ -116,6 +117,7 @@ class Settings:
             llm_api_key=env.get("LLM_API_KEY", cls.llm_api_key),
             llm_query_model=env.get("LLM_QUERY_MODEL", ""),
             llm_timeout_seconds=float(env.get("LLM_TIMEOUT_SECONDS", cls.llm_timeout_seconds)),
+            request_timeout_seconds=float(env.get("REQUEST_TIMEOUT_SECONDS", cls.request_timeout_seconds)),
             llm_verify_tls=_flag("LLM_VERIFY_TLS", True),
             llm_extra_body=_json_object("LLM_EXTRA_BODY") or {},
             llm_intent_model=env.get("LLM_INTENT_MODEL", ""),
