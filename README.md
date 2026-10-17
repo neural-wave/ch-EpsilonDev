@@ -28,6 +28,7 @@ This README is the single source of truth for the team. Read it once end to end 
 16. [Submission checklist](#16-submission-checklist)
 17. [Glossary](#17-glossary)
 18. [Team](#18-team)
+19. [Add-ons from the team (17 October evening)](#19-add-ons-from-the-team-17-october-evening)
 
 ---
 
@@ -234,6 +235,7 @@ nl2sparql/
 - [docs/LLM_AGENTS.md](docs/LLM_AGENTS.md): the two LLM agents, their configuration, how to measure them, how to change a prompt or a model, and their backlog. For module B.
 - [docs/MODEL_HISTORY.md](docs/MODEL_HISTORY.md): every change to the model and its configuration, why it was made, what was measured and what was decided. For everyone, and for the report.
 - [docs/FRONTEND.md](docs/FRONTEND.md): the endpoint the user interface calls, its fields and the rules the page must keep. For module E.
+- [docs/README.md](docs/README.md): the index of every guide, including the add-on documents of section 19 (privacy review, results validation, feature handoff, project handbook).
 - [docs/PERFORMANCE.md](docs/PERFORMANCE.md): how we measure, the scoreboard of every measured run, where the time and tokens go, and the levers. For everyone who changes anything.
 
 ## 6. Getting started on your computer
@@ -316,6 +318,11 @@ All settings come from environment variables; `.env.example` lists them. Load th
 | `GPU_SSH_HOST`, `GPU_SSH_PORT` | — | Run machine only, for the tunnel (ask Santiago) |
 | `API_PORT` | `8080` | Port used by `scripts/runbox.sh` |
 | `NL2SPARQL_DATA_DIR`, `NL2SPARQL_ASSETS_DIR`, `NL2SPARQL_LOG_PATH`, `NL2SPARQL_REPORTS_DIR` | `data/`, `assets/`, `logs/requests.jsonl`, `eval/reports/` | Where data, built assets, the request log and the eval reports live |
+| `DEMO_SHOW_DETAILS` | `true` | The team console shows the generated query, the specific reason of a block, the suggested rephrase and the retry diagnostics in `/demo/ask`. `false` hides them (section 19) |
+| `DEMO_PUBLIC_MODE` | `false` | Public end-user console: only `/`, `/health`, `/demo/*` and `/console/*` answer, nothing is logged, and the details above are hidden. Needs `DEMO_MIN_GROUP_SIZE`. Never on the jury's API |
+| `DEMO_MIN_GROUP_SIZE` | `disabled` | Demo only: hide a whole result when a group has fewer patients. Off until the organizers approve a policy |
+| `DEMO_SHARE_TTL_SECONDS`, `DEMO_SHARE_DB_PATH` | `604800`, `logs/shared_results.sqlite3` | Lifetime and store of the opt-in shared result links (aggregate tables only, git-ignored) |
+| `DEMO_DATASET_NAME`, `DEMO_DATASET_VERSION`, `DEMO_DATASET_DESCRIPTION` | empty | The reproducibility card's dataset identity; empty shows "Not configured" |
 
 ## 8. The LLM on the GPU
 
@@ -642,3 +649,25 @@ By **Sunday 18 October, 11:00**:
 | Gayathri Girish | Backend | D (compliance guard) |
 | David García Costa | Backend | A (integration) |
 | Odinaka Ogbujiagba | Frontend | E (demo and frontend) |
+
+## 19. Add-ons from the team (17 October evening)
+
+Merged on the run machine on 17 October at night. This README stays the team's master document; the add-ons sit on top of the pipeline and change neither `POST /nl-to-sparql` nor the agents, the judge or the guard.
+
+**Gayathri (branch `compliance`, pull requests #6 and #7):**
+- **"Did you mean...?"** A vague question ("patients with diabetes") gets the coded choices first, from the terminology index and without a model call: `POST /demo/clarify`, `src/nl2sparql/assist.py`.
+- **Follow-up questions.** An answer that is one number of at least 2 offers ways to break it down (by sex, by year...) as buttons; the follow-up's answer is read out in one sentence. Field `follow_ups` of `/demo/ask`; never for a blocked or withheld result.
+
+**Adrika (branch `features-adrika`):**
+- **Result display** (`frontend/js/result.js`, `policy.js`): numbers, bars, grouped comparisons, exact tables, pagination and truncation notices, driven by column metadata from `src/nl2sparql/demo_results.py`.
+- **Privacy controls for the demo:** whole-result suppression below `DEMO_MIN_GROUP_SIZE` (off by default, waiting for the organizers), a separate public console mode (`DEMO_PUBLIC_MODE`), `Cache-Control: no-store` on demo pages. Review: [docs/PRIVACY_REVIEW.md](docs/PRIVACY_REVIEW.md).
+- **Research workflow:** CSV and clipboard export, saved snapshots, a reproducibility card (question, time, dataset identity; never the query) and opt-in shared links that expire after seven days (`POST /demo/shares`, `src/nl2sparql/demo_shares.py`).
+- **Verification:** `eval/validate_demo_results.py` checks the console's answers against the reference results on a live API and database ([docs/RESULTS_VALIDATION.md](docs/RESULTS_VALIDATION.md)); Node tests (`tests/frontend/`) and Playwright browser tests on desktop and phone (`tests/browser/`, run as in [docs/features/README.md](docs/features/README.md)).
+- **CI/CD and container:** `.github/workflows/tests.yml` runs pytest, the frontend and browser tests and builds the container for AMD64 and ARM64 on every pull request; **on a push to `main` or a `v*` tag it publishes the image to GitHub Container Registry**. The `Dockerfile` copies only `src/`, `frontend/` and the public data files (`.dockerignore` denies everything else, `assets/` and `.env` included). Setup and tags: section 19 of [docs/operations/PROJECT_HANDBOOK.md](docs/operations/PROJECT_HANDBOOK.md#19-cicd-and-container-delivery).
+- **Documents:** [docs/README.md](docs/README.md) (index), [docs/features/README.md](docs/features/README.md) (her handoff), [docs/FRONTEND.md](docs/FRONTEND.md) (response contracts), and [docs/operations/PROJECT_HANDBOOK.md](docs/operations/PROJECT_HANDBOOK.md): a copy of this README as of 17 October with the CI/CD section; this README is the one kept up to date. `todo.md` moved to `docs/plans/PROJECT_STATUS_2026-10-17.md`.
+
+**How they were fitted to the project:**
+- `DEMO_SHOW_DETAILS` (default `true`) keeps the team console as it was: it shows the generated query of an allowed request, the specific reason and the suggested rephrase of a blocked one, and the retry diagnostics. `false`, or the public mode, gives Adrika's hardened answers: no query, a generic reason, no diagnostics, generic errors. The tests cover both.
+- The follow-up buttons appear under Adrika's result display, and only for a released result.
+- One add-on test paired a cholera question with a diabetes query; the judge's coverage check rightly asked for a retry, so the test now uses a cholera query.
+- **Known gap:** the container leaves out `eval/query_questions.jsonl`, so inside it the 45 dev reference queries are not retrieval examples (`CONTEXT_DEV_REFERENCES` does nothing there). They are part of what gives 19 of 31 on the blind holdout; copy that file into the image before the jury uses it.
