@@ -254,6 +254,20 @@ curl -i -s localhost:8080/nl-to-sparql -H 'Content-Type: application/json' \
 
 **Without a model** (`NL2SPARQL_BACKEND=stub`), the intent agent uses keyword rules and the query agent copies the SPARQL of the most similar example. It is not a translator; it only lets the pipeline run end to end. **To use the real LLM**, see [section 8](#8-the-llm-on-the-gpu).
 
+### For the jury: the full system on your machine
+
+The judged API needs a model server; everything else is in this repository. Four steps:
+
+1. **Install.** Python 3.11 or newer, then `python -m pip install -r requirements.txt`.
+2. **Configure.** Copy `.env.example` to `.env` and set:
+   - `NL2SPARQL_BACKEND=llm`.
+   - The model server: `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_QUERY_MODEL=Qwen/Qwen3.5-9B` and `LLM_EXTRA_BODY='{"chat_template_kwargs": {"enable_thinking": false}}'`. We hand over the endpoint and token of our own server with the submission. To serve the model yourself instead (a GPU with 24 GB or more, vLLM 0.30): `vllm serve Qwen/Qwen3.5-9B --max-model-len 32000 --max-num-seqs 8 --port 8000`, then `LLM_BASE_URL=http://localhost:8000/v1`.
+   - `VIRTUOSO_ENDPOINT`: your SPARQL endpoint. Only step 3 reads it; the API never does.
+3. **Build the local assets** (about a minute): `python scripts/build_assets.py`. It reads the ontologies in your Virtuoso and writes the terminology index and the value sets to `assets/`. They derive from restricted terminologies, so they are not in the repository. This step is optional: without it the API runs with fewer resolved medical codes.
+4. **Run.** `python -m nl2sparql --port 8080`, then `POST http://localhost:8080/nl-to-sparql` with `{"text": "..."}` as in [section 1](#1-the-challenge).
+
+The committed `data/` snapshots describe the mock data as released. If your graph differs, `python scripts/profile_data.py` rebuilds them in about two minutes.
+
 **Agents console:** <http://localhost:8080/agents> shows the full configuration of both agents and their prompts. It can:
 - preview exactly what each model would receive for a question, without calling any model;
 - run one question and show what each agent did (with the LLM backend, this calls the model);
@@ -580,9 +594,7 @@ By **Sunday 18 October, 11:00**:
 | Full name | Role | Modules |
 |---|---|---|
 | Santiago Figueroa Luchetti | Architecture and backend | Architecture, B (agents and models), C (data and context), run machine |
-| Adrika | Backend | D (judge), C groundwork (loader validation, retrieval) |
-| Gayathri | Backend | D (compliance guard) |
-| David | Backend | A (integration) |
-| Odinaka | Frontend | |
-
-Pick your module in [section 5](#5-repository-map-and-module-owners) and write it here and in the owner column there.
+| Adrika Pradhan | Backend | D (judge), C groundwork (loader validation, retrieval) |
+| Gayathri Girish | Backend | D (compliance guard) |
+| David García Costa | Backend | A (integration) |
+| Odinaka Ogbujiagba | Frontend | E (demo and frontend) |
