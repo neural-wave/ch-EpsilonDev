@@ -64,7 +64,7 @@ Reading: the context (codes) made more queries run; the prompt v4 halved the blo
 | Date | Queries | Result |
 |---|---|---|
 | 17 Oct, pilot | 5 generated (v2) vs their references, 60 s server limit | References #04, #05, #06 pass 60 s (they took 28 min to over 30 min on this machine). Generated #07 passes 60 s where the reference takes 1.2 s. #04, #06, #09 are fast but return a wrong or empty result. |
-| 17 Oct | All v4 queries that ran on dev, 2 timed runs | in progress |
+| 17 Oct 13:30 | 36 v4 queries that ran on dev, 1 warm-up + 2 timed runs, 60 s server limit | 22 pairs completed on both sides: median generated 0.3 s vs reference 0.5 s, ratio 0.9. 11 reference queries pass 60 s (#01, #02, #04, #05, #06, #10, q-014, q-017, q-025, q-028, q-033); 6 generated pass 60 s, 4 of them where the reference also does. Generated slow where the reference is fast: q-018 and q-026 time out (reference 3.8 s and 0.5 s); spec-01 takes 1.4 s for a 0.01 s reference (×142) with the right result; #09, q-009, q-036 are ×3–4. 15 fast generated queries return a wrong or empty result on dev. |
 
 A fast query with a wrong result scores nothing: read this table together with the exact-result column above.
 
