@@ -7,12 +7,19 @@ import pytest
 
 from conftest import DATA_DIR
 from nl2sparql.context import ContextBuilder, ExampleBank, SchemaCards, TerminologyIndex
-from nl2sparql.context.bm25 import tokenize
+from nl2sparql.context.bm25 import BM25, tokenize
 from nl2sparql.models import CodeEntry, Example
 
 
 def test_tokenize_folds_accents_and_drops_stopwords():
     assert tokenize("How many patients have Sjögren?") == ["patients", "sjogren"]
+
+
+def test_tokenize_handles_punctuation_and_bm25_handles_repeated_terms_and_empty_corpus():
+    assert tokenize("alpha-beta!") == ["alpha", "beta"]
+    assert BM25([]).scores(["alpha"]) == []
+    score = BM25([["alpha", "beta"]]).scores(["alpha", "alpha"])[0]
+    assert score > BM25([["alpha", "beta"]]).scores(["alpha"])[0]
 
 
 def test_example_bank_finds_similar_question():
@@ -107,6 +114,14 @@ def test_schema_cards_match_explicit_sphn_class_names():
         "AlphaCondition": {"instances": 1, "patients": 1, "properties": {}},
     }, [])
     assert cards.cards_for("sphn:AlphaCondition", k=1)[0].startswith("sphn:AlphaCondition")
+
+
+def test_schema_closest_ties_follow_the_existing_sorted_candidate_choice():
+    cards = SchemaCards({
+        "Bat": {"instances": 1, "patients": 1, "properties": {}},
+        "Hat": {"instances": 1, "patients": 1, "properties": {}},
+    }, [])
+    assert cards.closest("Cat") == "Hat"
 
 
 def test_terminology_ties_keep_index_order_even_when_codes_are_mentioned_reversed():
@@ -243,6 +258,62 @@ def test_context_builder_combines_everything():
     context = builder.build("How many patients have a billed diagnosis of cholera, by sex?")
     assert len(context.examples) == 3
     assert any(card.startswith("sphn:BilledDiagnosis") for card in context.schema_cards)
+
+
+def test_context_builder_respects_custom_top_k_settings():
+    builder = ContextBuilder(
+        ExampleBank([
+            Example("one", "alpha condition", "SELECT * WHERE {}", True),
+            Example("two", "alpha condition", "SELECT * WHERE {}", True),
+        ]),
+        SchemaCards({
+            "AlphaCondition": {"instances": 1, "patients": 1, "properties": {}},
+            "BetaCondition": {"instances": 1, "patients": 1, "properties": {}},
+        }, []),
+        TerminologyIndex([
+            CodeEntry("https://example.test/code/a", "A00", "synthetic", ("alpha condition",)),
+            CodeEntry("https://example.test/code/b", "B00", "synthetic", ("alpha condition",)),
+        ]),
+        k_examples=1,
+        k_cards=1,
+        k_codes=1,
+    )
+    context = builder.build("alpha condition")
+    assert len(context.examples) == 1
+    assert len(context.schema_cards) == 1
+    assert len(context.code_candidates) == 1
+
+
+def test_example_context_does_not_create_unrequested_terminology_candidates():
+    builder = ContextBuilder(
+        ExampleBank([
+            Example("example", "ordinary research question", "SELECT * WHERE { ?x <urn:synthetic> ?y }", True),
+        ]),
+        SchemaCards({}, []),
+        TerminologyIndex([
+            CodeEntry("https://example.test/code/rare", "SYN9", "synthetic", ("rare synthetic marker",)),
+        ]),
+    )
+    context = builder.build("ordinary research question")
+    assert context.examples
+    assert context.code_candidates == []
+
+
+def test_large_synthetic_local_files_load_without_truncation(tmp_path):
+    examples_path = tmp_path / "many_examples.jsonl"
+    rows = [
+        json.dumps({
+            "id": f"synthetic-{index}",
+            "question": f"alpha synthetic question {index}",
+            "sparql": "SELECT * WHERE {}",
+            "compliant": True,
+        })
+        for index in range(1200)
+    ]
+    examples_path.write_text("\n".join(rows) + "\n", encoding="utf-8")
+    bank = ExampleBank.load(examples_path)
+    assert len(bank.examples) == 1200
+    assert len(bank.search("alpha synthetic question", k=5000)) == 1200
 
 
 def test_context_request_path_needs_no_virtuoso_client_or_endpoint():

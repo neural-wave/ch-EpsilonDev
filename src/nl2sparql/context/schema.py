@@ -73,8 +73,13 @@ class SchemaCards:
         return self.empty or term in self.data_terms
 
     def closest(self, term: str) -> str | None:
-        matches = difflib.get_close_matches(term, sorted(self.data_terms), n=1, cutoff=0.6)
-        return matches[0] if matches else None
+        scored = [
+            (difflib.SequenceMatcher(None, term, candidate).ratio(), candidate)
+            for candidate in self.data_terms
+        ]
+        matches = [(score, candidate) for score, candidate in scored if score > 0.6]
+        # Match get_close_matches' existing tie choice for the sorted candidate set.
+        return max(matches, key=lambda item: (item[0], item[1]))[1] if matches else None
 
     def render(self, name: str) -> str:
         card = self.classes[name]
