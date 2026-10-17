@@ -69,3 +69,22 @@ The query eval on 47 reference questions (`eval/run_query_eval.py`, 2026-10-17) 
 | A selected variable that is neither grouped nor aggregated | SP031 | Add it to GROUP BY or aggregate it |
 
 Query prompt v3 (`src/nl2sparql/agents/prompts.py`) asks the model to avoid all of these. A check in the judge would still catch the ones it writes anyway.
+
+### Frequency on the 87-question baseline (17 October, 14:10, dev split)
+
+19 generated queries that our parser accepted were rejected by Virtuoso:
+
+| Count | Virtuoso error | Example |
+|---|---|---|
+| 2 | syntax error at `UNION` before `{` | q-008 |
+| 2 | syntax error at `true` before `}` (a bare boolean where a pattern was expected) | q-018 |
+| 2 | parentheses not balanced | q-027 |
+| 2 | SQ200 aggregate function not allowed in context | q-055 |
+| 3 | DT001: `YEAR()`, `DAY()` or `bif:datediff` applied to a value that is not a date (`BirthDate` holds `hasYear`/`hasMonth`/`hasDay` parts, not a dateTime) | q-005, q-069, q-074 |
+| 2 | 42S22: a selected alias defined twice | q-071, q-073 (also SP031 on q-059) |
+| 1 | syntax error at `FILTER` before `(` | q-010 |
+| 1 | syntax error at `a` before `snomed:` and at `|` (an alternative path written wrongly) | q-022, q-041 |
+| 1 | SR083 division by zero | q-060 |
+| 1 | SR066 unsupported CONVERT (a literal compared with an IRI) | q-013 |
+
+Unbalanced parentheses, a duplicated alias, `UNION`/`FILTER` placement and a bare `true` are checkable in code before the guard. The date functions need the schema: a property whose datatype is `gYear` is not a `dateTime`.
