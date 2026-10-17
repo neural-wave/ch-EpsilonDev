@@ -427,7 +427,7 @@ Four evals, all run on the run machine (`set -a && source .env && set +a` first)
 python eval/run_eval.py --execute                     # whole pipeline, 31 shared questions, one at a time
 python eval/run_eval.py --intent-cases --concurrency 4  # whole pipeline, 198 labeled questions: the verdict metric
 python eval/run_intent_eval.py --concurrency 4        # the intent agent alone, 198 questions
-python eval/run_query_eval.py --concurrency 4         # the query agent against 47 reference SPARQL queries (dev Virtuoso)
+python eval/run_query_eval.py --concurrency 4         # the query agent against 87 reference SPARQL queries (dev Virtuoso)
 python eval/run_query_eval.py --rescore eval/reports/query-<date>.json   # execute again, no model calls
 ```
 
@@ -451,18 +451,22 @@ python eval/run_query_eval.py --rescore eval/reports/query-<date>.json   # execu
 
 **Whole pipeline, 198 labeled questions (17 October, 4 at a time):**
 
-| Split | Verdicts correct | Forbidden marked compliant | Allowed blocked |
-|---|---|---|---|
-| dev (149) | 91.3% | 1 of 88 | 12 of 61 |
-| **holdout (49)** | **83.7%** | 2 of 29 | 6 of 20 |
+| System | Split | Verdicts correct | Forbidden marked compliant | Allowed blocked |
+|---|---|---|---|---|
+| prompts v4, cap 1,500 (13:20; a second identical run gave 94.6% / 87.8%) | dev (149) | 94.0% | 1 of 88 | 8 of 61 |
+| | **holdout (49)** | **91.8%** | 2 of 29 | 2 of 20 |
+| **+ the 17 October fixes** (judge checks and repairs, guard policy, one retry per checker, the less bad attempt kept, cards, retrieval; run 3 of 3) | dev (149) | **97.3%** | **0 of 88** | 4 of 61 |
+| | **holdout (49)** | **93.9%** | 2 of 29 | 1 of 20 |
+
+Two identical runs differ by up to 4 holdout points (2 of 49 questions), so a change is judged on all 198 and on which questions flip; the three runs of the fixed system gave 87.8 / 91.8 / 93.9% on the holdout and 96.6 / 95.3 / 97.3% on dev. The full log with every run of the day is [docs/PERFORMANCE.md](docs/PERFORMANCE.md); the case-by-case analysis behind the fixes is [docs/FAILURE_ANALYSIS.md](docs/FAILURE_ANALYSIS.md).
 
 **Per agent (17 October):**
-- **Intent agent (prompt v4), holdout:** 93% of forbidden requests detected, 5% false alarms, resists prompt injection, 631 tokens per call.
-- **Query agent (prompt v4, 1,500-token cap), 47 reference questions:**
-  - 3 return exactly the reference result;
-  - 77% run on Virtuoso (87% on the holdout), up from 64% with prompt v2;
-  - 57% are valid on the first try;
-  - 5 allowed questions end up blocked, down from 10 with prompt v2.
+- **Intent agent (prompt v4), holdout:** 93% of forbidden requests detected, 5% false alarms, resists prompt injection, 631 tokens per call; identical numbers in three runs.
+- **Query agent (prompt v4, 1,500-token cap), 87 reference questions, before and after the fixes (run 3):**
+  - 4 → 6 return exactly the reference result, 4 → **18** return the reference's numbers (`exact_numbers`: other labels, rounding or layout);
+  - 67% → **78%** run on Virtuoso (68% → 81% on the holdout); Virtuoso errors 29 → 19;
+  - 9 → **6** allowed questions end up blocked;
+  - the price: the judge rejects 57 of 87 first tries (29 for syntax, the model's own) and asks for a retry, so query tokens go from 3,345 to about 7,000 per question and p50 from 6.6 to 8.6 s; "valid on the first try" (62% → 34%) now measures the stricter judge, not the model.
 - **Load test (17 October):** 32 requests, 8 at a time, against the API with the real model: all HTTP 200, p50 3.7 s, p95 11.2 s, 1.33 requests per second, 2,873 tokens on average.
 
   Of the 13 compliant queries in the 31-question run, 8 return rows, 2 return nothing and 3 fail in Virtuoso.
