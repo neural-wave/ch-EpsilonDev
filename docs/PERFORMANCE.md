@@ -32,7 +32,8 @@ The jury scores three things: **time per request**, **verdict correctness** agai
 | 16 Oct | Qwen3.5-9B, prompts v1/v1, no codes | 90.3% | | | 2.8 s / 16.6 s | ~3,000 |
 | 17 Oct 05:00 | **Merged system**: intent v4, query v2, cap 900, terminology index + value sets | 90.3%, 0 leaks | 91.3% (1 leak of 88, 12 of 61 allowed blocked) | **83.7%** (2 leaks of 29, 6 of 20 allowed blocked) | 3.1 s / 19.2 s (one at a time); 4.0 s / 14.5 s (4 at a time) | ~3,600 |
 | 17 Oct 13:20 | **intent v4, query v4, cap 1,500**, index + value sets, context 3/6/5 | | 94.0% (1 leak of 88, 8 of 61 allowed blocked) | **91.8%** (2 leaks of 29, 2 of 20 allowed blocked) | 3.8 s / 13.7 s (4 at a time) | ~3,800 |
-| next | context with 2 examples instead of 3 | | | | | |
+| 17 Oct 13:31 | as above, **2 examples instead of 3** (rejected) | | query eval only: queries that run 77% → 60%, allowed blocked 5 → 13, exact 3 → 1, query tokens 3,369 → 3,908 (more guard retries) | | | |
+| next | query prompt v5: speed rules from the 100,000-patient timing | | | | | |
 
 ### Intent agent alone
 
@@ -90,7 +91,7 @@ A request without retry, Qwen3.5-9B, merged system:
 **Time**
 1. **Fewer retries.** Better judge hints and the Virtuoso-only checks in code (module D); shorter, simpler queries from the prompt (module B).
 2. **A faster model for the query agent.** Qwen3-Coder-30B-A3B (4-bit) answered in 3.6 s / 7.5 s against 6.9 s / 19 s, with similar quality but a worse intent agent. The code supports one model per agent (`LLM_INTENT_*`): the 9B for the intent agent, the 30B for queries, on a second GPU instance.
-3. **Two examples instead of three** in the context: about 25% fewer prompt tokens and a faster answer. Measure the exact-result and runs columns before keeping it.
+3. ~~Two examples instead of three~~: measured on 17 October and rejected. With 2 examples fewer queries run (77% → 60%), more allowed questions are blocked (5 → 13) and the retries cost more tokens than the example saved. The examples carry the house style; keep 3.
 
 **Verdicts**
 1. Re-run the 198 set with prompt v4: fewer allowed requests blocked is expected.
@@ -102,9 +103,8 @@ A request without retry, Qwen3.5-9B, merged system:
 2. Turn the findings into prompt rules and, where a rewrite is mechanical, into judge fixes.
 
 **Tokens**
-1. Two examples instead of three.
-2. Shorter schema cards: only the properties a question needs.
-3. No code candidates when the value sets in the cards already cover the question.
+1. Shorter schema cards: only the properties a question needs.
+2. No code candidates when the value sets in the cards already cover the question.
 
 ## 5. Protocol for a change
 
