@@ -213,3 +213,22 @@ and no configured query model. No new live model/database execution was attempte
 Santiago must load the authorized private connection settings, run an LLM-backed API, open the
 console without `?mock=1`, and resolve the reference/NL/browser checks listed above. Clinical
 semantic correctness and arbitrary-question translation remain PENDING until verified there.
+
+## Project CI/CD verification
+
+Local automation checks on 17 October 2026: **810 Python tests, 16 Node tests, and 88
+Playwright browser tests passed**. Actionlint 1.7.12, the tracked-file release boundary,
+workflow shell syntax, and Python wheel assembly also passed. Container helper tests use
+simulated Docker transport; they do not establish that an actual image builds or runs.
+
+The workflow tests Python 3.11/3.12, frontend behavior, and AMD64/ARM64 containers before
+publishing the tested images to GitHub Container Registry. The selected delivery target is
+GHCR only; no application-server deployment is configured. See README section 19 for
+triggers, permissions, branch protection, image tags, and local commands.
+
+Actual container builds, container smoke tests, and registry publication are **PENDING**
+the first GitHub Actions run. The local Docker daemon was stopped and was not started.
+No changes were pushed and no image was published during this implementation. Owner:
+implementing code author; repository/run-machine coordination: Santiago. Evidence from
+the first run must be recorded using its commit and Actions run URL. These automation
+checks do not replace the pending real-model and dev-database checks above.

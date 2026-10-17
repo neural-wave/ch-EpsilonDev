@@ -27,3 +27,7 @@ ontologies/
 # Browser test dependencies and generated synthetic evidence
 node_modules/
 tests/browser/artifacts/
+
+# Local Python packaging output
+build/
+dist/
