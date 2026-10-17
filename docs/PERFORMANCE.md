@@ -60,6 +60,7 @@ The jury scores three things: **time per request**, **verdict correctness** agai
 | 17 Oct | v2 | Qwen3.5-9B, merged system | index + value sets | 900 | 2 | 64% (80%) | 57% | 10 | 3,143 | 7.0 s / 19.5 s |
 | 17 Oct 13:00 | **v4** (default) | Qwen3.5-9B, merged system | index + value sets | **1,500** | **3** | **77% (87%)** | 57% | **5** | 3,369 | 6.4 s / 18.3 s |
 | 17 Oct 13:34 | v5 (rejected) | Qwen3.5-9B, merged system | index + value sets | 1,500 | 4 (1 holdout) | 66% (80%) | 72% | 5 | 3,372 | 6.2 s / 11.5 s |
+| 17 Oct 14:10 | **v4, 87 questions** (new baseline; 47 before) | Qwen3.5-9B, merged system | index + value sets | 1,500 | 4 (1 holdout) | 67% (68%) | 62% | 9 | 3,345 | 6.6 s / 16.0 s |
 
 Reading: the context (codes) made more queries run; the prompt v4 halved the blocked allowed questions; a bigger model did not change the exact-result rate, only the speed. On the 198-question verdict set, v4 with the 1,500 cap took the holdout from 83.7% to 91.8%: 7 dev questions fixed, 3 broken (#08 unparseable, #10 and one more grouped by a record node), retries 33 → 24, cut-off answers 10 → 4. Holdout exact results are 0 in every run: the hard questions are not solved by any configuration yet.
 
