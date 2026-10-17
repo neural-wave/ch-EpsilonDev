@@ -19,6 +19,13 @@ query both run on VIRTUOSO_ENDPOINT (the dev database, 2,000 patients) and their
 - "error": Virtuoso rejected the generated query (execution_error keeps its message) or stopped it at
   its timeout.
 
+Some references add a restriction their question does not state: official-03 asks for "any diagnosis rank"
+and its reference counts the principal diagnosis only. AS_ASKED lists them with the edits that make the
+reference answer its question as asked, for this eval only (data/examples.jsonl stays as given). Every
+question is scored twice: "outcome" against the given reference (the strict score: the headline, unchanged)
+and "outcome_as_asked", the same unless AS_ASKED edits its reference. The summary reports both:
+right_numbers and right_numbers_as_asked, and the as_asked rates next to the strict ones, also per split.
+
 Questions: the official compliant examples (data/examples.jsonl) plus eval/query_questions.jsonl.
 Holdout questions are a blind exam: they count in by_split only, never in the printed lines or lists.
 """
@@ -40,6 +47,31 @@ from nl2sparql.virtuoso import VirtuosoClient
 
 OUTCOMES = ("exact", "exact_numbers", "same_rows", "empty", "wrong", "error")
 RIGHT = ("exact", "exact_numbers")
+
+# References that add a restriction their question does not state, with the text edits (old, new) that make them
+# answer the question as asked. For the "as asked" score only: the strict score keeps the given reference.
+AS_ASKED = {
+    "official-03": {
+        "why": 'the question asks for "any diagnosis rank"; the reference counts the principal diagnosis only',
+        "edits": [("          sphn:hasRank sphn-individual:Principal ;\n", ""),
+                  ("?cholera_principal_patients", "?cholera_patients")],
+    },
+}
+
+
+def as_asked_sparql(question_id: str, reference_sparql: str) -> str | None:
+    """The reference edited to answer its question as asked (AS_ASKED), or None when it needs no edit. An edit whose
+    text is not in the reference exactly once raises: an override must never fall back to the strict reference."""
+    override = AS_ASKED.get(question_id)
+    if override is None:
+        return None
+    sparql = reference_sparql
+    for old, new in override["edits"]:
+        if sparql.count(old) != 1:
+            raise ValueError(f"{question_id}: the as-asked edit {old.strip()!r} occurs {sparql.count(old)} times "
+                             "in the reference instead of once")
+        sparql = sparql.replace(old, new)
+    return sparql
 
 
 def load_query_questions(settings: Settings) -> list[dict]:
@@ -155,9 +187,11 @@ async def execute(client: VirtuosoClient, sparql: str) -> tuple[list[dict] | Non
 
 
 def rates(rows: list[dict]) -> dict:
-    """Aggregate numbers only: safe to show for the holdout split. exact_numbers_rate counts exact results too."""
+    """Aggregate numbers only: safe to show for the holdout split. exact_numbers_rate counts exact results too, and
+    right_numbers counts both. right_numbers_as_asked and as_asked score the same answers by outcome_as_asked."""
     n = max(len(rows), 1)
     counts = Counter(r["outcome"] for r in rows)
+    as_asked = Counter(r.get("outcome_as_asked", r["outcome"]) for r in rows)
     return {
         "questions": len(rows),
         "exact_rate": round(counts["exact"] / n, 3),
@@ -166,6 +200,11 @@ def rates(rows: list[dict]) -> dict:
         "first_try_rate": round(sum(not r["pipeline_error"] and r["retries"] == 0 and not r["judge_errors_final"]
                                     for r in rows) / n, 3),
         "outcomes": {name: counts[name] for name in OUTCOMES},
+        "right_numbers": sum(counts[name] for name in RIGHT),
+        "right_numbers_as_asked": sum(as_asked[name] for name in RIGHT),
+        "as_asked": {"exact_rate": round(as_asked["exact"] / n, 3),
+                     "exact_numbers_rate": round(sum(as_asked[name] for name in RIGHT) / n, 3),
+                     "outcomes": {name: as_asked[name] for name in OUTCOMES}},
     }
 
 
@@ -179,8 +218,20 @@ def generated_row(item: dict, result: PipelineResult, latency_ms: float) -> dict
             "timings_ms": result.timings_ms, "diagnostics": result.diagnostics}
 
 
+async def score_as_asked(virtuoso: VirtuosoClient, row: dict, generated_rows: list[dict] | None) -> dict:
+    """The row's as-asked fields: the outcome against its AS_ASKED reference (as_asked_reference says which and why),
+    or the strict outcome when its question needs no override (as_asked_reference None)."""
+    sparql = as_asked_sparql(row["id"], row["reference_sparql"])
+    if sparql is None:
+        return {"outcome_as_asked": row["outcome"], "as_asked_reference": None}
+    reference_rows, _, reference_error = await execute(virtuoso, sparql)
+    return {"outcome_as_asked": "reference_failed" if reference_rows is None else compare(reference_rows, generated_rows),
+            "as_asked_reference": {"why": AS_ASKED[row["id"]]["why"], "sparql": sparql, "error": reference_error,
+                                   "rows": None if reference_rows is None else len(reference_rows)}}
+
+
 async def score(rows_in: list[dict], virtuoso: VirtuosoClient) -> list[dict]:
-    """Run each generated and reference query on the database and compare their results."""
+    """Run each generated and reference query on the database and compare their results, strictly and as asked."""
     rows = []
     for item in rows_in:  # one at a time, so execution times are comparable
         reference_rows, reference_ms, reference_error = await execute(virtuoso, item["reference_sparql"])
@@ -196,10 +247,12 @@ async def score(rows_in: list[dict], virtuoso: VirtuosoClient) -> list[dict]:
                "execution_ms": generated_ms, "execution_error": generated_error,
                "outcome": "reference_failed" if reference_rows is None else compare(reference_rows, generated_rows),
                "retries": item.get("retries", 0), "judge_errors_final": diagnostics.get("judge_errors_final", [])}
+        row |= await score_as_asked(virtuoso, row, generated_rows)
         rows.append(row)
         if row["split"] != "holdout":
+            as_asked = f" (as asked: {row['outcome_as_asked']})" if row["as_asked_reference"] else ""
             print(f"{row['outcome']:16} {row['id']:12} retries={row['retries']} "
-                  f"rows {row['generated_rows']} vs {row['reference_rows']}  {row['question'][:70]}")
+                  f"rows {row['generated_rows']} vs {row['reference_rows']}{as_asked}  {row['question'][:70]}")
     print(f"{sum(r['split'] == 'holdout' for r in rows)} holdout questions answered (hidden)")
     return rows
 
@@ -218,6 +271,8 @@ def summarize(rows: list[dict], setup: dict) -> dict:
         "blocked_allowed": [r["id"] for r in visible if r.get("is_compliant") is False],
         "not_exact": [r["id"] for r in visible if r["outcome"] != "exact"],
         "reference_failed": [r["id"] for r in rows if r["outcome"] == "reference_failed" and r["split"] != "holdout"],
+        "as_asked_overrides": {r["id"]: f"{r['outcome']} -> {r['outcome_as_asked']}"
+                               for r in visible if r.get("as_asked_reference")},
         "retry_reasons": dict(Counter((r.get("diagnostics") or {}).get("retry_reason", "none") for r in ok)),
         "median_query_tokens": median(query_tokens),
         "median_tokens": median([r["tokens_consumed"] for r in ok]),
@@ -237,6 +292,7 @@ async def main_async(args) -> None:
     if args.rescore:  # same generated queries, executed again (e.g. after the database was unavailable)
         old = json.loads(Path(args.rescore).read_text(encoding="utf-8"))
         keep = ("questions", "outcomes", "exact_rate", "exact_numbers_rate", "executes_rate", "first_try_rate",
+                "right_numbers", "right_numbers_as_asked", "as_asked", "as_asked_overrides",
                 "blocked_allowed", "not_exact", "reference_failed", "retry_reasons", "median_query_tokens",
                 "median_tokens", "latency_ms_p50", "latency_ms_p95", "execution_time_ratio_median", "by_split",
                 "by_difficulty")

@@ -460,6 +460,7 @@ python eval/run_query_eval.py --rescore eval/reports/query-<date>.json   # execu
 **Rules of the evals:**
 - **Splits.** Questions are split into **dev** (may be studied one by one to improve prompts or context) and **holdout** (a blind exam: reported only as totals, never studied). The holdout numbers are our best guess for the jury's hidden list.
 - **Fair test.** An official question never sees its own example in the context.
+- **Strict and as asked.** official-03's question says "any diagnosis rank" but the organizers' reference counts the principal diagnosis only (102 / 88 / 78 patients by sex instead of 277 / 256 / 234), so the literal answer scores `same_rows`; the query eval keeps that strict score as the headline and also reports `right_numbers_as_asked` and `as_asked` (overall and per split), scored against the reference without the rank restriction (`AS_ASKED` in `eval/run_query_eval.py`; `data/examples.jsonl` stays as given).
 - **Reports** go to `eval/reports/` (git-ignored) and show up in the agents console (`/agents`, **Measurements**). [docs/LLM_AGENTS.md](docs/LLM_AGENTS.md) explains every field.
 
 **Whole pipeline, 31 shared questions, one at a time:**

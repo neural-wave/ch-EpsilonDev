@@ -8,10 +8,13 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "eval"))
 import time_on_perf  # noqa: E402
+from conftest import load_examples  # noqa: E402
 from eval_common import virtuoso_error_text  # noqa: E402
-from run_query_eval import compare, execute, generated_row, rates, score, signature, summarize  # noqa: E402
+from run_query_eval import (AS_ASKED, as_asked_sparql, compare, execute, generated_row, rates, score,  # noqa: E402
+                            signature, summarize)
 
 from nl2sparql.models import IntentFlags, PipelineResult  # noqa: E402
+from nl2sparql.sparql.parse import parse_sparql  # noqa: E402
 from nl2sparql.virtuoso import SelectResult, VirtuosoClient, VirtuosoTimeout  # noqa: E402
 
 
@@ -176,6 +179,87 @@ def test_rates_and_summary_show_exact_and_right_numbers():
     summary = summarize(rows, {"backend": "llm"})
     assert summary["exact_numbers_rate"] == 0.6 and summary["by_split"]["holdout"]["exact_numbers_rate"] == 1.0
     assert summary["not_exact"] == ["q-2", "q-3", "q-4"] and summary["execution_time_ratio_median"] == 0.5
+
+
+# Official-03 on dev: patients by sex with a principal cholera diagnosis (the reference) or one of any rank (the question).
+CHOLERA_PRINCIPAL = [{"sex": "male", "patients": "709", "cholera": "102", "pct": "14.4"},
+                     {"sex": "indeterminate", "patients": "625", "cholera": "88", "pct": "14.1"},
+                     {"sex": "female", "patients": "666", "cholera": "78", "pct": "11.7"}]
+CHOLERA_ANY_RANK = [{"sex": "male", "patients": "709", "cholera": "277", "pct": "39.1"},
+                    {"sex": "female", "patients": "666", "cholera": "256", "pct": "38.4"},
+                    {"sex": "indeterminate", "patients": "625", "cholera": "234", "pct": "37.4"}]
+
+
+def official_sparql(question_id: str) -> str:
+    return next(row["sparql"] for row in load_examples() if row["id"] == question_id)
+
+
+def test_official_03_as_asked_is_the_organizers_reference_without_the_principal_rank():
+    reference = official_sparql("official-03")
+    edited = as_asked_sparql("official-03", reference)
+    removed = [line.strip() for line in reference.splitlines() if line not in edited.splitlines()]
+    added = [line.strip() for line in edited.splitlines() if line not in reference.splitlines()]
+    assert removed == ["(COUNT(DISTINCT ?cholera_patient) AS ?cholera_principal_patients)",
+                       "sphn:hasRank sphn-individual:Principal ;"]
+    assert added == ["(COUNT(DISTINCT ?cholera_patient) AS ?cholera_patients)"]
+    assert "Principal" not in edited and "principal" not in edited
+    parse_sparql(edited)  # still a valid query
+
+
+def test_as_asked_overrides_apply_to_the_official_examples_that_need_one_only():
+    # The team's own references are fixed in eval/query_questions.jsonl (q-052); only the organizers' stay as given.
+    official = {row["id"]: row for row in load_examples()}
+    assert set(AS_ASKED) <= {question_id for question_id, row in official.items() if row["compliant"]}
+    for question_id, row in official.items():
+        assert (as_asked_sparql(question_id, row["sparql"]) is None) == (question_id not in AS_ASKED)
+
+
+def test_an_as_asked_edit_that_does_not_apply_once_raises(monkeypatch):
+    monkeypatch.setitem(AS_ASKED, "q-9", {"why": "test", "edits": [("FILTER (?rank)", "")]})
+    with pytest.raises(ValueError, match="occurs 0 times"):
+        as_asked_sparql("q-9", "SELECT * WHERE { ?s ?p ?o }")
+    with pytest.raises(ValueError, match="occurs 2 times"):
+        as_asked_sparql("q-9", "SELECT * WHERE { FILTER (?rank) FILTER (?rank) }")
+    assert as_asked_sparql("q-9", "SELECT * WHERE { FILTER (?rank) }") == "SELECT * WHERE {  }"
+    assert as_asked_sparql("q-8", "SELECT * WHERE { FILTER (?rank) }") is None
+
+
+def test_score_gives_official_03_a_strict_and_an_as_asked_outcome():
+    reference = official_sparql("official-03")
+    virtuoso = FakeVirtuoso({reference: CHOLERA_PRINCIPAL, as_asked_sparql("official-03", reference): CHOLERA_ANY_RANK,
+                             "ANY_RANK": CHOLERA_ANY_RANK, "PRINCIPAL": CHOLERA_PRINCIPAL, "REF": [{"n": "5"}], "GEN": [{"n": "5"}]})
+    base = {"question": "q?", "pipeline_error": None, "retries": 0, "split": "dev"}
+    official_03 = {**base, "id": "official-03", "reference_sparql": reference}
+    rows = asyncio.run(score([
+        {**official_03, "sparql_query": "ANY_RANK"},
+        {**base, "id": "q-1", "reference_sparql": "REF", "sparql_query": "GEN"},
+        {**base, "id": "q-2", "reference_sparql": "REF", "sparql_query": "GEN", "split": "holdout"},
+    ], virtuoso))
+    assert [(r["outcome"], r["outcome_as_asked"]) for r in rows] == [("same_rows", "exact"), ("exact", "exact"), ("exact", "exact")]
+    assert rows[0]["as_asked_reference"]["rows"] == 3 and rows[0]["as_asked_reference"]["error"] is None
+    assert "any diagnosis rank" in rows[0]["as_asked_reference"]["why"] and rows[1]["as_asked_reference"] is None
+    principal_only = asyncio.run(score([{**official_03, "sparql_query": "PRINCIPAL"}], virtuoso))[0]
+    assert (principal_only["outcome"], principal_only["outcome_as_asked"]) == ("exact", "same_rows")
+    failed = asyncio.run(score([{**official_03, "sparql_query": "ANY_RANK", "pipeline_error": "model server down"}], virtuoso))[0]
+    assert (failed["outcome"], failed["outcome_as_asked"]) == ("error", "error")
+
+
+def test_summary_keeps_the_strict_counts_and_adds_the_as_asked_counts():
+    overridden = {"why": "test", "sparql": "SELECT ...", "rows": 3, "error": None}
+    rows = [{**scored("official-03", "same_rows", difficulty="official"), "outcome_as_asked": "exact", "as_asked_reference": overridden},
+            scored("q-1", "exact"), scored("q-2", "wrong"), scored("q-3", "exact_numbers", split="holdout"),
+            {**scored("q-4", "same_rows", split="holdout"), "outcome_as_asked": "exact_numbers", "as_asked_reference": overridden}]
+    summary = summarize(rows, {"backend": "llm"})
+    assert summary["outcomes"] == {"exact": 1, "exact_numbers": 1, "same_rows": 2, "empty": 0, "wrong": 1, "error": 0}
+    assert summary["exact_rate"] == 0.2 and summary["exact_numbers_rate"] == 0.4 and summary["not_exact"] == ["official-03", "q-2"]
+    assert summary["right_numbers"] == 2 and summary["right_numbers_as_asked"] == 4
+    assert summary["as_asked"] == {"exact_rate": 0.4, "exact_numbers_rate": 0.8,
+                                   "outcomes": {"exact": 2, "exact_numbers": 2, "same_rows": 0, "empty": 0, "wrong": 1, "error": 0}}
+    dev, holdout = summary["by_split"]["dev"], summary["by_split"]["holdout"]
+    assert (dev["right_numbers"], dev["right_numbers_as_asked"], dev["as_asked"]["exact_numbers_rate"]) == (1, 2, 0.667)
+    assert (holdout["right_numbers"], holdout["right_numbers_as_asked"], holdout["exact_numbers_rate"]) == (1, 2, 0.5)
+    assert summary["by_difficulty"]["official"]["right_numbers_as_asked"] == 1
+    assert summary["as_asked_overrides"] == {"official-03": "same_rows -> exact"}  # holdout ids are never listed
 
 
 def test_run_all_prints_only_the_last_summary_lines():
