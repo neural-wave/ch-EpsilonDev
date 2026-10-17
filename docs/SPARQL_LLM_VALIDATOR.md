@@ -62,8 +62,8 @@ The query eval on 47 reference questions (`eval/run_query_eval.py`, 2026-10-17) 
 | Pattern in the query | Virtuoso's error | Hint for the retry |
 |---|---|---|
 | `MEDIAN(`, `OVER (` | syntax error | Not supported: compute it differently (e.g. a subquery) |
-| `UNBOUNDED`, `NULL` | syntax error | Use OPTIONAL with BOUND() or COALESCE() |
-| `PREFIX bif: <http…>` | prefix `bif:` is reserved | Do not declare `bif:` |
+| `UNBOUNDED`, `NULL` | syntax error | `SUM(IF(<condition>, 1, 0))` for a condition on a per-patient number; `OPTIONAL { GRAPH ?g { … } BIND(?g AS ?x) }` and `COUNT(DISTINCT ?x)` for an absent pattern |
+| `PREFIX bif: <http…>` | prefix `bif:` is reserved (SP030 for the W3C and `/sparql/bif#` namespaces) | The judge rewrites every `bif:` declaration to `<bif:>` (`fix_standard_prefixes`) |
 | `xsd:year(` | undefined procedure | Use YEAR() |
 | `\|\|` between graph patterns | syntax error | Use UNION |
 | A selected variable that is neither grouped nor aggregated | SP031 | Add it to GROUP BY or aggregate it |

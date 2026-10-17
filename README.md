@@ -44,6 +44,7 @@ This README is the single source of truth for the team. Read it once end to end 
 
 ## Contents
 
+<<<<<<< HEAD
 **Understand the project**
 
 - [01 · The challenge](#1-the-challenge)
@@ -73,6 +74,27 @@ This README is the single source of truth for the team. Read it once end to end 
 - [16 · Submission checklist](#16-submission-checklist)
 - [17 · Glossary](#17-glossary)
 - [18 · Team](#18-team)
+=======
+1. [The challenge](#1-the-challenge)
+2. [What the jury told us](#2-what-the-jury-told-us)
+3. [Status today](#3-status-today)
+4. [Architecture and design decisions](#4-architecture-and-design-decisions)
+5. [Repository map and module owners](#5-repository-map-and-module-owners)
+6. [Getting started on your computer](#6-getting-started-on-your-computer)
+7. [Configuration reference](#7-configuration-reference)
+8. [The LLM on the GPU](#8-the-llm-on-the-gpu)
+9. [The run machine](#9-the-run-machine)
+10. [The knowledge base and the data files](#10-the-knowledge-base-and-the-data-files)
+11. [Evaluation and baseline numbers](#11-evaluation-and-baseline-numbers)
+12. [Things we learned the hard way](#12-things-we-learned-the-hard-way)
+13. [Next steps per module](#13-next-steps-per-module)
+14. [Questions for the organizers](#14-questions-for-the-organizers)
+15. [Team rules](#15-team-rules)
+16. [Submission checklist](#16-submission-checklist)
+17. [Glossary](#17-glossary)
+18. [Team](#18-team)
+19. [Add-ons from the team (17 October evening)](#19-add-ons-from-the-team-17-october-evening)
+>>>>>>> origin/main
 
 ---
 
@@ -157,10 +179,10 @@ Feedback on our design, 16 October:
 | Area | State |
 |---|---|
 | Modules A–D | **Merged on `main`** (17 October): integration with timeouts and safe retries (David), agents and context (Santiago), judge and context hardening (Adrika), compliance guard (Gayathri). 244 tests pass locally and in pull-request CI |
-| LLM | Qwen3.5-9B served by vLLM on a Vast.ai RTX 5090, for both agents. Coder-14B and Coder-30B were tested and not adopted ([section 8](#8-the-llm-on-the-gpu)) |
-| Verdicts, 31 shared questions | **90.3% correct, 0 forbidden requests marked compliant**, 3.1 s / 19.2 s latency (p50 / p95) |
-| Verdicts, 198 labeled questions | **91.3%** on the dev split and **83.7% on the blind holdout**. The main loss is allowed requests that end up blocked ([section 11](#11-evaluation-and-baseline-numbers)) |
-| Query quality | Weak on complex questions: 2 of 47 queries return exactly the reference result, and 64% run on Virtuoso |
+| LLM | **Qwen3.6-27B** (4-bit AWQ build `cyankiwi/Qwen3.6-27B-AWQ-INT4`, Apache-2.0) served by vLLM on a Vast.ai RTX 5090, for both agents, since 17 October 21:00. It replaced Qwen3.5-9B after a measured test; Coder-14B, Coder-30B and Qwen3.8-27B were tested and not adopted ([section 8](#8-the-llm-on-the-gpu), and the full history with the reasons in [docs/MODEL_HISTORY.md](docs/MODEL_HISTORY.md)) |
+| Verdicts, 31 shared questions | 90.3% correct, 0 forbidden requests marked compliant, 3.1 s / 19.2 s latency (p50 / p95), measured with Qwen3.5-9B on 17 October morning |
+| Verdicts, 198 labeled questions | **99.3%** on the dev split and **100% on the blind holdout** (0 forbidden requests marked compliant, 0 allowed requests blocked), p50 5.3 s, p95 17.9 s ([section 11](#11-evaluation-and-baseline-numbers)) |
+| Query quality | **48 of 87** generated queries return the reference's numbers (**19 of 31** on the blind holdout, 1 of 11 official examples), 92% run on Virtuoso, 83% pass the judge on the first try |
 | Context | Terminology index (38,765 codes) and coded value sets (55 properties) built on the run machine; 96% of the codes reference queries need reach the query agent |
 | Knowledge base | Two local Virtuoso databases: dev (2,000 patients) and perf (100,000 patients) |
 | Demo page and agents console | `http://localhost:8080` and `/agents` on the run machine |
@@ -212,7 +234,7 @@ A visual version with module letters and a "who works where" panel lives on the 
    - Each sees what the other misses: a query cleaned up by the model, or a query that leaks rows on an allowed request.
 3. **Code wherever possible.** Input check, context, judge and guard are deterministic code: milliseconds, zero tokens, same answer every time. The parse plus guard takes about 15 ms per query.
 4. **One LLM call on the critical path.** The intent agent runs in parallel with generation, never as a gate before it.
-5. **One retry each for the judge and the guard.** The judge (syntax, unknown terms and the checks in `judge_checks/`) may ask the model again once, and the guard (an allowed request whose query broke a rule) once more, so the query agent runs at most three times per request.
+5. **One retry each for the judge and the guard, plus one after a retry spent on syntax.** The judge (syntax, unknown terms and the checks in `judge_checks/`) may ask the model again once, and the guard (an allowed request whose query broke a rule) once more. When the judge's retry was bought by syntax errors alone and the retry parses but is still not clean, the judge asks once more (`retry_reason` `judge x2`): that retry is the first answer the semantic checks ever saw, and on the 17 October run 13 of 56 dev requests spent the judge's only retry on syntax and none ended right. So the query agent runs at most four times per request, always inside `REQUEST_TIMEOUT_SECONDS` (the extra call is skipped when less time remains than the longest query-agent call so far). A retry that is still not clean is a fresh query, not a repaired one: after each retry, the judge's or the guard's, the pipeline keeps the less bad attempt by the judge's severity (`nl2sparql.judge.severity`), so a guard retry that comes back unparseable or cut off never replaces an attempt that parsed. A cut-off answer tells the retry to be shorter, whichever checker asked for it.
 6. **A forbidden request is never retried.** A retry could turn it into a clean query, which we would then wrongly mark compliant. An R1 violation on the query is treated the same way: the model cannot invent a graph name, a record IRI or identifier digits, so the request named them (`REQUEST_LEVEL_RULES` in `guard/decision.py`).
 7. **A query that breaks a rule is never marked compliant**, even if that costs us a point.
 
@@ -270,7 +292,9 @@ nl2sparql/
 │   ├── judge.py                  repairs, syntax, terms absent from the data, then the    (D)
 │   │                             checks below
 │   ├── judge_checks/             one module per family: syntax (explains and repairs what
-│   │                             rdflib rejects), scope, semantics, schema                (D)
+│   │                             rdflib rejects), scope, semantics, schema, the question
+│   │                             checks (coverage, record count) and the rewrites of
+│   │                             shapes with one correct form (scope, aggregation)        (D)
 │   ├── sparql/                   Virtuoso-aware parsing and prefix fixes, shared by guard and judge (D)
 │   ├── virtuoso.py               small client (scripts, eval, demo only)                  (C)
 │   └── demo/index.html           demo page                                                (E)
@@ -307,8 +331,13 @@ nl2sparql/
 - [docs/guard-and-judge/README.md](docs/guard-and-judge/README.md): what was verified locally in the guard and the judge, and what needs the run machine.
 - [docs/SPARQL_LLM_VALIDATOR.md](docs/SPARQL_LLM_VALIDATOR.md): SIB's sparql-llm validator, evaluated offline, and the Virtuoso-only errors the judge could catch. For module D.
 - [docs/LLM_AGENTS.md](docs/LLM_AGENTS.md): the two LLM agents, their configuration, how to measure them, how to change a prompt or a model, and their backlog. For module B.
+- [docs/MODEL_HISTORY.md](docs/MODEL_HISTORY.md): every change to the model and its configuration, why it was made, what was measured and what was decided. For everyone, and for the report.
 - [docs/FRONTEND.md](docs/FRONTEND.md): the endpoint the user interface calls, its fields and the rules the page must keep. For module E.
+<<<<<<< HEAD
 - [frontend/README.md](frontend/README.md): how to run the SIB DOC console with the API, a proxy or built-in fixtures. For module E.
+=======
+- [docs/README.md](docs/README.md): the index of every guide, including the add-on documents of section 19 (privacy review, results validation, feature handoff, project handbook).
+>>>>>>> origin/main
 - [docs/PERFORMANCE.md](docs/PERFORMANCE.md): how we measure, the scoreboard of every measured run, where the time and tokens go, and the levers. For everyone who changes anything.
 
 [↑ Back to contents](#contents)
@@ -357,7 +386,7 @@ The judged API needs a model server; everything else is in this repository. Foll
 1. **Install.** Python 3.11 or newer, then `python -m pip install -r requirements.txt`.
 2. **Configure.** Copy `.env.example` to `.env` and set:
    - `NL2SPARQL_BACKEND=llm`.
-   - The model server: `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_QUERY_MODEL=Qwen/Qwen3.5-9B` and `LLM_EXTRA_BODY='{"chat_template_kwargs": {"enable_thinking": false}}'`. We hand over the endpoint and token of our own server with the submission. To serve the model yourself instead (a GPU with 24 GB or more, vLLM 0.30): `vllm serve Qwen/Qwen3.5-9B --max-model-len 32000 --max-num-seqs 8 --port 8000`, then `LLM_BASE_URL=http://localhost:8000/v1`.
+   - The model server: `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_QUERY_MODEL=cyankiwi/Qwen3.6-27B-AWQ-INT4` and `LLM_EXTRA_BODY='{"chat_template_kwargs": {"enable_thinking": false}}'`. We hand over the endpoint and token of our own server with the submission. To serve the model yourself instead (a GPU with 32 GB or more, vLLM 0.30; the weights take 19.6 GB): `vllm serve cyankiwi/Qwen3.6-27B-AWQ-INT4 --max-model-len 32000 --max-num-seqs 8 --port 8000`, then `LLM_BASE_URL=http://localhost:8000/v1`.
    - `VIRTUOSO_ENDPOINT`: your SPARQL endpoint. Only step 3 reads it; the API never does.
 3. **Build the local assets** (about a minute): `python scripts/build_assets.py`. It reads the ontologies in your Virtuoso and writes the terminology index and the value sets to `assets/`. They derive from restricted terminologies, so they are not in the repository. This step is optional: without it the API runs with fewer resolved medical codes.
 4. **Run.** `python -m nl2sparql --port 8080`, then `POST http://localhost:8080/nl-to-sparql` with `{"text": "..."}` as in [section 1](#1-the-challenge).
@@ -388,7 +417,7 @@ All settings come from environment variables; [`.env.example`](.env.example) lis
 | `NL2SPARQL_BACKEND` | `stub` | `stub` (no model) or `llm` |
 | `LLM_BASE_URL` | `http://localhost:8000/v1` | OpenAI-compatible server. Through the SSH tunnel: `http://localhost:18000/v1` |
 | `LLM_API_KEY` | `not-needed` | Bearer token; needed for the public Vast endpoint, not for the tunnel |
-| `LLM_QUERY_MODEL` | — | Model name served by vLLM, e.g. `Qwen/Qwen3.5-9B` |
+| `LLM_QUERY_MODEL` | — | Model name served by vLLM, e.g. `cyankiwi/Qwen3.6-27B-AWQ-INT4` |
 | `LLM_INTENT_MODEL` | query model | A separate model for the intent agent |
 | `LLM_INTENT_BASE_URL`, `LLM_INTENT_API_KEY` | shared values | Give the intent agent its own model server |
 | `LLM_INTENT_EXTRA_BODY` | inherits `LLM_EXTRA_BODY` | Request fields for the intent model only; `'{}'` sends none |
@@ -396,18 +425,24 @@ All settings come from environment variables; [`.env.example`](.env.example) lis
 | `INTENT_PROMPT_VERSION`, `QUERY_PROMPT_VERSION` | `v4`, `v4` | Which prompt version each agent uses (see `src/nl2sparql/agents/prompts.py` and docs/LLM_AGENTS.md §6) |
 | `QUERY_REORDER` | `true` | Applies the guarded query-ordering optimization described below; other queries are left untouched. |
 | `CONTEXT_EXAMPLES`, `CONTEXT_CARDS`, `CONTEXT_CODES` | `3`, `8`, `5` | How many similar examples, schema cards and code candidates the query agent receives per request |
+| `CONTEXT_DEV_REFERENCES` | `true` | `true` also loads the dev rows of `eval/query_questions.jsonl` (question + reference SPARQL, 45 today) into the example bank, after the official and team examples so an official example wins a tie; holdout rows are never read. Their shape tag is read from the SPARQL. With it on, only the holdout numbers of the eval are meaningful: a dev question no longer finds its own reference (excluded by text) but retrieves its neighbours'. On since 17 October: on the blind holdout, right numbers 7 → 10 of 31 and queries that run 81% → 94%, with fewer tokens and retries. Does nothing where `eval/` is absent |
 | `LLM_TIMEOUT_SECONDS` | `30` | Per LLM call |
 | `LLM_VERIFY_TLS` | `true` | `false` for servers with a self-signed certificate |
 | `LLM_EXTRA_BODY` | empty | JSON merged into every LLM request. For Qwen3.x: `'{"chat_template_kwargs": {"enable_thinking": false}}'` (keep the single quotes) |
 | `VIRTUOSO_ENDPOINT` | `http://localhost:8890/sparql` | Dev only: scripts, `eval --execute`, the demo's dev check |
 | `MAX_INPUT_CHARS` | `2000` | Longer requests get a 400 |
-| `MAX_RETRIES` | `1` | Retries per checker: the judge may ask the model again once and the guard once, so the query agent runs at most three times per request |
+| `MAX_RETRIES` | `1` | Retries per checker: the judge may ask the model again once (twice when its first retry was spent on syntax errors alone) and the guard once, so the query agent runs at most four times per request |
 | `RETRY_WITH_PREVIOUS_QUERY` | `false` | `true` adds the rejected query to the retry feedback. Measured on 17 October: the model then copies the broken query; fewer retries end valid |
 | `REQUEST_TIMEOUT_SECONDS` | `75` | Total time limit for one pipeline request, including agent calls and retries. Expiry returns HTTP 503; use a positive number of seconds |
 | `RETURN_NONCOMPLIANT_QUERY` | `true` | Hackathon behavior. `false` = a forbidden request returns an empty `sparql_query` |
 | `GPU_SSH_HOST`, `GPU_SSH_PORT` | — | Run machine only, for the tunnel (ask Santiago) |
 | `API_PORT` | `8080` | Port used by `scripts/runbox.sh` |
 | `NL2SPARQL_DATA_DIR`, `NL2SPARQL_ASSETS_DIR`, `NL2SPARQL_LOG_PATH`, `NL2SPARQL_REPORTS_DIR` | `data/`, `assets/`, `logs/requests.jsonl`, `eval/reports/` | Where data, built assets, the request log and the eval reports live |
+| `DEMO_SHOW_DETAILS` | `true` | The team console shows the generated query, the specific reason of a block, the suggested rephrase and the retry diagnostics in `/demo/ask`. `false` hides them (section 19) |
+| `DEMO_PUBLIC_MODE` | `false` | Public end-user console: only `/`, `/health`, `/demo/*` and `/console/*` answer, nothing is logged, and the details above are hidden. Needs `DEMO_MIN_GROUP_SIZE`. Never on the jury's API |
+| `DEMO_MIN_GROUP_SIZE` | `disabled` | Demo only: hide a whole result when a group has fewer patients. Off until the organizers approve a policy |
+| `DEMO_SHARE_TTL_SECONDS`, `DEMO_SHARE_DB_PATH` | `604800`, `logs/shared_results.sqlite3` | Lifetime and store of the opt-in shared result links (aggregate tables only, git-ignored) |
+| `DEMO_DATASET_NAME`, `DEMO_DATASET_VERSION`, `DEMO_DATASET_DESCRIPTION` | empty | The reproducibility card's dataset identity; empty shows "Not configured" |
 
 <details open>
 <summary>How <code>QUERY_REORDER</code> works and what we measured</summary>
@@ -427,11 +462,11 @@ A forced order is only as good as the whole written query: q-015 went from 0.19 
 | Provider | Vast.ai, on-demand instance rented by Santiago (about $100 of credit) |
 | GPU | 1× NVIDIA RTX 5090, 32 GB |
 | Server | vLLM 0.30 (Vast "vLLM" template), OpenAI-compatible API |
-| Model | `Qwen/Qwen3.5-9B`: 9.7B parameters, Apache-2.0, not gated |
+| Model | `cyankiwi/Qwen3.6-27B-AWQ-INT4`: the 4-bit AWQ build of `Qwen/Qwen3.6-27B` (27.8B parameters, dense, Apache-2.0, not gated). 19.6 GB of weights; the KV cache holds 102,808 tokens. Until 17 October 21:00: `Qwen/Qwen3.5-9B` |
 | Server settings | `--max-model-len 32000 --max-num-seqs 8` (at most 8 requests decoded at once) |
 | Both agents | Same model, different prompts. Separate it only if the eval says so |
 
-**Turn thinking off.** Qwen3.5 thinks by default. In our first test it spent its whole 600-token budget reasoning and returned nothing (7 s). With thinking off it answered in 1.2 s with 47 tokens. Always set `LLM_EXTRA_BODY='{"chat_template_kwargs": {"enable_thinking": false}}'`.
+**Turn thinking off.** Qwen3.5 and Qwen3.6 think by default. In our first test it spent its whole 600-token budget reasoning and returned nothing (7 s). With thinking off it answered in 1.2 s with 47 tokens. Always set `LLM_EXTRA_BODY='{"chat_template_kwargs": {"enable_thinking": false}}'`.
 
 ### Access and operations
 
@@ -459,7 +494,17 @@ The full procedure is in [docs/LLM_AGENTS.md](docs/LLM_AGENTS.md). vLLM listens 
 | `Qwen/Qwen2.5-Coder-14B-Instruct-AWQ` | 2–3 of 47 | 72–74% | 4.5 / 10.9 s | not measured |
 | `cyankiwi/Qwen3-Coder-30B-A3B-Instruct-AWQ-4bit` | 3 of 47 | 60% | 3.6 / 7.5 s | 93% / 10% |
 
-A bigger model did not improve the SPARQL; it only changed speed. `swiss-ai/Apertus-8B-Instruct-2509`, the model the organizers encourage, is still a candidate for the intent agent ([docs/LLM_AGENTS.md](docs/LLM_AGENTS.md), section 7).
+That morning a bigger model did not improve the SPARQL; it only changed speed.
+
+**Models compared on 17 October evening**, on the final pipeline (judge with deterministic repairs, 3 examples from a bank that includes the dev reference queries). Right numbers = the reference's numbers, possibly with other labels or rounding; the blind holdout has 31 questions:
+
+| Model (Apache-2.0) | Right numbers, holdout | Official examples | Holdout queries that run | Holdout first try | Latency p50 / p95 | Verdicts dev / holdout (198) |
+|---|---|---|---|---|---|---|
+| `Qwen/Qwen3.5-9B` (until 21:00) | 10 of 31 (two runs) | 1 of 11 | 87–94% | 48–52% | 8.7 / 28.2 s | 95.3% / 93.9% |
+| **`cyankiwi/Qwen3.6-27B-AWQ-INT4` (in use)** | **19 of 31 (three runs)** | 1 of 11 | **94%** | **81%** | **7.2 / 21.9 s** | **99.3% / 100%** |
+| `cyankiwi/Qwen3.8-27B-AWQ-INT4` | 16 of 31 (one run) | 1 of 11 | 84% | 81% | 9.3 / 20.5 s | not measured |
+
+Qwen3.6-27B nearly doubles the right numbers. It passes the judge on the first try far more often, so it needs fewer retries (median tokens per question 5,913 → 3,325): on the 87 reference questions it is faster (p50 8.7 → 7.2 s); on the 198 verdict questions the median request takes longer (4.0 → 5.3 s) while the slowest get faster (p95 24.2 → 17.9 s). The newer Qwen3.8-27B gave fewer right numbers and more Virtuoso errors. Bigger open models need several GPUs and were not tested. Every model change, with its reason and its reports, is in [docs/MODEL_HISTORY.md](docs/MODEL_HISTORY.md). `swiss-ai/Apertus-8B-Instruct-2509`, the model the organizers encourage, is still a candidate for the intent agent ([docs/LLM_AGENTS.md](docs/LLM_AGENTS.md), section 7).
 
 **Cost.** Vast bills per hour while the instance runs, not per request, so run as many tests as you like. Stopping it halts GPU billing; storage is still billed. After a stop, the GPU may be taken by someone else when you restart.
 
@@ -528,7 +573,7 @@ Setup is in [infra/virtuoso/README.md](infra/virtuoso/README.md). Always query o
 | `data/schema_cards.json` | The 164 classes present in the data (the schema defines 214), with their properties: datatype, every class a link reaches, the terminology of each coded property (ICD-10-GM, CHOP, SNOMED CT or only the generic `sphn:Code`) and the members of each sphn-individual value set, all measured on the data | yes | `python scripts/profile_data.py --cards-only` (1 minute) |
 | `data/team_examples.jsonl` | 3 retrieval-only examples the team wrote (a two-cohort "with cholera vs other patients" comparison, a conditional count with its share, a breakdown with a decade bucket, a braced UNION and `VALUES (?concept ?label)`), each verified on the dev database (row counts in `note`). Loaded by the example bank next to `examples.jsonl`; the eval scripts never read it | yes | by hand; verify on dev before adding |
 | `assets/terminology_index.jsonl` | 38,765 code IRIs with their labels (ICD-10-GM, CHOP, the SNOMED CT concepts used in the data) plus English aliases for the codes the examples use (chop 00.0 therapeutic ultrasound, A00 and its subcodes, E11) | **no**, restricted | `python scripts/build_terminology_index.py` (17 s) |
-| `assets/value_sets.json` | The coded values each class property uses in the data with their labels: 59 properties, coded sets of at most 15 members (civil status, tobacco use, consent) and every sphn-individual set in full; the schema cards show them | **no**, restricted | `python scripts/build_value_sets.py` (1 minute) |
+| `assets/value_sets.json` | The coded values each class property uses in the data with their labels: 61 properties, coded sets of at most 20 members (civil status, tobacco use, consent, procedure intent, tumour grade) and every sphn-individual set in full; the schema cards show them | **no**, restricted | `python scripts/build_value_sets.py` (1 minute) |
 | `data/guard_corpus.jsonl` | 37 queries the LLM really wrote, with labels and the guard's verdict | yes | `python scripts/export_guard_corpus.py` (run machine, after LLM runs) |
 
 </details>
@@ -595,12 +640,18 @@ python eval/run_query_eval.py --rescore eval/reports/query-<date>.json   # execu
 |---|---|---|---|---|
 | prompts v4, cap 1,500 (13:20; a second identical run gave 94.6% / 87.8%) | dev (149) | 94.0% | 1 of 88 | 8 of 61 |
 | | **holdout (49)** | **91.8%** | 2 of 29 | 2 of 20 |
-| **+ the 17 October fixes** (judge checks and repairs, guard policy, one retry per checker, the less bad attempt kept, cards, retrieval; run 3 of 3) | dev (149) | **97.3%** | **0 of 88** | 4 of 61 |
-| | **holdout (49)** | **93.9%** | 2 of 29 | 1 of 20 |
+| + the 17 October fixes (judge checks and repairs, guard policy, one retry per checker, the less bad attempt kept, cards, retrieval; run 3 of 3) | dev (149) | 97.3% | 0 of 88 | 4 of 61 |
+| | holdout (49) | 93.9% | 2 of 29 | 1 of 20 |
+| **+ round 2 and the dev references as examples, Qwen3.6-27B for both agents** (21:00; p50 5.3 s, p95 17.9 s, 3,972 tokens) | dev (149) | **99.3%** | **0 of 88** | **1 of 61** |
+| | **holdout (49)** | **100%** | **0 of 29** | **0 of 20** |
 
 Two identical runs differ by up to 4 holdout points (2 of 49 questions), so a change is judged on all 198 and on which questions flip; the three runs of the fixed system gave 87.8 / 91.8 / 93.9% on the holdout and 96.6 / 95.3 / 97.3% on dev. The full log with every run of the day is [docs/PERFORMANCE.md](docs/PERFORMANCE.md); the case-by-case analysis behind the fixes is [docs/FAILURE_ANALYSIS.md](docs/FAILURE_ANALYSIS.md).
 
+<<<<<<< HEAD
 ### Agent and load results
+=======
+**The model change (17 October, 21:00).** Same pipeline, Qwen3.5-9B → Qwen3.6-27B: right numbers on the 87 reference questions 29–30 → **48** (blind holdout 10 → **19 of 31** in three runs, official examples 1 → 1 of 11), queries that run 85–87% → 92%, judge passes on the first try 45% → 83%, Virtuoso errors 11–13 → 7, p50 8.2–8.7 → 7.2 s, median query tokens ~5,900 → 3,325; intent agent on the holdout: 100% of forbidden requests detected, 0% false alarms. Reasons and reports: [docs/MODEL_HISTORY.md](docs/MODEL_HISTORY.md).
+>>>>>>> origin/main
 
 **Per agent (17 October):**
 - **Intent agent (prompt v4), holdout:** 93% of forbidden requests detected, 5% false alarms, resists prompt injection, 631 tokens per call; identical numbers in three runs.
@@ -668,13 +719,19 @@ The recurring themes are: trust the data over the published schema, parse SPARQL
 11. **rdflib's SPARQL parser is not thread-safe.** The orchestrator runs the judge and the guard in worker threads, and two requests parsing at once corrupted the parser for the rest of the process: every later request came back "not compliant". With 4 concurrent requests, 198 of 198 failed. `parse_sparql` now takes a lock, and a test parses from 8 threads at once.
 12. **A client timeout does not stop a Virtuoso query.** Slow queries from an eval kept running and saturated dev Virtuoso (HTTP 503). The query eval runs queries one at a time and can `--rescore` a report. Restart the container if it happens (section 9). The client raises `VirtuosoTimeout` on HTTP 206 / `X-SQL-State: S1TAT` (a partial result from the anytime `timeout` parameter) instead of parsing wrong partial aggregates, and `eval/time_on_perf.py` no longer sends that parameter: it times plain runs with a client deadline (`--timeout-ms`) and restarts the perf container after every overrun.
 13. **On our Vast instance, `supervisorctl restart vllm` keeps the old server alive** on port 18000. Kill it before starting the new model (section 8).
-14. **A bigger model did not fix the SPARQL.** Qwen3.5-9B, Coder-14B and Coder-30B-A3B gave the same exact-result rate. The levers are context (codes, examples) and prompts.
+14. **A bigger model did not fix the SPARQL, until the pipeline could use it.** On 17 October morning Qwen3.5-9B, Coder-14B and Coder-30B-A3B gave the same exact-result rate. The same evening, with the judge's repairs and the dev reference queries as examples, Qwen3.6-27B took the blind holdout from 10 to 19 of 31 right numbers (section 8). Re-test the model whenever the pipeline changes a lot.
 15. **90% correct verdicts can hide poor SPARQL.** Measure query results against reference queries (`eval/run_query_eval.py`), not only verdicts.
 16. **Do not commit environments or editor settings.** A teammate's `.venv311/` (1,834 files) almost got merged. `.venv*/` and `.vscode/` are git-ignored now.
 17. **A Virtuoso quirk in conditional counts.** `OPTIONAL { GRAPH ?g { … } BIND(… ) }` used for a conditional count returns zeros when the same query also has an `EXISTS` cohort `BIND`, whatever the order. Use `IF(?concept = …, ?x, ?none)` binds instead (reference query q-075).
 18. **The mock data is thin outside cholera.** Billed ICD codes are almost all cholera (778 patients) plus the chapter code (189); other codes have fewer than 10 patients; CHOP is almost all `00.0x`; many SNOMED value sets are random. Questions about other diagnoses return tiny or empty results on both databases.
 19. **rdflib's syntax message names the wrong token.** "Expected SelectQuery, found 'GRAPH'" for a missing parenthesis three lines later, and the model repeats the error on its retry. The judge now rewrites a standard prefix declared with another namespace (`fix_standard_prefixes`), repairs three mistakes with exactly one meaning without a model call (`GROUP BY true`, `GROUP BY` inside the WHERE braces, a UNION branch that is a bare `GRAPH` block) and replaces rdflib's message with hints that name the real error and say what to write instead (`judge_checks/syntax.py`). On the 17 October dev run: 13 of 52 unparseable answers repaired, 36 explained; 0 hints on the examples and the dev references.
 20. **The anytime `timeout` parameter changes Virtuoso's plan.** With it, an OPTIONAL + inference query that answers in 84 ms runs to the deadline and returns HTTP 206 with wrong partial aggregates. Time plain runs.
+21. **The query agent can drop the concept the question names.** "How many patients have cholera on a hospital bill, by sex?" came back as all patients by sex, and no check compared the question with the query. The judge now takes the codes the question names strongly and asks for the missing pattern when the query uses neither the code nor a subcode or parent code (`judge_checks/coverage.py`). A code counts when the question writes the ICD code out, or when all the words of an ICD-10-GM or CHOP label stand side by side in the question; SNOMED CT categories never count, nor does a word that only implies its label. With the real index: 0 hits on the 16 official examples, the 3 team examples and the 45 dev references; over all 2,202 dev queries of the 29 saved reports, 40 hits, none on a right answer.
+22. **A judge hint buys a whole new query, which comes back worse as often as better.** On the 17 October run the record-name hint sent q-003 to `SELECT ?stays ... GROUP BY ?stays` in 3 of 3 runs and q-042 to a UNION that Virtuoso rejected; the model is deterministic, so a hint that misleads misleads every time. Shapes with exactly one correct form are now repaired before the checks run, with no model call (`judge_checks/rewrites_scope.py`, `rewrites_aggregation.py`): a sub-select that hides variables an outer clause reads (exported to its SELECT and GROUP BY), `COUNT(?prescription)` next to the typed `?drug_prescription` (renamed), a record link's object typed with a terminology IRI (`?intent a snomed:X` becomes `?intent sphn:hasCode ?intent_code . ?intent_code a snomed:X`), a VALUES block on a code node (the node is typed and the VALUES moves to the concept), `FILTER(?pid = ?r/sphn:hasSubjectPseudoIdentifier)` (a division, dropped), `?date <= (bif:datediff(...) <= 90)` (the inner comparison is kept); a top-level GROUP BY per patient or per record under an aggregate-only SELECT (dropped), `COUNT(DISTINCT ?g)` under a record name (counts the one typed record whose class shares a word stem with the alias), a GROUP BY key bound only by labels inside OPTIONAL (`FILTER (BOUND(?key))`), a BIND alone in an OPTIONAL (moved out), `ROUND(1000.0 * AVG(?x)) / 10` on a plain statistic (factor 100 removed), a subcode regex copied from an example on a code already typed concretely (removed with its chain). Each rewrite re-parses its result and gives up when it does not parse or projects other columns. 0 hits on the 16 official examples, the 3 team examples and the 45 dev references; replayed on the 17 October dev answers, q-020, q-022, q-042, q-050, q-054, q-060, q-064 and q-073 become right with no model call.
+23. **The model follows a judge hint to the letter, so a hint must name the query's own variables.** The generic templates of the hints were copied verbatim: `?x sphn:hasCode ?c ... VALUES` replaced the right property (q-047) and invented a category (q-035), `BIND(?g AS ?x)` turned record columns into patient counts (q-011, q-074, q-076), a "write `hasConsequences`" recipe changed the cohort (official-09) and `DeathDate.hasYear` (random values in the data) emptied q-005. The hints in `judge_checks/scope.py`, `semantics.py` and `schema.py` are built from the query itself: `SUM(IF(?count_diagnoses > 1, 1, 0))` next to a per-patient sub-select, the query's own record, code property and codes as the VALUES to group by, `BIND(?record AS ?x)` for a column named after records, "add ?case to the sub-select's SELECT" for a hidden variable, only the linking record's dateTime for DeathDate/BirthDate, and the plain value list when a value-set member belongs to another property of the same class. Six further checks catch a statistic scaled like a percentage, a percentage whose constants do not make 100, a decade computed from `hasValue` but compared with calendar years, a share that is 100% by construction, a patient count over the backbone while every measure comes from an OPTIONAL block, and a GROUP BY key bound only in an OPTIONAL linked by `?g` alone. 0 hits on the 64 reference queries; on the 17 October dev run 31 of 94 attempts get a different hint, none of them a right answer.
+24. **"How many prescriptions ..." comes back as a patient count.** q-049 returned the patients only, q-042 counted patients under `?episodes`, q-003's retry projected an unbound `?stays`: the asked record count was missing or on the wrong unit in ten dev answers, all wrong. The judge now reads the question (`judge_checks/coverage.py`, `check_record_count_asked`): when "how many", "the number of" or "give" is followed by at most two modifiers and a plural record noun, and no COUNT in the query counts records, it asks for `(COUNT(DISTINCT ?prescription) AS ?drug_prescriptions)` next to the patient count, naming the query's own record variable. The record nouns come from the cards (the head word of every class with `hasSubjectPseudoIdentifier`) plus the everyday plurals the class names do not spell (stays, admissions, visits, tests, records); a patient word between cue and noun or a kind word ("how many different procedures") switches it off. 0 false alarms on the 64 reference queries (the cue matches 25 of them, all counting records); 10 hits on the 17 October dev finals, all wrong.
+25. **The model copies what a card shows.** The card line `hasCode -> SNOMED CT code: ?c a snomed:<code> OPTION (inference ...)` was copied as it stood in 11 dev answers of run 3 (all unparseable), and the `hasSubjectPseudoIdentifier` link every card advertised became a join in 5 dev answers, wrong or harmful in 3, although no compliant reference joins through it. Cards now say `hasCode -> SNOMED CT code (?c a ?concept; one code from the candidates to match a concept)` with no copyable code and no inference option (the prompt rules carry it), and show the pseudo-identifier link only on the SubjectPseudoIdentifier card, which the picker brings in only when the question names identifiers. The picker also learned early/preterm (GestationalAgeAtBirth), "give drugs"/route/by mouth/IV (DrugAdministrationEvent), in hospital/inpatient (AdministrativeCase) and intent/guidance/screening/diagnostic (Intent); a code candidate that is a member of a class's value set pulls that class through a shown card's link; a candidate whose label only restates a class name ("Imaging (procedure)") is dropped. Card coverage of the classes the references use: 103 → 106 of 107; value sets capped at 20 members instead of 15 (adds Intent and TumorGradeAssessment).
+26. **A guard hint bought a worse regeneration too.** Told to "group by a category", the model invented categories and codes and ran out of tokens (q-013, q-071, official-07); a parse error got rdflib's message plus a privacy sentence, and 0 of 6 such retries came back parseable; an outer SELECT that re-projects sub-selects of totals (q-052's share) was rejected as "individual rows" in 3 of 3 runs. The guard now sees through re-projected sub-selects (not a UNION: gen-024 is caught only there), a patient-graph key gets the per-patient sub-select recipe, a code node "never list codes you were not given", an all-totals query "remove GROUP BY", and a parse error the judge's diagnosis (`docs/GUARD.md`). Measured on 405 dev and official queries: 2 verdict changes (q-052), 0 rule-set changes.
 
 </details>
 
@@ -782,3 +839,25 @@ Full backlog in [docs/LLM_AGENTS.md](docs/LLM_AGENTS.md#9-backlog-for-module-b-m
 | Gayathri Girish | Backend | D (compliance guard) |
 | David García Costa | Backend | A (integration) |
 | Odinaka Ogbujiagba | Frontend | E (demo and frontend) |
+
+## 19. Add-ons from the team (17 October evening)
+
+Merged on the run machine on 17 October at night. This README stays the team's master document; the add-ons sit on top of the pipeline and change neither `POST /nl-to-sparql` nor the agents, the judge or the guard.
+
+**Gayathri (branch `compliance`, pull requests #6 and #7):**
+- **"Did you mean...?"** A vague question ("patients with diabetes") gets the coded choices first, from the terminology index and without a model call: `POST /demo/clarify`, `src/nl2sparql/assist.py`.
+- **Follow-up questions.** An answer that is one number of at least 2 offers ways to break it down (by sex, by year...) as buttons; the follow-up's answer is read out in one sentence. Field `follow_ups` of `/demo/ask`; never for a blocked or withheld result.
+
+**Adrika (branch `features-adrika`):**
+- **Result display** (`frontend/js/result.js`, `policy.js`): numbers, bars, grouped comparisons, exact tables, pagination and truncation notices, driven by column metadata from `src/nl2sparql/demo_results.py`.
+- **Privacy controls for the demo:** whole-result suppression below `DEMO_MIN_GROUP_SIZE` (off by default, waiting for the organizers), a separate public console mode (`DEMO_PUBLIC_MODE`), `Cache-Control: no-store` on demo pages. Review: [docs/PRIVACY_REVIEW.md](docs/PRIVACY_REVIEW.md).
+- **Research workflow:** CSV and clipboard export, saved snapshots, a reproducibility card (question, time, dataset identity; never the query) and opt-in shared links that expire after seven days (`POST /demo/shares`, `src/nl2sparql/demo_shares.py`).
+- **Verification:** `eval/validate_demo_results.py` checks the console's answers against the reference results on a live API and database ([docs/RESULTS_VALIDATION.md](docs/RESULTS_VALIDATION.md)); Node tests (`tests/frontend/`) and Playwright browser tests on desktop and phone (`tests/browser/`, run as in [docs/features/README.md](docs/features/README.md)).
+- **CI/CD and container:** `.github/workflows/tests.yml` runs pytest, the frontend and browser tests and builds the container for AMD64 and ARM64 on every pull request; **on a push to `main` or a `v*` tag it publishes the image to GitHub Container Registry**. The `Dockerfile` copies only `src/`, `frontend/` and the public data files (`.dockerignore` denies everything else, `assets/` and `.env` included). Setup and tags: section 19 of [docs/operations/PROJECT_HANDBOOK.md](docs/operations/PROJECT_HANDBOOK.md#19-cicd-and-container-delivery).
+- **Documents:** [docs/README.md](docs/README.md) (index), [docs/features/README.md](docs/features/README.md) (her handoff), [docs/FRONTEND.md](docs/FRONTEND.md) (response contracts), and [docs/operations/PROJECT_HANDBOOK.md](docs/operations/PROJECT_HANDBOOK.md): a copy of this README as of 17 October with the CI/CD section; this README is the one kept up to date. `todo.md` moved to `docs/plans/PROJECT_STATUS_2026-10-17.md`.
+
+**How they were fitted to the project:**
+- `DEMO_SHOW_DETAILS` (default `true`) keeps the team console as it was: it shows the generated query of an allowed request, the specific reason and the suggested rephrase of a blocked one, and the retry diagnostics. `false`, or the public mode, gives Adrika's hardened answers: no query, a generic reason, no diagnostics, generic errors. The tests cover both.
+- The follow-up buttons appear under Adrika's result display, and only for a released result.
+- One add-on test paired a cholera question with a diabetes query; the judge's coverage check rightly asked for a retry, so the test now uses a cholera query.
+- **Known gap:** the container leaves out `eval/query_questions.jsonl`, so inside it the 45 dev reference queries are not retrieval examples (`CONTEXT_DEV_REFERENCES` does nothing there). They are part of what gives 19 of 31 on the blind holdout; copy that file into the image before the jury uses it.

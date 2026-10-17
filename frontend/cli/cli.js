@@ -30,13 +30,28 @@
   themeBtn.addEventListener("click", () => setTheme(isDark() ? "light" : "dark", true));
   document.getElementById("title").textContent = SQ.config.APP_NAME;
   const chip = document.getElementById("mode-chip");
-  chip.textContent = live ? "Live" : "Mock";
+  chip.textContent = live ? "Live" : "Preview";
+  if (!live) chip.title = "Synthetic examples only — not live patient data";
   chip.classList.toggle("is-live", live);
   if (live) {
     SQ.backend.health()
       .then((h) => { chip.textContent = `Live: ${h.backend}`; chip.title = h.backend === "stub" ? "Stand-in agents, no model" : "Real model on the GPU"; })
       .catch(() => { chip.textContent = "Backend offline"; chip.classList.remove("is-live"); });
   }
+
+  SQ.policy.subscribe((policy) => {
+    const available = policy.state === "available";
+    document.getElementById("snapshot-import").disabled = !available;
+    document.getElementById("retry-privacy-policy").hidden = policy.state !== "failed";
+    document.getElementById("privacy-policy").textContent = available
+      ? policy.config.demo_min_group_size === null
+        ? "Minimum group sizes are not enforced (pending organizer policy)."
+        : `Small groups below ${policy.config.demo_min_group_size} are hidden.`
+      : policy.state === "loading" ? "Loading privacy policy…" : "Privacy policy unavailable";
+  });
+  const loadPolicy = () => SQ.policy.load({mock: !live});
+  const policyReady = loadPolicy();
+  document.getElementById("retry-privacy-policy").addEventListener("click", loadPolicy);
 
   const history = [];
   let hIndex = 0;
@@ -97,17 +112,19 @@
 
   // ---------- commands ----------
 
+  function privateDiagnostics(e) { add(e, para("Developer diagnostics are not available in the user console.")); }
+
   const COMMANDS = {
     help: { usage: "help", text: "List commands", fn: help },
     examples: { usage: "examples", text: "Cohort questions you can try", fn: listExamples },
     attacks: { usage: "attacks", text: "Requests built to extract patient data", fn: listAttacks },
     try: { usage: "try e1 | a1", text: "Ask an example or attack by its id", fn: tryOne },
     run: { usage: "run", text: "Run the last allowed query again", fn: runLast },
-    explain: { usage: "explain", text: "What the model was given for the last question", fn: explain },
-    status: { usage: "status", text: "Backend mode, model and whether it is reachable", fn: status },
-    json: { usage: "json", text: "Raw API response for the last question", fn: json },
+    explain: { usage: "explain", text: "What the model was given for the last question", fn: privateDiagnostics },
+    status: { usage: "status", text: "Backend mode, model and whether it is reachable", fn: privateDiagnostics },
+    json: { usage: "json", text: "Raw API response for the last question", fn: privateDiagnostics },
     rules: { usage: "rules", text: "The five rules and the intent check", fn: rules },
-    bench: { usage: "bench", text: "Benchmark summary", fn: bench },
+    bench: { usage: "bench", text: "Benchmark summary", fn: privateDiagnostics },
     theme: { usage: "theme", text: "Switch light and dark", fn: theme },
     clear: { usage: "clear", text: "Clear the view (previous questions stay in the sidebar)", fn: () => clearView() },
   };
@@ -164,10 +181,9 @@
     try {
       const r = await SQ.api.run(last.res.sparql_query);
       p.remove();
-      const isNum = (v) => /^[\d,.\s%-]+$/.test(String(v)) && String(v).trim() !== "";
-      const nums = r.columns.map((_, i) => i).filter((i) => r.rows.length && isNum(r.rows[0][i]));
-      e.appendChild(windowPanel(`result: ~/virtuoso, ${r.rows.length} ${r.rows.length === 1 ? "row" : "rows"}, ${fmtMs(r.elapsed_ms || 0)}`,
-        tbl(r.columns, r.rows.map((row) => ({ cells: row.map((v) => esc(v)) })), nums), null, "has-table"));
+      await policyReady;
+      const fixture = sparqlOf(last.question, last.res);
+      SQ.result.mount(e, last.question, {...r, column_metadata:F.RESULT_METADATA[fixture?.id] || r.columns.map((name) => ({name,role:"unknown",kind:"unknown"})), result_status:"released",suppression:null,truncated:false,row_limit:200, reproducibility:SQ.result.syntheticRecord(last.question,last.res.sparql_query)}, {policy:SQ.policy,toast});
     } catch (err) {
       p.remove();
       add(e, para(`Run failed: ${esc(err.message)}`));
@@ -193,7 +209,10 @@
 
   function json(e) {
     if (!last) return add(e, para("No response yet. Ask a question first."));
-    const text = JSON.stringify(last.res, null, 2);
+    const publicResponse = JSON.parse(JSON.stringify(last.res));
+    stripSavedQueries(publicResponse);
+    delete publicResponse.trace;
+    const text = JSON.stringify(publicResponse, null, 2);
     const lines = text.split("\n").map((l) => `<span class="ln">${esc(l).replace(/^(\s*)(&quot;[^&]*?&quot;)(:)/, '$1<span class="tok-var">$2</span>$3')}</span>`).join("");
     e.appendChild(windowPanel(`response: ~/${mode}`, `<pre class="code plain">${lines}</pre>`, text));
   }
@@ -261,6 +280,7 @@
       }
       clearInterval(tick);
       p.remove();
+      await policyReady;
       report(e, question, res, result, runError);
     } catch (err) {
       clearInterval(tick);
@@ -377,17 +397,12 @@
     if (res.is_compliant) {
       // 1. The answer, 2. what was counted
       const counted = t.interpretation || (fixture && fixture.counted) || describe(res.sparql_query, codes);
-      add(e, `<div class="answer">
-        <p class="answer-text">${esc(runError ? "The query is safe, but it could not be run." : sentence(question, res, result, fixture))}</p>
-        <p class="counted"><span class="counted-label">Counted</span><span>${esc(counted)}</span></p>
-      </div>`);
       if (runError) add(e, para(`Run failed: ${esc(runError.message)}`));
-
-      // 3. Result table with readable labels (only when there is more than one value)
-      if (result && (result.rows.length > 1 || result.columns.length > 1)) {
-        const isNum = (v) => /^[\d,.\s%-]+$/.test(String(v)) && String(v).trim() !== "";
-        const nums = result.columns.map((_, i) => i).filter((i) => result.rows.length && isNum(result.rows[0][i]));
-        add(e, tbl(result.columns.map((c) => c.replace(/_/g, " ")), result.rows.map((row) => ({ cells: row.map((v) => esc(readable(v, codes))) })), nums));
+      if (result) {
+        const authored = fixture || F.FIXTURES.find((item) => item.sparql === res.sparql_query);
+        const metadata = F.RESULT_METADATA[authored?.id] || result.columns.map((name) => ({name, role:"unknown", kind:"unknown"}));
+        SQ.result.mount(e, question, {...result, column_metadata:metadata, result_status:"released", suppression:null, truncated:false, row_limit:200, reproducibility:SQ.result.syntheticRecord(question,res.sparql_query)},
+          {policy:SQ.policy, toast, caption:sentence(question, res, result, fixture), description:counted});
       }
 
       // 4. Small verdict line
@@ -503,6 +518,7 @@
       }
       stop();
       last = { question, res: d };
+      await policyReady;
       reportLive(e, question, d, opts);
       e.dataset.hid = remember(question, d.is_compliant ? "allow" : "block", d);
       if (!d.is_compliant) rejectPending = true;
@@ -513,35 +529,6 @@
     }
     revealAnswer(e, from);
     renderHistory(e.dataset.hid);
-  }
-
-  function answerSentence(d, rows) {
-    if (!rows.length) return "The query ran and found nothing.";
-    if (rows.length === 1 && d.columns.length === 1) {
-      const v = rows[0][0];
-      const col = d.columns[0];
-      return /^(count|countresult|n|total|patients?)$/i.test(col) ? `${nice(v)} ${patientsWord(v)} ${isOne(v) ? "matches" : "match"}.` : `${nice(v)} ${humanCol(col)}.`;
-    }
-    return `${rows.length} ${rows.length === 1 ? "row" : "groups"}. The first is ${rows[0][0]}${rows[0].length > 1 ? `, with ${nice(rows[0][1])} ${humanCol(d.columns[1])}` : ""}.`;
-  }
-
-  // Result rows as a table; the main numeric column gets a bar so groups compare at a glance.
-  function resultTable(columns, rows) {
-    const toNum = (v) => { const n = parseFloat(String(v).replace(/[,\s%]/g, "")); return Number.isFinite(n) ? n : null; };
-    // A year is a label, not a quantity: no thousands separator (2021, not 2,021) and no bar.
-    const numCols = columns.map((_, i) => i).filter((i) => !/year/i.test(columns[i])
-      && rows.every((r) => String(r[i]).trim() === "" || toNum(r[i]) !== null));
-    const barCol = numCols.find((i) => i > 0) ?? numCols[0];
-    const max = barCol === undefined ? 0 : Math.max(0, ...rows.map((r) => toNum(r[barCol]) || 0));
-    const head = columns.map((c, i) => `<th${numCols.includes(i) ? ' class="num"' : ""}>${esc(humanCol(c))}</th>`).join("");
-    const body = rows.map((r) => `<tr>${r.map((v, i) => {
-      if (i === barCol && max > 0) {
-        const pct = Math.max(1, Math.round(((toNum(v) || 0) / max) * 100));
-        return `<td><div class="bar-cell"><span class="bar-track" aria-hidden="true"><span class="bar" style="width:${pct}%"></span></span><span class="bar-val">${esc(nice(v))}</span></div></td>`;
-      }
-      return `<td${numCols.includes(i) ? ' class="num"' : ""}>${esc(numCols.includes(i) ? nice(v) : readable(v, []))}</td>`;
-    }).join("")}</tr>`).join("");
-    return `<table class="tbl result-tbl"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
   }
 
   // Buttons that send a new question through the whole pipeline; data-final skips the vagueness check.
@@ -575,32 +562,18 @@
     const meta = fmtMs(tm.total || 0);
 
     if (d.is_compliant) {
-      const rows = d.executed ? (d.rows || []).map((r) => d.columns.map((c) => (r[c] == null ? "" : r[c]))) : [];
-      // Only show a plain-English reading when the backend provides one: guessing it from the
-      // query text misread grouped queries. (Suggested backend field: interpretation.)
-      const counted = d.interpretation || "";
-      // The result leads; the verdict is a small badge above it.
-      const verdictLine = `<p class="verdict-small"><span class="badge badge-sm badge-allow">ALLOWED</span><span>${meta}</span></p>`;
-      const countedHtml = counted ? `<p class="counted"><span class="counted-label">Counted</span><span>${esc(counted)}</span></p>` : "";
-      if (d.executed && rows.length === 1 && d.columns.length === 1) {
-        const col = d.columns[0];
-        const label = /^(count|countresult|n|total|patients?)$/i.test(col)
-          ? (isOne(rows[0][0]) ? "patient matches your question" : "patients match your question") : humanCol(col);
-        add(e, `<div class="answer is-result">${verdictLine}
-          <div class="result-hero"><span class="result-number">${esc(nice(rows[0][0]))}</span><span class="result-label">${esc(label)}</span></div>${countedHtml}</div>`);
-      } else if (d.executed && rows.length) {
-        const text = (opts.intro && splitSentence(opts.intro, rows)) || answerSentence(d, rows);
-        add(e, `<div class="answer is-result">${verdictLine}
-          <p class="answer-text">${esc(text)}</p>
-          ${resultTable(d.columns, rows.slice(0, 50))}
-          ${rows.length > 50 ? `<p class="text dim">Showing 50 of ${rows.length} rows.</p>` : ""}${countedHtml}</div>`);
-      } else if (d.executed) {
-        add(e, `<div class="answer is-result">${verdictLine}
-          <div class="result-hero"><span class="result-number">0</span><span class="result-label">rows: the query ran and found nothing</span></div>${countedHtml}</div>`);
+      add(e, `<p class="verdict-small"><span class="badge badge-sm badge-allow">ALLOWED</span><span>${meta} · ${esc(d.tokens_consumed || 0)} tokens</span></p>`);
+      if (opts.intro && d.result_status === "released" && d.rows && d.rows.length && d.columns) {
+        const rows = d.rows.map((r) => d.columns.map((c) => (r[c] == null ? "" : r[c])));
+        const sentence = splitSentence(opts.intro, rows);
+        if (sentence) add(e, `<p class="answer-text">${esc(sentence)}</p>`);
+      }
+      if (d.result_status === "withheld" || d.result_status === "released") {
+        SQ.result.mount(e, question, d, {policy:SQ.policy, toast, createShare:SQ.backend.createShare});
+      } else if (d.result_status === "execution_error") {
+        add(e, `<p class="text">The question is allowed, but execution failed: ${esc(d.execution_error || "Database unavailable")}</p>`);
       } else {
-        add(e, `<div class="answer is-result">${verdictLine}
-          <div class="result-empty"><p class="result-empty-title">No results on this machine</p>
-            <p class="result-empty-text">The question is allowed, but the numbers come from the patient database, which is not connected here. Ask on the machine where the database runs to see them.${d.execution_error ? ` <span class="dim">(${esc(d.execution_error)})</span>` : ""}</p></div>${countedHtml}</div>`);
+        add(e, '<p class="text">No results on this machine. The patient database is not connected here.</p>');
       }
       if (d.follow_ups && d.follow_ups.length) {
         add(e, `<div class="clarify"><span class="suggest-label">Break this down?</span>${choiceButtons(d.follow_ups)}</div>`);
@@ -790,7 +763,7 @@
         const e = entry("cmd", text);
         await cmd.fn(e, rest.join(" "));
       } else {
-        await ask(text, opts);
+        await ask(raw, opts);
       }
     } finally {
       busy = false;
@@ -921,7 +894,18 @@
   const histEmpty = document.getElementById("hist-empty");
 
   function loadHistory() {
-    try { return JSON.parse(localStorage.getItem(HIST_KEY) || "[]"); } catch (e) { return []; }
+    try {
+      const items = JSON.parse(localStorage.getItem(HIST_KEY) || "[]");
+      for (const entry of items) stripSavedQueries(entry.res);
+      saveHistory(items);
+      return items;
+    } catch (e) { return []; }
+  }
+  function stripSavedQueries(res) {
+    if (!res) return;
+    delete res.sparql_query;
+    if (res.reproducibility) delete res.reproducibility.sparql_query;
+    res.diagnostics = {};
   }
   function saveHistory(items) {
     try { localStorage.setItem(HIST_KEY, JSON.stringify(items.slice(0, HIST_MAX))); } catch (e) { /* full or private mode */ }
@@ -931,8 +915,9 @@
     const id = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
     let kept = null;
     if (res && live) {
-      kept = Object.assign({}, res, { rows: (res.rows || []).slice(0, 50) });
-      if (kept.diagnostics) kept.diagnostics = Object.assign({}, kept.diagnostics);
+      kept = Object.assign({}, res, { rows: res.result_status === "released" ? (res.rows || []).slice(0, 200) : null });
+      if (kept.reproducibility) kept.reproducibility = Object.assign({}, kept.reproducibility);
+      stripSavedQueries(kept);
     }
     saveHistory([{ id, question, verdict, at: Date.now(), res: kept }, ...loadHistory()]);
     return id;
@@ -959,10 +944,16 @@
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></li>`).join("");
   }
 
-  function showFromHistory(id) {
+  async function showFromHistory(id) {
+    await policyReady;
     const h = loadHistory().find((x) => x.id === id);
     if (!h) return;
     closeSidebar();
+    if (SQ.policy.state !== "available" || (h.res?.result_status !== "withheld" && h.res?.is_compliant && !SQ.result.policyMatches(h.res, SQ.policy.config))) {
+      const e = entry("ask", h.question);
+      add(e, `<p>Privacy policy unavailable or changed. Re-ask before displaying cached numbers.</p><button type="button" data-ask="${esc(h.question)}">Ask again</button>`);
+      return;
+    }
     const onScreen = out.querySelector(`[data-hid="${CSS.escape(id)}"]`);
     if (onScreen) {
       onScreen.scrollIntoView({ block: "start", behavior: "smooth" });
@@ -970,7 +961,16 @@
       renderHistory(id);
       return;
     }
-    if (!h.res || !live) { if (!busy) handle(h.question); return; }
+    if (!h.res || !live) {
+      const e = entry("ask", h.question);
+      add(e, `<p>No saved result is available.</p><button type="button" data-ask="${esc(h.question)}">Ask again</button>`);
+      return;
+    }
+    if (!h.res.result_status && h.res.executed) {
+      h.res.result_status = "released";
+      h.res.legacy_incomplete = true;
+      h.res.column_metadata = (h.res.columns || []).map((name) => ({name, role:"unknown", kind:"unknown"}));
+    }
     const e = entry("ask", h.question);
     e.dataset.hid = id;
     add(e, `<p class="from-history">From your history, asked ${esc(when(h.at))}. <button type="button" class="link-btn" data-ask="${esc(h.question)}">Ask again</button></p>`);
@@ -1012,6 +1012,7 @@
   // ---------- new question, empty state, sidebar on phones ----------
 
   function clearView() {
+    SQ.result.disposeAll(out);
     out.innerHTML = "";
     document.body.classList.add("is-empty");
     renderHistory();
@@ -1060,9 +1061,85 @@
     if (b && !busy) handle(b.dataset.ask);
   });
 
+  document.getElementById("snapshot-import").addEventListener("change", async (ev) => {
+    const file = ev.target.files[0];
+    if (!file) return;
+    if (SQ.policy.state !== "available") {
+      ev.target.value = "";
+      toast("Privacy policy unavailable");
+      return;
+    }
+    try {
+      if (file.size > 2 * 1024 * 1024) throw Error("Snapshot exceeds 2 MB.");
+      const saved = SQ.result.validateSnapshot(await file.text());
+      if (SQ.policy.state !== "available") {
+        ev.target.value = "";
+        toast("Privacy policy unavailable");
+        return;
+      }
+      const e = entry("ask", saved.question);
+      SQ.result.mount(e, saved.question, saved, {policy:SQ.policy,toast});
+      add(e, `<button type="button" data-ask="${esc(saved.question)}">Re-ask for a verified result</button>`);
+    } catch (err) { toast(`Cannot import snapshot: ${err.message}`); }
+    ev.target.value = "";
+  });
+
+  // Authored visual test cases are browser-only synthetic data, never API requests.
+  const visualExamples = [
+    {label:"Preview example: patients by sex (synthetic numbers)", title:"Synthetic bar-chart example — not patient data",
+      columns:["sex", "patients"], roles:["category", "patient_count"],
+      rows:[["Female", "48"], ["Male", "36"], ["Other / unknown", "12"]]},
+    {label:"Preview example: two cohorts by age group (synthetic numbers)", title:"Synthetic comparison example — not patient data",
+      columns:["age_group", "group_A", "group_B"], roles:["category", "patient_count", "patient_count"],
+      rows:[["18–39", "24", "36"], ["40–64", "41", "52"], ["65+", "18", "29"]]},
+    {label:"Preview example: two cohorts by sex (long-form synthetic numbers)", title:"Synthetic long-form comparison — not patient data",
+      columns:["sex", "cohort", "patients"], roles:["category", "category", "patient_count"],
+      rows:[["Female", "Group A", "32"], ["Female", "Group B", "48"], ["Male", "Group A", "24"], ["Male", "Group B", "36"], ["Other / unknown", "Group A", "12"]]},
+  ];
+  for (const example of visualExamples) {
+    const button = document.createElement("button");
+    button.type = "button"; button.className = "starter"; button.textContent = example.label;
+    button.onclick = async () => {
+      await policyReady;
+      if (SQ.policy.state !== "available") return toast("Privacy policy unavailable");
+      const e = entry("cmd", example.title);
+      const d = {is_compliant:true, executed:false, result_status:"released", columns:example.columns, rows:example.rows,
+        column_metadata:example.columns.map((name,i) => ({name,role:example.roles[i],kind:example.roles[i] === "category" ? "group_key" : "distinct_patient_count"})),
+        suppression:null, row_limit:200,truncated:false, imported:true, synthetic_preview:true};
+      // Import boundary: synthetic previews have no exports or live verification claims.
+      SQ.result.mount(e, example.title, d, {policy:SQ.policy,toast});
+    };
+    starterGrid.appendChild(button);
+  }
+
   // ---------- start ----------
 
+  async function openSharedResult(id) {
+    await policyReady;
+    if (SQ.policy.state !== "available") {
+      toast("Privacy policy unavailable. Retry the policy and reopen this link.");
+      return;
+    }
+    try {
+      const shared = await SQ.backend.sharedResult(id);
+      if (SQ.policy.state !== "available") throw Error("Privacy policy unavailable");
+      const saved = SQ.result.validateSnapshot(JSON.stringify(shared.snapshot));
+      saved.shared = true;
+      saved.imported = false; // A server-authorized release, not a user-supplied file.
+      const e = entry("ask", saved.question);
+      add(e, `<p class="from-history">Shared snapshot — not a fresh database run. Captured ${esc(saved.captured_at)}. Expires ${esc(shared.expires_at)}.</p>`);
+      SQ.result.mount(e, saved.question, saved, {policy:SQ.policy,toast});
+      add(e, `<button type="button" data-ask="${esc(saved.question)}">Ask again for current results</button>`);
+    } catch (error) {
+      const e = entry("cmd", "Shared result unavailable");
+      add(e, `<p role="status">${esc(error.message)}</p>`);
+    }
+  }
+
   renderHistory();
+  const sharedId = params.get("share");
   const q = params.get("q");
-  if (q) handle(q); else input.focus();
+  if (sharedId) openSharedResult(sharedId);
+  else if (q) handle(q);
+  else input.focus();
 })();

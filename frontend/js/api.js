@@ -77,6 +77,11 @@ window.SQ = window.SQ || {};
       const base = F().FIXTURES.find((f) => f.id === "a-whole-graph");
       return Object.assign({}, base, { text });
     }
+    // A count fixture cannot answer an arbitrary comparison or grouped question.
+    if (SQ.result.comparisonRequested(text) || /\bgroup(?:ed|ing)?\s+by\b|\bbreakdown\b|\bsplit\s+by\b|\bby\s+(?:age|sex|gender|cohort|group|diagnosis|country|year|month|hospital|treatment)\b/i.test(text)) {
+      const error = new Error('Preview mode cannot execute arbitrary comparison or grouped questions. Use the live console with a configured model and database. No comparison counts were generated.');
+      error.kind = 'mock-shape'; throw error;
+    }
     if (term && /(how many|count|number of|share|percentage|proportion|patients with|patients have)/.test(t)) {
       const base = F().FIXTURES.find((f) => f.id === "c-diabetes");
       return Object.assign({}, base, {
@@ -152,6 +157,9 @@ window.SQ = window.SQ || {};
   }
 
   SQ.backend = {
+    createShare: (share_token) => call("POST", "/demo/shares", {share_token}),
+    sharedResult: (id) => call("GET", `/demo/shares/${encodeURIComponent(id)}`),
+    demoConfig: () => call("GET", "/demo/config"),
     demoAsk: (text) => call("POST", "/demo/ask", { text }),          // verdict, rephrase, timings, rows
     clarify: (text) => call("POST", "/demo/clarify", { text }),      // "Did you mean...?" choices, no model call
     agentsRun: (text) => call("POST", "/agents/run", { text }),      // full result: flags, violations, retries

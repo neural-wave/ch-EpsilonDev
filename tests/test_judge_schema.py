@@ -214,6 +214,21 @@ def test_value_set_member_on_the_wrong_class(schema):
     ]
 
 
+def test_value_set_member_of_another_property_of_the_same_class_gets_no_rewrite(schema):
+    # official-09: "write ?event sphn:hasConsequences sphn-individual:Death" was copied in 3 of 3 runs and
+    # changed the cohort from serious events to fatal ones. The hint now lists the values and stops.
+    query = (
+        "SELECT (COUNT(DISTINCT ?g) AS ?events) (COUNT(DISTINCT ?death_patient) AS ?deaths) WHERE { GRAPH ?g { "
+        "?event a sphn:AdverseEvent ; sphn:hasConsequences ?consequence . } OPTIONAL { GRAPH ?g { "
+        "?event sphn:hasOutcome sphn-individual:Death . BIND (?g AS ?death_patient) } } }"
+    )
+    assert run(check_value_set_member, query, schema) == [
+        "sphn-individual:Death (Death) is not a value of sphn:AdverseEvent hasOutcome; its values: Recovering | Recovered | "
+        "NotRecovered | Fatal | RecoveringWithSequelae: use the one the question means (Death is a value of hasConsequences)."
+    ]
+    assert run(check_value_set_member, query.replace("sphn-individual:Death", "sphn-individual:Fatal"), schema) == []
+
+
 def test_value_set_member_stays_silent_without_evidence(schema):
     own = GRAPH_COUNT % "?follow_up a sphn:FollowUp ; sphn:hasCode ?code . ?code a snomed:386473003 ."
     assert run(check_value_set_member, own, schema) == []

@@ -154,19 +154,24 @@ def database(monkeypatch):
     return FakeVirtuoso
 
 
+# The judge checks that a query covers the coded concepts its question names, so the scripted answer to a
+# cholera question must be about cholera: spec-01 (type 2 diabetes, E11) with A00 instead.
+CHOLERA_COUNT = EXAMPLES["spec-01"]["sparql"].replace("icd-10-gm/E11>", "icd-10-gm/A00>")
+
+
 def test_demo_answers_carry_follow_ups_after_a_result(database):
     question = {"text": "How many patients have cholera?"}
     database.rows = [{"countResult": "767"}]
-    found = demo_client(EXAMPLES["spec-01"]["sparql"]).post("/demo/ask", json=question).json()
+    found = demo_client(CHOLERA_COUNT).post("/demo/ask", json=question).json()
     assert found["follow_ups"][0] == {
         "label": "By sex",
         "question": "How many patients have cholera, split by sex (male, female, indeterminate)?",
         "intro": "The patients having cholera, split by sex, are:",
     }
     database.rows = [{"countResult": "0"}]
-    assert demo_client(EXAMPLES["spec-01"]["sparql"]).post("/demo/ask", json=question).json()["follow_ups"] == []
+    assert demo_client(CHOLERA_COUNT).post("/demo/ask", json=question).json()["follow_ups"] == []
     database.rows = None  # no database: no result, so nothing to break down
-    assert demo_client(EXAMPLES["spec-01"]["sparql"]).post("/demo/ask", json=question).json()["follow_ups"] == []
+    assert demo_client(CHOLERA_COUNT).post("/demo/ask", json=question).json()["follow_ups"] == []
 
 
 def test_blocked_answers_have_no_follow_ups(database):

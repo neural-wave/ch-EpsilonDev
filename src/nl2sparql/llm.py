@@ -31,7 +31,8 @@ class LLMClient:
         self.extra_body = extra_body or {}
 
     async def chat(self, model: str, messages: list[dict], max_tokens: int = 800, json_mode: bool = False) -> LLMReply:
-        body = {**self.extra_body, "model": model, "messages": messages, "temperature": 0, "max_tokens": max_tokens}
+        # Greedy by default; the extra body may set the sampling (thinking mode must not decode greedily).
+        body = {"temperature": 0, **self.extra_body, "model": model, "messages": messages, "max_tokens": max_tokens}
         if json_mode:
             body["response_format"] = {"type": "json_object"}
         try:
@@ -46,3 +47,26 @@ class LLMClient:
         usage = payload.get("usage") or {}
         tokens = int(usage.get("prompt_tokens", 0)) + int(usage.get("completion_tokens", 0))
         return LLMReply(text, tokens, choice.get("finish_reason"))
+
+    async def sample(self, model: str, messages: list[dict], n: int, temperature: float,
+                     max_tokens: int = 800) -> list[LLMReply]:
+        """n answers to the same messages from one request at `temperature`, which wins over the extra body's
+        (the OpenAI "n" field, which vLLM supports; a server that ignores it returns fewer answers). The server
+        reports one usage per request, the prompt once and the completion of every answer: the first answer
+        carries it and the others 0, so the answers' tokens add up to the request's."""
+        body = {**self.extra_body, "model": model, "messages": messages, "temperature": temperature,
+                "max_tokens": max_tokens, "n": n}
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout, transport=self.transport, verify=self.verify_tls) as client:
+                response = await client.post(f"{self.base_url}/chat/completions", json=body, headers=self.headers)
+            response.raise_for_status()
+            payload = response.json()
+            answers = [(choice["message"]["content"] or "", choice.get("finish_reason")) for choice in payload["choices"]]
+            usage = payload.get("usage") or {}
+            tokens = int(usage.get("prompt_tokens", 0)) + int(usage.get("completion_tokens", 0))
+        except (httpx.HTTPError, KeyError, IndexError, TypeError, ValueError, AttributeError) as error:
+            raise LLMError(f"LLM call failed: {error}") from error
+        if not answers:
+            raise LLMError("LLM call failed: the answer has no choices.")
+        return [LLMReply(text, tokens if position == 0 else 0, finish_reason)
+                for position, (text, finish_reason) in enumerate(answers)]

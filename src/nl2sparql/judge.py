@@ -6,7 +6,10 @@ exactly one meaning (judge_checks.syntax.normalize) and a typed value-set entry.
 syntax, with hints that name the real error when rdflib still rejects the text (rdflib's own
 message points at the wrong token); SPHN terms against the data snapshot; the inference option on
 code patterns; distinct patient counts; and the three families in judge_checks/: variable scope,
-semantics and schema. Every error becomes the retry feedback, so a check that fires on a correct
+semantics and schema; given the question, also that the query restricts to the coded concepts the
+question names and counts the records it asks for (judge_checks/coverage.py). Shapes with exactly one
+correct form are repaired instead of reported (judge_checks/rewrites_scope.py, rewrites_aggregation.py):
+a hint buys a whole new query, which came back worse as often as better. Every error becomes the retry feedback, so a check that fires on a correct
 query costs the request its retry: each one was measured at zero hits on the reference queries.
 The repairs are reported so the pipeline can log them.
 
@@ -22,6 +25,8 @@ from rdflib.namespace import RDF
 from rdflib.plugins.sparql.parserutils import CompValue
 
 from nl2sparql.context.schema import SchemaCards
+from nl2sparql.context.terminology import TerminologyIndex
+from nl2sparql.judge_checks import coverage as question_checks, rewrites_aggregation, rewrites_scope
 from nl2sparql.judge_checks import schema as schema_checks, scope as scope_checks, semantics as semantic_checks
 from nl2sparql.judge_checks.syntax import diagnose, normalize
 from nl2sparql.models import JudgeResult
@@ -38,12 +43,14 @@ CODE_INFERENCE_URI = "https://biomedit.ch/rdf/sphn-resource/global"
 # A single pseudo-identifier triple that nothing reads is harmless for the result: not worth a retry.
 SEMANTIC_CHECKS = [check for check in semantic_checks.CHECKS if check is not semantic_checks.check_unused_pseudo_identifier]
 MAX_ERRORS = 5  # the model gets the first ones; more hints than that read as noise
-# Errors after which the query still runs (the numbers may be off) are severity 1; wrong terms, scopes and
-# dates make Virtuoso fail or return nothing (2); a syntax error is rejected outright (3).
+# Errors after which the query still runs (the numbers may be off) are severity 1; wrong terms, scopes,
+# unbound variables and dates make Virtuoso fail or return nothing or an empty-keyed row (2); a syntax error
+# is rejected outright (3).
 HARD_ERROR_RE = re.compile(
     r"does not occur in the data| has no sphn:|needs OPTION \(inference|Count patients with COUNT\(DISTINCT"
     r"|bound twice|already bound|nests an aggregate|aggregates \?\w+, which is an alias|needs a dateTime"
-    r"|is a record, not a date|datediff")
+    r"|is (?:a sphn:\w+ )?record, not a date|datediff|cannot see|with true/false|not a property path"
+    r"|nothing binds|not bound in this scope")
 
 
 def severity(result: JudgeResult) -> tuple[int, int]:
@@ -58,10 +65,11 @@ def severity(result: JudgeResult) -> tuple[int, int]:
 
 
 class Judge:
-    def __init__(self, schema: SchemaCards):
+    def __init__(self, schema: SchemaCards, terminology: TerminologyIndex | None = None):
         self.schema = schema
+        self.terminology = terminology  # the codes a question names, for judge_checks/coverage.py
 
-    def check(self, sparql: str) -> JudgeResult:
+    def check(self, sparql: str, question: str | None = None) -> JudgeResult:
         repairs: list[str] = []
         text = fix_standard_prefixes(sparql.strip() + "\n")
         for rewrite in semantic_checks.REWRITES:
@@ -70,7 +78,7 @@ class Judge:
         fixed = add_missing_prefixes(text)
         parsed = parse_sparql(fixed)
         if parsed.kind == "Invalid":
-            fixed, applied = normalize(fixed)
+            fixed, applied = normalize(fixed, self.schema.data_terms)
             repairs += applied
             parsed = parse_sparql(fixed)
             if parsed.kind == "Invalid":
@@ -80,6 +88,15 @@ class Judge:
             return JudgeResult(fixed, repairs=repairs)  # updates: nothing to check here, the guard rejects them
         for rewrite in schema_checks.REWRITES:
             rewritten, applied = rewrite(fixed, self.schema)
+            if applied:
+                reparsed = parse_sparql(rewritten)
+                if reparsed.kind != "Invalid" and reparsed.query is not None:
+                    fixed, parsed = rewritten, reparsed
+                    repairs += applied
+        # Shapes with exactly one correct form are repaired, not hinted: a hint buys a whole new query, which
+        # came back worse as often as better. Scope first (hidden variables become visible), then aggregation.
+        for rewrite in [*rewrites_scope.REWRITES, *rewrites_aggregation.REWRITES]:
+            rewritten, applied = rewrite(fixed, parsed)
             if applied:
                 reparsed = parse_sparql(rewritten)
                 if reparsed.kind != "Invalid" and reparsed.query is not None:
@@ -107,10 +124,17 @@ class Judge:
             errors.append("Count patients with COUNT(DISTINCT ?g) to avoid counting duplicate graph matches.")
         for check in scope_checks.CHECKS:
             errors += check(parsed)
+        for check in rewrites_scope.CHECKS:
+            errors += check(parsed, fixed)
         for check in schema_checks.CHECKS:
             errors += check(parsed, fixed, self.schema)
         for check in SEMANTIC_CHECKS:
             errors += check(parsed, fixed)
+        if question:  # the query must answer the question: its coded concepts and the record count it asks for
+            asked: list[str] = []
+            for check in question_checks.CHECKS:
+                asked += check(question, parsed, fixed, self.schema, self.terminology)
+            errors = asked + errors  # first, so the cap below never drops them
         return JudgeResult(fixed, _first_unique(errors), repairs)
 
 

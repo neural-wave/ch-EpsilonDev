@@ -4,7 +4,9 @@ For example CivilStatus.hasCode takes six SNOMED CT concepts, and AdverseEvent.h
 individuals such as Fatal or Recovered. The schema cards show these values, so the query agent can
 write ?status sphn:hasCode ?c . ?c a snomed:<concept> instead of guessing the code. Coded sets above
 MAX_VALUES members (diagnoses, procedures) are left to the terminology index; sphn-individual sets
-are kept whole, however large (TherapeuticArea.hasSpecialtyName has 64 members).
+are kept whole, however large (TherapeuticArea.hasSpecialtyName has 64 members). The cap of 20 takes
+in the procedure intents (Intent.hasCode, 17 members) and the tumour grades (18), which 15 left out;
+the next coded sets have 21 or more members (measurement methods, information systems).
 
 Labels come from restricted terminologies (SNOMED CT), so the output stays in assets/ (git-ignored)
 and must never be committed or shared. Script time only: the API never queries the database. Each
@@ -25,7 +27,7 @@ import httpx
 from nl2sparql.config import REPO_ROOT, Settings
 from nl2sparql.sparql.prefixes import INFERENCE_RULE_SET, SPHN, STANDARD_PREFIXES
 
-MAX_VALUES = 15  # coded sets only: larger ones (diagnoses, procedures) are left to the terminology index
+MAX_VALUES = 20  # coded sets only: larger ones (diagnoses, procedures) are left to the terminology index
 INDIVIDUAL = STANDARD_PREFIXES["sphn-individual"]
 SEMANTIC_TAG_RE = re.compile(r"\s*\([^()]*\)\s*$")  # "Married (finding)" -> "Married"
 PATIENT_GRAPHS = 'FILTER(STRSTARTS(STR(?g), "http://example.org/graph/"))'

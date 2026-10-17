@@ -200,7 +200,7 @@ async function loadConfig() {
   renderAgent("query", c.agents.query);
   const x = c.context;
   document.getElementById("context").innerHTML = `
-    <span>Examples per request <b>${x.examples_per_request}</b> of <b>${x.examples_in_bank}</b> in the bank</span>
+    <span>Examples per request <b>${x.examples_per_request}</b> of <b>${x.examples_in_bank}</b> in the bank (<b>${x.dev_references_in_bank ?? 0}</b> dev references)</span>
     <span>Schema cards per request <b>${x.schema_cards_per_request}</b></span>
     <span>Code candidates per request <b>${x.code_candidates_per_request}</b> (index entries: <b>${x.terminology_entries}</b>)</span>
     <span>Hide the question's own example <b>${x.hide_exact_example}</b></span>`;

@@ -76,13 +76,16 @@ def per_agent_summary(rows: list[dict]) -> dict:
 
 
 def agent_setup(settings: Settings) -> dict:
+    """The configuration a report was made with, so that runs can be told apart. With CONTEXT_DEV_REFERENCES on,
+    dev questions retrieve their neighbours' reference queries: only the holdout numbers compare with other runs."""
     agents = {name: settings.agent(name) for name in ("intent", "query")}
     llm = settings.backend == "llm"
     return {
         "models": {name: agent.model if llm else "stub" for name, agent in agents.items()},
         "prompt_versions": {name: agent.prompt_version for name, agent in agents.items()},
         "max_tokens": {name: agent.max_tokens for name, agent in agents.items()},
-        "context": {"examples": settings.context_examples, "cards": settings.context_cards, "codes": settings.context_codes},
+        "context": {"examples": settings.context_examples, "cards": settings.context_cards, "codes": settings.context_codes,
+                    "dev_references": settings.context_dev_references},
         "query_reorder": settings.query_reorder,
     }
 

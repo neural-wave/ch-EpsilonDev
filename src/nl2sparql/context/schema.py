@@ -3,6 +3,11 @@
 A card says, per property, what the data holds: a value and its datatype, a value set (listed in
 full, sphn-individual entries are not restricted), a link and every class it reaches, or a code node
 and the terminology its codes come from (ICD-10-GM, CHOP, SNOMED CT or only the generic sphn:Code).
+A coded property shows no example code: the model copied the placeholder `snomed:<code>` as it stood
+(11 dev answers of the 17 October run), so the card names the pattern `?c a ?concept` and points at the
+code candidates for a concrete code. The link hasSubjectPseudoIdentifier, which every record carries,
+is shown only on the SubjectPseudoIdentifier card: one patient is one graph, no compliant reference
+joins through it, and the join misled the model three times.
 
 Optional value sets (assets/value_sets.json, built by scripts/build_value_sets.py) add the labels of
 the few coded values a property takes in the data, e.g. the six SNOMED CT concepts of
@@ -16,8 +21,9 @@ import re
 from collections import Counter
 from pathlib import Path
 
-from nl2sparql.context.bm25 import tokenize
-from nl2sparql.sparql.prefixes import INFERENCE_RULE_SET, STANDARD_PREFIXES
+from nl2sparql.context.bm25 import normalize_text, tokenize
+from nl2sparql.models import CodeEntry
+from nl2sparql.sparql.prefixes import STANDARD_PREFIXES
 
 CAMEL_RE = re.compile(r"[A-Z]+(?=[A-Z][a-z])|[A-Z]?[a-z]+|[A-Z]+|\d+")
 SPHN_TERM_RE = re.compile(r"sphn:([A-Za-z]+)")
@@ -31,8 +37,14 @@ CODE_SYSTEM_PREFIXES = {
 # Prefixes the query prompt and the official examples already use; a card that uses any other one
 # prints its namespace, so the model declares it right.
 PROMPT_PREFIXES = frozenset({"sphn", "sphn-individual", "icd-10-gm", "chop", "snomed"})
-# Classes every record links to; following a link there never helps a question.
+# Classes every record links to; following a link there never helps a question, and an example that
+# uses one (official-15 lists identifiers) does not make the question need it.
 PROVENANCE_CLASSES = frozenset({"SourceSystem", "DataProvider", "SubjectPseudoIdentifier"})
+# The link from every record to the patient's pseudo-identifier: rendered only on the card of the class
+# it reaches, where a question that names identifiers finds the vocabulary for a literal translation.
+PATIENT_LINK = "hasSubjectPseudoIdentifier"
+# How a card tells the model to match a coded property, with no code it could copy verbatim.
+CONCEPT_PATTERN = "?c a ?concept; one code from the candidates to match a concept"
 MAX_TARGETS = 12  # Interpretation.hasInput reaches 79 classes; a card lists the most frequent ones
 # Name parts shared by many classes or properties, or that most questions contain ("number",
 # "average"), weigh half: "medical" alone must not bring MedicalDevice. The loaded cards add every
@@ -45,10 +57,20 @@ GENERIC_PART_NAMES = 4
 # Labels too common to point at a class ("Other" is a member of five value sets).
 UNSPECIFIC_LABELS = frozenset({"other", "none", "not", "unknown", "general", "specific", "yes", "no", "applicable"})
 IRREGULAR_PLURALS = {"diagnoses": "diagnosis", "analyses": "analysis", "men": "man", "women": "woman"}
-# Everyday words for backbone classes whose names the questions never use.
+# "give drugs", "drugs given", "medication we gave": the verb counts next to a drug noun only, since
+# "Give the number of stays" is an imperative, not an administration.
+GIVE_PHRASES = tuple(
+    f"{first} {second}"
+    for verb in ("give", "given", "gave", "giving")
+    for noun in ("drug", "drugs", "medication", "medications", "medicine", "medicines", "dose", "doses")
+    for first, second in ((verb, noun), (noun, verb))
+)
+# Everyday words for backbone classes whose names the questions never use. A phrase with a stopword
+# ("in hospital", "by mouth") is matched as written, since the tokenizer would drop the stopword.
 SYNONYMS = {
     ("stay", "stays", "admission", "admissions", "admitted", "discharge", "discharged", "discharges",
-     "hospitalization", "hospitalisation", "hospitalized", "hospitalised"): ("AdministrativeCase",),
+     "hospitalization", "hospitalisation", "hospitalized", "hospitalised", "in hospital", "inpatient",
+     "inpatients"): ("AdministrativeCase",),
     ("citizen", "citizens", "citizenship", "nationality", "nationalities"): ("Nationality",),
     ("bmi",): ("BodyMassIndex",),
     ("blood pressure",): ("BloodPressure",),
@@ -58,7 +80,17 @@ SYNONYMS = {
     ("specialty", "specialties", "speciality", "specialities"): ("TherapeuticArea",),
     ("follow up", "followed up"): ("FollowUp", "VitalStatus"),
     ("born", "birth", "births", "baby", "babies", "newborn", "newborns", "delivered", "delivery"): ("Birth",),
+    ("early", "preterm", "premature", "prematurely", "gestation", "gestational"): ("GestationalAgeAtBirth",),
     ("sex", "gender", "male", "female", "men", "women", "man", "woman"): ("AdministrativeSex",),
+    # Drugs given, administered or taken by a route (official-07 asked by route and got no card).
+    (*GIVE_PHRASES, "administer", "administered", "administering", "administration", "administrations",
+     "route", "routes", "by mouth", "orally", "iv", "intravenous", "intravenously"): ("DrugAdministrationEvent",),
+    # The purpose of a procedure (q-057 and q-074 asked for diagnostic and guidance intents).
+    ("intent", "intents", "intention", "guidance", "guide", "guided", "guiding", "screening", "diagnostic",
+     "diagnostics"): ("Intent",),
+    # A request that names identifiers is forbidden, but its literal translation still needs the vocabulary.
+    ("identifier", "identifiers", "pseudo identifier", "pseudo identifiers", "pseudonym", "pseudonyms",
+     "pseudonymised", "pseudonymized", "patient id", "patient ids"): ("SubjectPseudoIdentifier",),
 }
 
 
@@ -117,6 +149,18 @@ class SchemaCards:
         self._label_keys = {
             name: [key for prop in props.values() for key in (_label_key(v["label"]) for v in prop) if key]
             for name, props in self.value_sets.items() if name in classes
+        }
+        # Code IRI -> the classes whose value sets hold it: a code candidate that is a member of a set
+        # names the class as surely as a value label does (the screening-intent code names Intent).
+        # An unspecific member ("Other" sits in two sets) names nothing, as its label would not.
+        self._classes_by_value: dict[str, set[str]] = {}
+        for name, props in self.value_sets.items():
+            for prop in props.values():
+                for value in prop:
+                    if name in classes and _label_key(value["label"]) and (iri := _expand(value["value"])):
+                        self._classes_by_value.setdefault(iri, set()).add(name)
+        self._patient_link_targets = {
+            target for card in classes.values() for target in _targets(card["properties"].get(PATIENT_LINK, {}))
         }
         self._synonyms = {
             " ".join(stem(word) for word in phrase.split()): tuple(c for c in targets if c in classes)
@@ -196,6 +240,8 @@ class SchemaCards:
         parts, prefixes = [], set()
         for prop, info in card["properties"].items():
             values = self.value_sets.get(name, {}).get(prop)
+            if prop == PATIENT_LINK:
+                continue  # shown on the card it reaches, see PATIENT_LINK
             if values and all(v["value"].startswith("sphn-individual:") for v in values):
                 parts.append(f"{prop} = one of " + " | ".join(v["value"] for v in values))
             elif values:  # code nodes: ?x sphn:<prop> ?c . ?c a <value>
@@ -218,26 +264,35 @@ class SchemaCards:
             f" ({prefix}: <{STANDARD_PREFIXES[prefix]}>)"
             for prefix in sorted(prefixes - PROMPT_PREFIXES) if prefix in STANDARD_PREFIXES
         )
-        return f"sphn:{name} [{card['instances']} records, {card['patients']} patients]: " + "; ".join(parts) + namespaces
+        reached = f" (every record links to it with {PATIENT_LINK})" if name in self._patient_link_targets else ""
+        return f"sphn:{name} [{card['instances']} records, {card['patients']} patients]{reached}: " + "; ".join(parts) + namespaces
 
-    def cards_for(self, text: str, k: int = 6, examples_sparql: str = "") -> list[str]:
+    def cards_for(self, text: str, k: int = 6, examples_sparql: str = "", codes: list[CodeEntry] | tuple = ()) -> list[str]:
         """Cards for the classes the question names (as sphn:Name, as words, as a synonym such as
-        "stay" for AdministrativeCase, through a property name or a value label) first, then the
-        classes the retrieved examples use. A shown card pulls the class behind a link the question
-        points at (FollowUp.hasResult -> VitalStatus), never a provenance class."""
+        "stay" for AdministrativeCase, through a property name, a value label or a code candidate that
+        is a member of the class's value set) first, then the classes the retrieved examples use. A
+        shown card pulls the class behind a link the question points at (FollowUp.hasResult ->
+        VitalStatus), never a provenance class, which only a question that names it brings in."""
         tokens = tokenize(text)
         if k <= 0 or self.empty or not tokens:
             return []
-        question = _Question(tokens)
+        question = _Question(tokens, text)
         named = {term for term in SPHN_TERM_RE.findall(text) if term in self.classes}
-        used_by_examples = {term for term in SPHN_TERM_RE.findall(examples_sparql) if term in self.classes}
-        synonyms = {name for phrase, targets in self._synonyms.items() if phrase in question.phrases for name in targets}
+        used_by_examples = {
+            term for term in SPHN_TERM_RE.findall(examples_sparql) if term in self.classes and term not in PROVENANCE_CLASSES
+        }
+        synonyms = {name for phrase, targets in self._synonyms.items() if question.has_phrase(phrase) for name in targets}
+        # Classes whose value set holds a code candidate. A candidate can be a partial match ("Lost to
+        # follow-up" for a follow-up question), so membership only makes the class worth pulling through
+        # a link of a shown card (ImagingProcedure.hasIntent -> Intent for the screening-intent code).
+        members = {name for entry in codes for name in self._classes_by_value.get(entry.iri, ())}
 
         def labelled(name: str) -> bool:
             return name not in PROVENANCE_CLASSES and any(key <= question.stems for key in self._label_keys.get(name, ()))
 
         def mentioned(name: str) -> bool:
-            return name in synonyms or labelled(name) or self._ratio(self._class_parts[name], question)[0] >= 0.5
+            return (name in synonyms or name in members or labelled(name)
+                    or self._ratio(self._class_parts[name], question)[0] >= 0.5)
 
         scored, pulled = [], {}
         for name in self.classes:
@@ -301,17 +356,24 @@ class SchemaCards:
 
 
 class _Question:
-    """The question as stems, bigrams and seven-letter prefixes, the forms a name part is matched in."""
+    """The question as stems, bigrams and seven-letter prefixes, the forms a name part is matched in,
+    and as folded text for the phrases the tokenizer would break up."""
 
-    def __init__(self, tokens: list[str]):
+    def __init__(self, tokens: list[str], text: str = ""):
         stems = [stem(token) for token in tokens]
         self.stems = set(stems)
         self.phrases = self.stems | {f"{a} {b}" for a, b in zip(stems, stems[1:])}
         self.prefixes = {token[:7] for token in tokens if len(token) >= 7}
+        self.text = normalize_text(text)
 
     def mentions(self, part: str) -> bool:
         """'stays' mentions 'stay'; 'resuscitate' mentions 'resuscitation' (same first seven letters)."""
         return stem(part) in self.stems or (len(part) >= 7 and part[:7] in self.prefixes)
+
+    def has_phrase(self, phrase: str) -> bool:
+        """A synonym phrase: one stem or two in a row ('stays', 'blood pressure'), or, when it holds a
+        stopword the tokenizer drops ('in hospital'), the phrase as written in the question."""
+        return phrase in self.phrases or (" " in phrase and re.search(rf"\b{re.escape(phrase)}\b", self.text) is not None)
 
 
 def _is_int(value) -> bool:
@@ -325,17 +387,27 @@ def _targets(info: dict) -> list[str]:
 
 
 def _code_line(prop: str, info: dict) -> tuple[str, str | None]:
-    """How to match the codes of a coded property, and the prefix the pattern uses."""
+    """How to match the codes of a coded property, and the prefix the codes use. No example code: the
+    prompt rules say how a concrete code is typed, with the inference option."""
     system = info["code_system"]
     if system == "generic":
         return f"{prop} -> generic sphn:Code (no terminology type: cannot be matched by ICD/CHOP/SNOMED)", None
     systems = info.get("code_systems") or {}
     total = sum(systems.values())
-    share = f" ({100 * systems[system] // total}%; the rest generic sphn:Code)" if len(systems) > 1 and total else ""
+    share = f"{100 * systems[system] // total}%, the rest generic sphn:Code; " if len(systems) > 1 and total else ""
     prefix = CODE_SYSTEM_PREFIXES.get(system)
-    pattern = f"{prefix}:<code>" if prefix else f"<{system}...>"
-    label = f"{system} code" if prefix else "code"
-    return f'{prop} -> {label}{share}: ?c a {pattern} OPTION (inference "{INFERENCE_RULE_SET}")', prefix
+    label = f"{system} code" if prefix else f"code in <{system}>"
+    return f"{prop} -> {label} ({share}{CONCEPT_PATTERN})", prefix
+
+
+def _expand(value: str) -> str | None:
+    """The full IRI of a value-set entry written as prefix:local or <iri>; None for an sphn-individual."""
+    if value.startswith("<") and value.endswith(">"):
+        return value[1:-1]
+    prefix, _, local = value.partition(":")
+    if prefix == "sphn-individual" or prefix not in STANDARD_PREFIXES:
+        return None
+    return STANDARD_PREFIXES[prefix] + local
 
 
 def _load_value_sets(path: str | Path | None) -> dict:

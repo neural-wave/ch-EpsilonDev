@@ -1,0 +1,40 @@
+# Deny by default. Local credentials, patients, terminologies, logs, reports and test
+# artifacts must never reach the builder, even if they are present on a developer laptop.
+**
+!Dockerfile
+!pyproject.toml
+!README.md
+!src/
+!src/**/
+!src/**/*.py
+!src/**/*.html
+!frontend/
+!frontend/**/
+!frontend/**/*.html
+!frontend/**/*.js
+!frontend/**/*.css
+!frontend/**/*.svg
+!frontend/**/*.png
+!frontend/**/*.woff
+!frontend/**/*.woff2
+!data/
+!data/examples.jsonl
+!data/team_examples.jsonl
+!data/schema_cards.json
+!data/property_kinds.json
+# Exclude generated/private directories even when nested inside an admitted source tree.
+**/node_modules
+**/node_modules/**
+**/__pycache__
+**/__pycache__/**
+**/.git
+**/.git/**
+**/.venv*
+**/.venv*/**
+**/.env*
+**/artifacts/**
+**/logs/**
+**/assets/**
+!frontend/cli/assets/
+!frontend/cli/assets/sib-emblem.png
+!frontend/cli/assets/sphn-logo.png
