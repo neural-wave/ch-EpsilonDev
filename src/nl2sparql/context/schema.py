@@ -12,16 +12,22 @@ joins through it, and the join misled the model three times.
 Optional value sets (assets/value_sets.json, built by scripts/build_value_sets.py) add the labels of
 the few coded values a property takes in the data, e.g. the six SNOMED CT concepts of
 CivilStatus.hasCode. They derive from restricted terminologies, so they live in assets/ and are never
-committed."""
+committed.
+
+A code candidate whose kind SPHN keeps in one class (SEMANTIC_TAG_CLASSES: a SNOMED CT geographic
+location is a Country code) has a home, `code_home()`: the class, its coded property and the records
+that link to it, read from the cards. The picker shows the home and those records, and the query
+prompt prints where the candidate is used (context/builder.py)."""
 from __future__ import annotations
 
 import difflib
 import json
 import re
 from collections import Counter
+from dataclasses import dataclass
 from pathlib import Path
 
-from nl2sparql.context.bm25 import normalize_text, tokenize
+from nl2sparql.context.bm25 import TOKEN_RE, normalize_text, tokenize
 from nl2sparql.models import CodeEntry
 from nl2sparql.sparql.prefixes import STANDARD_PREFIXES
 
@@ -79,7 +85,14 @@ SYNONYMS = {
     ("ingredient", "ingredients", "substance", "substances"): ("Substance",),
     ("specialty", "specialties", "speciality", "specialities"): ("TherapeuticArea",),
     ("follow up", "followed up"): ("FollowUp", "VitalStatus"),
-    ("born", "birth", "births", "baby", "babies", "newborn", "newborns", "delivered", "delivery"): ("Birth",),
+    ("born", "birth", "births", "baby", "babies", "newborn", "newborns", "delivered", "delivery", "birthplace",
+     "birthplaces", "country of birth"): ("Birth",),
+    # Where a patient lives ("How many patients live in India?" got neither HomeAddress nor Country). The
+    # verb only before "in": q-006 asks about "living with a partner", "live births" are births and "living
+    # at the time of follow-up" is a vital status.
+    ("live in", "lives in", "lived in", "living in", "resident", "residents", "residence", "residences", "reside",
+     "resides", "resided", "residing", "address", "addresses", "home address", "home addresses", "home country",
+     "home countries"): ("HomeAddress",),
     ("early", "preterm", "premature", "prematurely", "gestation", "gestational"): ("GestationalAgeAtBirth",),
     ("sex", "gender", "male", "female", "men", "women", "man", "woman"): ("AdministrativeSex",),
     # Drugs given, administered or taken by a route (official-07 asked by route and got no card).
@@ -92,6 +105,30 @@ SYNONYMS = {
     ("identifier", "identifiers", "pseudo identifier", "pseudo identifiers", "pseudonym", "pseudonyms",
      "pseudonymised", "pseudonymized", "patient id", "patient ids"): ("SubjectPseudoIdentifier",),
 }
+# SNOMED CT semantic tags whose concepts SPHN keeps in one class: a code tagged so is a code of that
+# class, whatever record links to it. On dev the 96 geographic locations of the data are all
+# Country.hasCode, reached from HomeAddress, Birth and Nationality; with neither card shown, "How many
+# patients live in India?" typed the country on OncologyDiagnosis, then on RadiotherapyProcedure.
+SEMANTIC_TAG_CLASSES = {"geographic location": "Country"}
+SEMANTIC_TAG_RE = re.compile(r"\(([^()]*)\)\s*$")  # "<country> (geographic location)" -> "geographic location"
+
+
+@dataclass(frozen=True)
+class CodeHome:
+    """Where the codes of one kind live: the class, its coded property and the records that link to it."""
+
+    kind: str  # the semantic tag: "geographic location"
+    name: str  # "Country"
+    prop: str  # "hasCode"
+    via: tuple[tuple[str, str], ...] = ()  # (class, link property): ("HomeAddress", "hasCountry"), ...
+
+    def describe(self) -> str:
+        """'sphn:Country hasCode (via Birth / HomeAddress hasCountry, Nationality hasAssociatedCountry)'."""
+        groups: dict[str, list[str]] = {}
+        for name, prop in self.via:
+            groups.setdefault(prop, []).append(name)
+        via = ", ".join(f"{' / '.join(names)} {prop}" for prop, names in groups.items())
+        return f"sphn:{self.name} {self.prop}" + (f" (via {via})" if via else "")
 
 
 def words(name: str) -> list[str]:
@@ -166,6 +203,17 @@ class SchemaCards:
             " ".join(stem(word) for word in phrase.split()): tuple(c for c in targets if c in classes)
             for phrases, targets in SYNONYMS.items() for phrase in phrases
         }
+        # Semantic tag -> the home of its codes, when the cards have the class with a SNOMED CT coded property.
+        self._code_homes: dict[str, CodeHome] = {}
+        for tag, name in SEMANTIC_TAG_CLASSES.items():
+            coded = [prop for prop, info in classes.get(name, {}).get("properties", {}).items()
+                     if info.get("code_system") == "SNOMED CT"]
+            if coded:
+                via = tuple(sorted(
+                    (other, prop) for other, card in classes.items() if other != name and other not in PROVENANCE_CLASSES
+                    for prop, info in card["properties"].items() if name in _targets(info)
+                ))
+                self._code_homes[tag] = CodeHome(tag, name, "hasCode" if "hasCode" in coded else coded[0], via)
 
     @classmethod
     def load(cls, path: str | Path, value_sets_path: str | Path | None = None) -> "SchemaCards":
@@ -226,6 +274,17 @@ class SchemaCards:
         """True when the class or property occurs in the patient data (always True without cards)."""
         return self.empty or term in self.data_terms
 
+    def code_home(self, entry: CodeEntry | None) -> CodeHome | None:
+        """Where codes of the entry's kind live, by the SNOMED CT semantic tag of its labels: a label
+        "<country> (geographic location)" makes it a sphn:Country code. None for any other entry."""
+        if entry is None or entry.system != "SNOMED CT":
+            return None
+        for label in entry.labels:
+            tag = SEMANTIC_TAG_RE.search(label)
+            if tag and (home := self._code_homes.get(tag.group(1).strip().lower())):
+                return home
+        return None
+
     def closest(self, term: str) -> str | None:
         scored = [
             (difflib.SequenceMatcher(None, term, candidate).ratio(), candidate)
@@ -269,10 +328,11 @@ class SchemaCards:
 
     def cards_for(self, text: str, k: int = 6, examples_sparql: str = "", codes: list[CodeEntry] | tuple = ()) -> list[str]:
         """Cards for the classes the question names (as sphn:Name, as words, as a synonym such as
-        "stay" for AdministrativeCase, through a property name, a value label or a code candidate that
-        is a member of the class's value set) first, then the classes the retrieved examples use. A
-        shown card pulls the class behind a link the question points at (FollowUp.hasResult ->
-        VitalStatus), never a provenance class, which only a question that names it brings in."""
+        "stay" for AdministrativeCase, through a property name, a value label, a code candidate that
+        is a member of the class's value set or one whose kind the class holds) first, then the classes
+        the retrieved examples use. A shown card pulls the class behind a link the question points at
+        (FollowUp.hasResult -> VitalStatus), never a provenance class, which only a question that names
+        it brings in; the home of a candidate's kind pulls the records that link to it."""
         tokens = tokenize(text)
         if k <= 0 or self.empty or not tokens:
             return []
@@ -286,12 +346,16 @@ class SchemaCards:
         # follow-up" for a follow-up question), so membership only makes the class worth pulling through
         # a link of a shown card (ImagingProcedure.hasIntent -> Intent for the screening-intent code).
         members = {name for entry in codes for name in self._classes_by_value.get(entry.iri, ())}
+        # Classes that hold the codes of a candidate's kind (a geographic location is a sphn:Country code):
+        # the candidate names the class as a synonym would, and the class brings the records that link to
+        # it, the ones the question names ("live" -> HomeAddress) or else all of them.
+        homes = {home.name: home for entry in codes if (home := self.code_home(entry)) is not None}
 
         def labelled(name: str) -> bool:
             return name not in PROVENANCE_CLASSES and any(key <= question.stems for key in self._label_keys.get(name, ()))
 
         def mentioned(name: str) -> bool:
-            return (name in synonyms or name in members or labelled(name)
+            return (name in synonyms or name in members or name in homes or labelled(name)
                     or self._ratio(self._class_parts[name], question)[0] >= 0.5)
 
         scored, pulled = [], {}
@@ -302,6 +366,8 @@ class SchemaCards:
                 (1 + name_ratio if name in named or name_ratio >= 0.5 else 0)
                 + (10 if name in named else 0)  # an explicit sphn:Name beats every other signal
                 + (1.75 if name in synonyms else 0)
+                # the candidate is evidence only where the question does not name the class itself (official-04: "country")
+                + (1.75 if name in homes and name not in synonyms and name not in named and name_ratio < 0.5 else 0)
                 + 0.75 * max(properties.values(), default=0.0)
                 + (0.6 if labelled(name) else 0)
                 + (0.5 if name in used_by_examples else 0)
@@ -317,6 +383,9 @@ class SchemaCards:
                 if target in self.classes and target != name and target not in PROVENANCE_CLASSES
                 and (properties[prop] > 0 or mentioned(target))
             ]
+            if name in homes:
+                linking = [other for other, _ in homes[name].via]
+                pulled[name] += [other for other in linking if mentioned(other)] or linking
         scored.sort(key=lambda item: (-item[0], -item[1], item[2]))  # ties: more words, then name
         chosen: list[str] = []
         for _, _, name in scored:
@@ -365,6 +434,7 @@ class _Question:
         self.phrases = self.stems | {f"{a} {b}" for a, b in zip(stems, stems[1:])}
         self.prefixes = {token[:7] for token in tokens if len(token) >= 7}
         self.text = normalize_text(text)
+        self.stemmed_text = " ".join(stem(token) for token in TOKEN_RE.findall(self.text))  # stopwords kept
 
     def mentions(self, part: str) -> bool:
         """'stays' mentions 'stay'; 'resuscitate' mentions 'resuscitation' (same first seven letters)."""
@@ -372,8 +442,14 @@ class _Question:
 
     def has_phrase(self, phrase: str) -> bool:
         """A synonym phrase: one stem or two in a row ('stays', 'blood pressure'), or, when it holds a
-        stopword the tokenizer drops ('in hospital'), the phrase as written in the question."""
-        return phrase in self.phrases or (" " in phrase and re.search(rf"\b{re.escape(phrase)}\b", self.text) is not None)
+        stopword the tokenizer drops ('in hospital', 'living in'), the phrase in the question as written
+        or stemmed word by word ('lives in' is 'live in')."""
+        if phrase in self.phrases:
+            return True
+        if " " not in phrase:
+            return False
+        pattern = rf"\b{re.escape(phrase)}\b"
+        return re.search(pattern, self.text) is not None or re.search(pattern, self.stemmed_text) is not None
 
 
 def _is_int(value) -> bool:

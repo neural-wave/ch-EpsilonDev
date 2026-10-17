@@ -129,6 +129,8 @@ class Judge:
             errors += check(parsed, fixed)
         for check in schema_checks.CHECKS:
             errors += check(parsed, fixed, self.schema)
+        for check in schema_checks.TERMINOLOGY_CHECKS:  # a code typed where its kind cannot be (a country on a procedure)
+            errors += check(parsed, fixed, self.schema, self.terminology)
         for check in SEMANTIC_CHECKS:
             errors += check(parsed, fixed)
         if question:  # the query must answer the question: its coded concepts and the record count it asks for
