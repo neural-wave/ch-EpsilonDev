@@ -1,114 +1,114 @@
-# Project Status Checklist
+# Project Status and Remaining Work
 
-Status checked on **17 October 2026** against the root [README](README.md), module guides, current repository files, and the pushed `guardjudge` branch (`bdf5f0e4ba20e73f546e038e4f1a50211fa5fed1`). The README remains the project-wide source of truth. This checklist distinguishes implemented code from work that still needs external decisions, run-machine access, or submission action.
+Status reviewed on **17 October 2026** against the root [README](README.md), module guides, tracked source/tests/scripts, and current Git state. The root README is the project-wide source of truth. This checklist distinguishes merged implementation, reported evidence, and work that still needs a fresh run, real graph access, team decisions, or submission action.
 
-## Done: base implementation and local verification
+**Current checkout:** `main` at `49ebc29e2977fa9470bda51854bd7f93bd6a275c`. This is the revision inspected for this checklist; it was **not** test-run in this environment. The root README reports 244 tests passing locally and in pull-request CI, but that report does not establish that exact SHA was tested. The local `.venv311` has no `bin/python` and no usable pytest installation. Rerun the suite on this revision before claiming it verified.
 
-- [x] End-to-end pipeline components are built and wired together.
-- [x] FastAPI endpoint and fixed response contract are implemented.
-- [x] Input validation and normalization are implemented.
-- [x] Module A has a configurable whole-request timeout and an HTTP concurrency test command.
-- [x] Intent and query agents, prompts, and OpenAI-compatible LLM client are present.
-- [x] Context retrieval, schema cards, example bank, and terminology-index lookup code are present.
-- [x] SPARQL parser, Judge diagnostics, compliance rules, and shared retry flow are implemented.
-- [x] Demo, evaluation runner, Virtuoso helper, profile/index builders, and database setup scripts are present.
-- [x] Local full test suite passes after merging modules A, B, C and D: **243 passed** (17 October). Local evidence only: it does not verify the actual RDF graphs.
-- [x] Baseline evaluation is recorded in the root README: stub 87% verdict accuracy; Qwen3.5-9B 90%, zero forbidden requests marked compliant, 2.8 s median latency.
-- [x] Jury confirmed the system must be database-agnostic at request time; compliant-query execution is optional; the hackathon API returns the query for forbidden requests.
+## Completed implementation
 
-## Data and Context (Module C)
+- [x] Modules A–E have implementation code in the repository and modules A–D are merged on `main`.
+- [x] FastAPI request flow, input validation, configurable timeouts, shared one-retry orchestration, response contract, and no-retry handling for forbidden intent are implemented.
+- [x] Intent/query agents, prompt versions, OpenAI-compatible client, context retrieval, schema/profile loading, terminology lookup, Guard, Judge, and shared SPARQL parsing are implemented.
+- [x] Parser access is serialized with a lock; an eight-thread parser regression test is present.
+- [x] Evaluation runners, runbox scripts, profile/index builders, query checker, profile comparator, retrieval benchmark, load-test command, demo, and Virtuoso helper are present.
+- [x] Request-time code is database-agnostic. Virtuoso access is limited to evaluation, maintenance scripts, or optional demo execution.
+- [x] API fields, shared model/agent interfaces, literal translation, open-source model requirement, and the rule that query violations cannot become compliant are documented as invariants.
+- [x] The root README records the current project evaluation and known issues. See its sections 3, 11, and 13 for the latest shared status.
 
-### Code complete locally
+## Verification required on this revision
 
-- [x] Refined example, schema-card, and terminology candidate retrieval, including empty queries, `k` limits, normalized exact-question exclusion, and deterministic ties.
-- [x] Added path/line-specific validation for malformed context files and loader errors naming the source path.
-- [x] Preserved fail-closed validation for required schema/profile snapshots.
-- [x] Added `scripts/compare_data_profile.py` for aggregate-only snapshot comparison; synthetic comparison tests pass.
-- [x] Confirmed request-time context loading does not require a Virtuoso connection.
-- [x] Kept BM25 defaults because the synthetic benchmark did not meet the change threshold.
+- [ ] On a working Python 3.11 environment, run `python -m pytest -q` at the current commit and record the actual result here and in the module guides.
+- [ ] Run the focused suites after confirming the full-test environment: `tests/test_context.py`, `tests/test_guard.py`, `tests/test_sparql.py`, `tests/test_agents_and_judge.py`, `tests/test_pipeline_and_api.py`, and `tests/test_profile_comparison.py`.
+- [ ] Run `scripts/retrieval_benchmark.py` separately; retain only its aggregate numeric output. Do not change BM25 defaults unless the documented quality/latency thresholds are met on repeatable evidence.
+- [ ] Check `git status` and review all files before the official push. The current checkout contains untracked duplicate-named files; do not add these by accident, and confirm their ownership/content before cleaning or sharing them.
+- [ ] Update `docs/data-and-context/README.md` and `docs/guard-and-judge/README.md`: both still identify the old `guardjudge` revision and report 171 tests. Replace those with evidence for the merged revision only after it has actually been tested; label graph/LLM results separately from local tests.
 
-### Remaining: real-data work for Santiago
+## Module A — Integration
 
-- [ ] Profile the dev RDF graph into a temporary directory and compare both snapshots with `scripts/compare_data_profile.py`. No profile was produced in this checkout: `.env` is absent and dev port 8890 is closed.
-- [ ] Refresh committed snapshots only if the measured dev profile supports the change; rerun tests after a refresh.
-- [ ] Build `assets/terminology_index.jsonl` on the configured run machine. The builder and loader exist; the generated restricted-terminology-derived index is not in Git.
-- [ ] Evaluate context with the real generated index and configured LLM. Report aggregate retrieval quality, empty-result rate, latency, tokens, memory, and build duration.
-- [ ] Use real evaluation evidence before changing BM25 defaults, adding embeddings, changing context size, or adding English label support.
-- [ ] Measure scale-sensitive behavior on the perf graph after dev correctness is reviewed. Perf port 8891 is closed in this checkout.
-- [ ] Add SIB-format examples only when validated and approved for inclusion.
+- [x] API, pipeline construction, configuration, request validation, timeout handling, and the load-test command are implemented.
+- [ ] Run `python -m nl2sparql.load_test --url http://localhost:8080 --questions eval/questions.jsonl --requests 32 --concurrency 8 --require-llm` against the configured LLM endpoint. Record aggregate errors, latency, throughput, and tokens.
+- [ ] Confirm judging deployment location and model/GPU access with the team/organizers.
+- [ ] Install from a clean environment and verify startup and API smoke checks for the final pushed revision.
 
-Local evidence: `tests/test_context.py` passed **41 tests**; `tests/test_profile_comparison.py` passed **3 tests**; the full suite passed **171 tests**. The synthetic benchmark covered 14 fabricated cases: default and both candidates scored 92.9% top-1 and 100% top-3, so defaults stayed unchanged. See [docs/data-and-context/README.md](docs/data-and-context/README.md) for full evidence and the Santiago runbook.
+## Module B — Agents and prompts
 
-## Guard and Judge (Module D)
+- [x] Intent/query agent implementations, open-source model configuration, prompt versioning, token/timing reporting, console, and evaluation support are present.
+- [ ] Raise the query output cap from 900 toward 1,500 tokens if the measured truncation cases improve without hurting quality.
+- [ ] Add the proposed query prompt v4 change to group by concept class rather than code node; evaluate it against dev and preserve a blind holdout.
+- [ ] Investigate the allowed-request false alarm involving a count that mentions an identifier.
+- [ ] Review first-try Judge errors and retry logs for #01/#08; reduce retries only where a validated prompt/context fix preserves verdict quality.
+- [ ] Consider intent prompt v5, an Apertus comparison, and token reductions only with measured dev/holdout results. Keep the holdout blind until final selection.
+- [ ] Check prompt-injection resistance and intent false alarms on the labeled evaluation set.
 
-### Code complete for current offline scope
+## Module C — Data and Context
 
-- [x] Fixed R1 `PropertyKinds` wiring and restored inverse identifier-path detection.
-- [x] Synthetic Guard coverage exercises R1–R5 and the current nested-query, graph, `VALUES`, filter, `BIND`, aggregate, grouping, property-path, identity-transform, `OPTIONAL`, and `UNION` cases with valid near-misses.
-- [x] Judge/parser diagnostics cover prefixes, syntax, unknown SPHN terms and suggestions, inference per code pattern, patient graph counts, and Virtuoso extension parsing, with valid neighboring cases.
-- [x] Preserved forbidden-request no-retry behavior and the rule that query violations never become compliant.
-- [x] Kept request-time Guard/Judge behavior database-agnostic.
+### Implemented locally / available on the run machine
 
-### Remaining: run-machine validation and policy decisions
+- [x] Example, schema-card, and terminology retrieval support empty queries, `k` boundaries, normalized exact-question exclusion, and deterministic ranking.
+- [x] Context loaders validate malformed inputs with path/line-specific errors; production snapshot validation is fail-closed.
+- [x] Aggregate-only snapshot comparison and synthetic regression tests are implemented.
+- [x] Synthetic retrieval benchmark did not meet the documented improvement threshold; BM25 remains the default.
+- [x] Root README reports the terminology index and coded value sets were built on the run machine. Generated terminology-derived assets remain ignored and must not be committed.
 
-- [ ] Santiago: run fresh LLM evaluation and dev query execution; compare verdict accuracy, false positives/negatives, forbidden leaks, retries, latency, and tokens with the root README baseline.
-- [ ] Santiago: reconcile fresh corpus outcomes for #01, #07, and #08 with post-retry logs. Keep raw queries, question text, and reports on the run machine.
-- [ ] Santiago: reproduce #05 and #10 Virtuoso failures and investigate `NULL` and nested-`GRAPH` error patterns. Add static diagnostics only for reproducible patterns, each with a synthetic valid near-miss.
-- [ ] Team/organizers: decide fine-grained grouping, `MIN`/`MAX`, minimum group size, `SERVICE`, and singleton-group policy. Keep current behavior unchanged until decisions arrive.
-- [ ] Team: agree on selective-pattern ordering guidance before any Judge diagnostic is added.
-- [ ] Santiago: measure repeated isolated perf-graph runs before proposing ordering advice or rewrites. Prove rewrite equivalence with synthetic regressions and dev result comparisons first.
-- [ ] Make further Guard/Judge code changes only when an actionable policy decision, reproducible Virtuoso error, or specific test/evaluation defect supports them.
+### Still required
 
-Local evidence recorded in [docs/guard-and-judge/README.md](docs/guard-and-judge/README.md): Guard **68 passed**, focused Guard/Judge/SPARQL/pipeline suite **116 passed**, repository full suite **171 passed**. The documented local stub result is not a fresh LLM evaluation and does not verify real-graph behavior.
+- [ ] Santiago: profile the actual dev graph into a temporary directory and compare both snapshots; refresh committed metadata only if the measured profile supports it.
+- [ ] Santiago: review profile drift using sanitized aggregate counts only; keep profile files and entry-level diffs local.
+- [ ] Santiago: add the 21 dev reference examples to the example bank only after review and ensure official examples never retrieve themselves during evaluation.
+- [ ] Santiago/team: assess authorized English ICD-10-GM/CHOP labels for the two missed code cases; keep terminology-derived files and labels out of Git unless explicitly approved.
+- [ ] Santiago: run retrieval and configured LLM evaluation with the generated local index; report aggregate quality, empty-result rate, build time, memory, latency, and tokens.
+- [ ] Santiago/team: configure a server-side dev Virtuoso query timeout so evaluation cannot saturate the service.
+- [ ] Use dev correctness evidence before considering BM25/context changes; use repeated perf measurements only after correctness review.
 
-## Integration
+## Module D — Guard and Judge
 
-- [ ] Decide where the API will run during judging and how GPU access will be provided.
-- [ ] Run `python -m nl2sparql.load_test --url http://localhost:8080 --questions eval/questions.jsonl --requests 32 --concurrency 8 --require-llm` on the run machine; record errors, latency, throughput, and tokens. The command is ready, but the real LLM load run is pending.
-- [ ] Verify clean-environment installation and startup of the final A revision. A clean checkout of the earlier revision passed on 17 October; repeat the check after the new A changes are included.
-- [ ] Run the existing LLM evaluation on the final A branch and compare it with the README baseline before merging; leave evaluation code to module E.
-- [ ] Finish the README for the jury after the deployment answer and teammates' full names and roles are confirmed.
+### Implemented synthetic behavior
 
-## Agents and prompts
+- [x] Guard R1–R5 and Judge/parser diagnostics are implemented, including supplied `PropertyKinds` use, inverse identifier paths, nested query cases, unknown-term suggestions, inference checks, and graph-count diagnostics.
+- [x] Tests cover synthetic trigger/near-miss cases for currently agreed policy, and forbidden-request no-retry behavior.
+- [x] Database access is absent from the request-time Guard/Judge path.
 
-- [ ] Choose and record the final model configuration.
-- [ ] Improve prompts so complex requests, especially #01 and #08, produce valid SPARQL and fewer allowed queries return zero rows.
-- [ ] Reduce the approximate 3,000 tokens per request, subject to measured quality.
-- [ ] Measure intent-agent false alarms and prompt-injection resistance.
+### Remaining
 
-## Evaluation and demo
+- [ ] Santiago: run current tests and fresh configured LLM evaluation; compare verdict accuracy, false positives/negatives, forbidden leaks, retries, latency, and tokens with the root README baseline.
+- [ ] Santiago: reconcile fresh corpus outcomes for #01, #07, and #08 using post-retry logs; keep raw queries, question text, and reports on the run machine.
+- [ ] Santiago: reproduce #05 and #10 Virtuoso failures and investigate reported `NULL`/nested-`GRAPH` issues. Add a static diagnostic only for a reproduced pattern and pair it with a synthetic valid near-miss.
+- [ ] Team/organizers: decide fine-grained grouping, `MIN`/`MAX`, minimum group size, `SERVICE`, and singleton-group policy. Preserve current behavior until decisions are recorded.
+- [ ] Team: agree on selective-pattern ordering guidance before adding a Judge rule; use repeated perf timings and prove rewrite equivalence on dev before any automatic rewrite.
+- [ ] Review SIB validator findings offline; do not add database access or a heavy dependency to the API path without team agreement and evidence.
 
-- [ ] Grow the labeled evaluation set to 80+ questions, including paraphrases, prompt-injection attempts, and organizer-approved gray zones.
-- [ ] Run evaluation questions in parallel if quality and report ordering remain stable.
-- [ ] Store reference results for correctness checks without including patient data or restricted terminology.
-- [ ] Build a ten-run timing harness on the 100,000-patient performance database.
-- [ ] Polish the demo and prepare final numbers for the report and video.
+## Module E — Evaluation, performance, and demo
 
-## Organizer questions
+- [x] Intent, pipeline, query, and local evaluation tooling is present; the root README records the latest run-machine numbers.
+- [ ] Grow/maintain a labeled set of at least 80 questions with paraphrases, injection cases, and organizer-approved gray zones, while keeping the holdout blind.
+- [ ] Run fresh 31-question and 198-question configured LLM evaluations on the run machine; compare against the root README baseline (90.3% shared accuracy; 91.3% dev and 83.7% holdout on the labeled set, with the listed false-positive/negative and latency/token caveats).
+- [ ] Re-run dev execution and classify results as successful, empty, or execution error without sharing patient-level output.
+- [ ] Build a ten-run isolated timing harness on the 100,000-patient perf graph; report medians and spread, not raw patient results.
+- [ ] Polish and rehearse the demo, report, and presentation after final measurements are available.
 
-- [ ] Confirm judging deployment hardware and how the team can keep GPU access.
-- [ ] Confirm whether result correctness is evaluated, or only verdicts and timings.
-- [ ] Resolve whether only `SELECT` is accepted.
-- [ ] Confirm query timing method, cache conditions, timeout, and dataset size.
-- [ ] Resolve gray zones: fine-grained grouping, `MIN`/`MAX` that may identify a patient, and minimum group size.
-- [ ] Confirm whether `SERVICE` and singleton groups are permitted.
-- [ ] Confirm whether adversarial requests will be included and whether requests are English-only.
-- [ ] Confirm conventions for interpreting requests such as “diagnosed with X”.
-- [ ] Ask whether additional SPHN example queries are available.
+## Organizer/team decisions
 
-## Submission checklist (deadline: Sunday 18 October 2026, 11:00)
+- [ ] Confirm judging deployment hardware and how model access will be maintained.
+- [ ] Confirm whether result correctness is scored in addition to verdicts and timing; confirm accepted query forms and timing/cache/timeout methodology.
+- [ ] Resolve gray zones: fine-grained grouping, identifying `MIN`/`MAX`, and minimum group size.
+- [ ] Confirm whether federated `SERVICE` and singleton result groups are permitted.
+- [ ] Confirm whether adversarial requests/languages are in scope and conventions for requests such as “diagnosed with X”.
+- [ ] Ask whether additional approved SPHN example queries are available.
 
-- [ ] Push the code to the official `NW_26_<Company>_<Team>` repository and ensure collaborators are invited.
-- [ ] Provide the jury README: overview, run instructions, dependencies, and every member's full name and role.
-- [ ] Confirm `pip install -r requirements.txt` works in a clean environment and `python -m nl2sparql` starts without debugging.
-- [ ] Write the report (maximum 3 pages): approach, architecture and rationale, results and figures, challenges and failed ideas, and disclosure of AI-agent/LLM coding-assistant use.
-- [ ] Produce and watch the video (maximum 2 minutes) showing the goal, relevance, key results, and demo; share it by SwissTransfer.
-- [ ] Credit external sources and check that no restricted terminology, derived assets, patient data, secrets, or GPU host details are included.
-- [ ] Prepare a 5-minute presentation in case the team wins.
+## Submission and release
 
-## Notes
+- [ ] Push the tested revision to the official `NW_26_<Company>_<Team>` repository and invite collaborators.
+- [ ] Complete the jury README with run instructions, dependencies, and every member’s full name and role.
+- [ ] Confirm clean installation with `pip install -r requirements.txt` and startup with `python -m nl2sparql`.
+- [ ] Write the three-page maximum report with approach, architecture, results, challenges, failed ideas, and AI-assistant disclosure.
+- [ ] Produce and watch the two-minute maximum demo video; share using the agreed transfer method.
+- [ ] Credit external sources and audit the public tree for secrets, patient data, restricted terminology, derived assets, and GPU host details.
+- [ ] Prepare the five-minute presentation.
 
-- The base pipeline plan marks all 13 implementation steps complete. Unchecked tasks above are quality, real-data validation, policy, or submission work—not missing base architecture.
-- The latest local checkout check found `.env` absent and ports 8890/8891 closed. Santiago's actual graph and configured LLM work remains pending.
-- Keep `assets/` terminology-derived files, patient data, `.env`, tokens, GPU host details, and raw run-machine reports out of Git and shared documentation.
-- Run `python -m pytest -q` after code changes before marking them complete. Real-graph checks remain a separate validation layer.
+## Evidence and privacy rules
+
+- The root README’s Qwen3.5-9B results (31-question and 198-question evaluations, query execution rates, latency, and tokens) are **reported run-machine evidence**, not a fresh test of this checkout.
+- The module handoffs’ 171-test figures and old `guardjudge` SHAs are historical branch evidence; they are not current `main` results.
+- Local unit tests, synthetic benchmarks, dev-graph checks, perf timings, and configured LLM evaluations are separate evidence layers. Never describe one as a substitute for another.
+- Keep `.env`, tokens, GPU host details, RDF/patient data, raw evaluation logs/results, terminology files, and generated restricted-derived assets out of Git and shared reports.
+- After any code changes, rerun focused tests and `python -m pytest -q`; update this checklist with the actual tested commit SHA and counts.
