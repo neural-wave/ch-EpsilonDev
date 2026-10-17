@@ -153,13 +153,15 @@ def create_app(pipeline: Pipeline | None = None, settings: Settings | None = Non
         result, error = await run(request, public_errors=not details)
         if error is not None:
             return error
+        not_a_question = bool(result.diagnostics.get("not_a_question"))  # "hey", "thanks": no query at all
         answer = {
             # The demo never shows the query of a forbidden request. Without details it shows no query at all:
             # the executed query stays internal to the demo, and the judged endpoint is unchanged either way.
             "sparql_query": result.sparql_query if details and result.is_compliant else None,
             "tokens_consumed": result.tokens_consumed,
             "is_compliant": result.is_compliant,
-            "compliance_reason": result.compliance_reason if details else (
+            "not_a_question": not_a_question,
+            "compliance_reason": result.compliance_reason if details or not_a_question else (
                 None if result.is_compliant else "This request cannot be answered. Only permitted aggregate results may be shown."),
             "suggested_rephrase": result.suggested_rephrase if details else None,
             "timings_ms": result.timings_ms,

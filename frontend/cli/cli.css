@@ -220,6 +220,7 @@ body.is-empty .dock { position: static; border-top: 0; padding: 0; margin-top: 0
 
 .answer { display: grid; gap: 16px; padding: 26px 28px; border: 1px solid var(--c-line); background: var(--c-panel); border-left: 3px solid var(--c-allow); }
 .answer.is-blocked { border-left-color: var(--c-block); }
+.answer.is-note { border-left-color: var(--c-line); }
 /* Results lead an allowed answer */
 .answer.is-result { gap: 18px; }
 .result-hero { display: grid; gap: 6px; }

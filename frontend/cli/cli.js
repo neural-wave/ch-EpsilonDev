@@ -520,8 +520,8 @@
       last = { question, res: d };
       await policyReady;
       reportLive(e, question, d, opts);
-      e.dataset.hid = remember(question, d.is_compliant ? "allow" : "block", d);
-      if (!d.is_compliant) rejectPending = true;
+      e.dataset.hid = remember(question, d.not_a_question ? "note" : d.is_compliant ? "allow" : "block", d);
+      if (!d.is_compliant && !d.not_a_question) rejectPending = true;
     } catch (err) {
       stop();
       liveError(e, err);
@@ -560,6 +560,13 @@
   function reportLive(e, question, d, opts = {}) {
     const tm = d.timings_ms || {};
     const meta = fmtMs(tm.total || 0);
+
+    // "hey", "thanks", "what is the weather?": not a question about the data, so no query and no verdict badge.
+    if (d.not_a_question) {
+      add(e, `<div class="answer is-note"><p class="verdict-small"><span>${meta}</span></p>
+        <p class="answer-text">${esc(d.compliance_reason || "This is not a question about the patient data.")}</p></div>`);
+      return;
+    }
 
     if (d.is_compliant) {
       add(e, `<p class="verdict-small"><span class="badge badge-sm badge-allow">ALLOWED</span><span>${meta} · ${esc(d.tokens_consumed || 0)} tokens</span></p>`);
@@ -939,7 +946,7 @@
       <li class="hist-item"><button type="button" class="hist-btn${h.id === activeId ? " is-active" : ""}" data-hid="${esc(h.id)}" title="${esc(h.question)}">
         <span class="hist-dot ${h.verdict === "allow" ? "is-allow" : h.verdict === "block" ? "is-block" : ""}" aria-hidden="true"></span>
         <span class="hist-q">${esc(h.question)}</span>
-        <span class="hist-time">${esc(when(h.at))}<span class="visually-hidden">, ${h.verdict === "allow" ? "allowed" : h.verdict === "block" ? "blocked" : "did not finish"}</span></span>
+        <span class="hist-time">${esc(when(h.at))}<span class="visually-hidden">, ${h.verdict === "allow" ? "allowed" : h.verdict === "block" ? "blocked" : h.verdict === "note" ? "not a question" : "did not finish"}</span></span>
       </button><button type="button" class="hist-del" data-del="${esc(h.id)}" aria-label="Delete this question: ${esc(h.question)}" title="Delete">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></li>`).join("");
   }

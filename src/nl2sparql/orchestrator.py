@@ -18,6 +18,7 @@ from nl2sparql.agents.query_llm import QueryReply
 from nl2sparql.context.builder import ContextBuilder
 from nl2sparql.guard.decision import ComplianceGuard
 from nl2sparql.input_check import normalize_text
+from nl2sparql.not_a_question import NOT_A_QUESTION_REASON, is_small_talk, reads_no_data
 from nl2sparql.intent_check import confirm_identifier_flag
 from nl2sparql.judge import Judge, severity
 from nl2sparql.models import Context, IntentFlags, JudgeResult, PipelineResult
@@ -169,6 +170,9 @@ class Pipeline:
         started = time.perf_counter()
         text = normalize_text(raw_text, self.max_input_chars)
         run = _Run(self.max_retries, deadline)
+        if is_small_talk(text):  # "hey", "thanks", "how are you?": no model call, no query
+            run.diagnostics["not_a_question"] = "small_talk"
+            return await self._not_a_question(text, run, started, IntentFlags())
 
         intent_task = asyncio.create_task(self._classify(text, run))
         stage = "Context building"
@@ -184,6 +188,13 @@ class Pipeline:
             if not isinstance(error, Exception) or isinstance(error, PipelineError):
                 raise
             raise PipelineError(f"{stage} failed: {error}") from error
+
+        # The model's own verdict on a request it cannot translate: a query that reads no data. A flagged
+        # request keeps its forbidden verdict and reason.
+        if not flags.flagged and await asyncio.to_thread(reads_no_data, attempt.sparql):
+            run.diagnostics["not_a_question"] = "query_reads_no_data"
+            run.diagnostics["not_a_question_sparql"] = attempt.sparql
+            return await self._not_a_question(text, run, started, flags)
 
         try:
             decision = await asyncio.to_thread(self._timed, run, "guard", lambda: self.guard.decide(attempt.sparql, flags))
@@ -219,6 +230,26 @@ class Pipeline:
             suggested_rephrase=decision.suggested_rephrase,
             intent=flags,
             violations=[f"{v.rule}: {v.message}" for v in decision.violations],
+            retries=run.retries,
+            timings_ms=run.timings,
+            tokens_by_step=run.tokens,
+            diagnostics=run.diagnostics,
+        )
+        if self.log_path is not None:
+            await asyncio.to_thread(self._log, text, result)
+        return result
+
+    async def _not_a_question(self, text: str, run: _Run, started: float, flags: IntentFlags) -> PipelineResult:
+        """No query for a request that is not a question about the patient data (see not_a_question.py)."""
+        run.timings["total"] = round((time.perf_counter() - started) * 1000, 1)
+        result = PipelineResult(
+            sparql_query="",
+            tokens_consumed=sum(run.tokens.values()),
+            is_compliant=False,
+            compliance_reason=NOT_A_QUESTION_REASON,
+            suggested_rephrase=None,
+            intent=flags,
+            violations=[],
             retries=run.retries,
             timings_ms=run.timings,
             tokens_by_step=run.tokens,
@@ -264,6 +295,8 @@ class Pipeline:
             attempt = await self._best_candidate(text, context, run)
         else:
             attempt = await self._ask_and_judge(text, context, feedback, step, run)
+        if step == "query" and await asyncio.to_thread(reads_no_data, attempt.sparql):
+            return attempt  # the model says it cannot translate the request: no retry (see _run)
         # The first generation runs alongside the intent agent, but a forbidden request is never retried.
         if attempt.verdict.errors and run.can_retry("judge") and not (await intent_task).flagged and run.take_retry("judge"):
             run.note_rejected("judge_errors_first_try", attempt.verdict.errors, attempt.sparql)

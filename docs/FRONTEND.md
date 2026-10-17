@@ -1,6 +1,6 @@
 # Frontend: what to build on
 
-> **Updated privacy requirement (17 October 2026):** The user-facing reproducibility card and copied record contain only question, execution time, and dataset details. Query display/copy controls were removed. `/demo/ask` returns no executed query or query-bearing diagnostics, and provenance omits SPARQL. New and reopened console history strips legacy query fields. Earlier descriptions of query disclosure below are superseded. The judged `/nl-to-sparql` contract remains unchanged; access to developer/judged endpoints requires a separate deployment boundary.
+> **Updated privacy requirement (17 October 2026):** The user-facing reproducibility card and copied record contain only question, execution time, and dataset details. Query display/copy controls were removed. With `DEMO_SHOW_DETAILS=false` or `DEMO_PUBLIC_MODE`, `/demo/ask` returns no executed query or query-bearing diagnostics; by default (`true`) the team console keeps showing the query of an allowed request, the specific reason and the diagnostics in its steward panel (README section 19). Provenance always omits SPARQL. New and reopened console history strips legacy query fields. Earlier descriptions of query disclosure below are superseded. The judged `/nl-to-sparql` contract remains unchanged; access to developer/judged endpoints requires a separate deployment boundary.
 
 
 For whoever builds the user interface (module E, Odinaka). The interface lives **outside the judged API**: the jury calls `POST /nl-to-sparql` directly and never sees the page. The page matters for the demo video and for the "what the doctor gets" story in the report.
@@ -20,6 +20,7 @@ For whoever builds the user interface (module E, Odinaka). The interface lives *
 | `is_compliant` | bool | The verdict |
 | `sparql_query` | string or `null` | The query, **only when compliant**. For a forbidden request it is `null` on purpose |
 | `compliance_reason` | string or `null` | Why the request was refused, in plain English |
+| `not_a_question` | bool | `true` for small talk and off-topic text ("hey", "what is the weather?"): no query, `is_compliant: false`, reason "This is not a question about the patient data.". The console shows a neutral note instead of a verdict badge |
 | `suggested_rephrase` | string or `null` | A closer allowed question, when the intent agent found one |
 | `tokens_consumed` | int | Tokens of every model call in the request |
 | `timings_ms` | object | `intent`, `context`, `generate`, `guard`, `total`, and the retry steps when they ran |
