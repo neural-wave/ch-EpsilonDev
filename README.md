@@ -235,7 +235,7 @@ nl2sparql/
 
 ## 6. Getting started on your computer
 
-You need Python 3.11 or newer. You do **not** need Virtuoso or a GPU to work on the code.
+You need Python 3.11 or newer; CI tests 3.11, 3.12 and 3.14. You do **not** need Virtuoso or a GPU to work on the code.
 
 ```bash
 git clone <repo-url> nl2sparql && cd nl2sparql
@@ -264,7 +264,7 @@ curl -i -s localhost:8080/nl-to-sparql -H 'Content-Type: application/json' \
 
 The judged API needs a model server; everything else is in this repository. Four steps:
 
-1. **Install.** Python 3.11 or newer, then `python -m pip install -r requirements.txt`.
+1. **Install.** Python 3.11 or newer (tested on 3.11, 3.12 and 3.14), then `python -m pip install -r requirements.txt`.
 2. **Configure.** Copy `.env.example` to `.env` and set:
    - `NL2SPARQL_BACKEND=llm`.
    - The model server: `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_QUERY_MODEL=Qwen/Qwen3.5-9B` and `LLM_EXTRA_BODY='{"chat_template_kwargs": {"enable_thinking": false}}'`. We hand over the endpoint and token of our own server with the submission. To serve the model yourself instead (a GPU with 24 GB or more, vLLM 0.30): `vllm serve Qwen/Qwen3.5-9B --max-model-len 32000 --max-num-seqs 8 --port 8000`, then `LLM_BASE_URL=http://localhost:8000/v1`.
@@ -510,6 +510,7 @@ Query performance is a major lever: even the organizers' own queries can take mi
    - `GROUP BY (expr)` without `AS` loses the expression.
    - `__agg_N__` names repeat across subqueries.
    - `pyparsing` must stay pinned at 3.2.0.
+   - rdflib 7.1.1 does not import on Python 3.14 (`term 'value' not in namespace`), so the API did not start there; 7.6.0 does, with the same 3.2.0 pyparsing.
    - `translateExists` stores the translated `EXISTS` / `NOT EXISTS` pattern as an attribute (`node.graph`); `node.items()` keeps the raw parse tree without its inner filters. Walk `exists_pattern(node)` (`guard/provenance.py`), never the items: until 17 October everything inside `NOT EXISTS` was invisible to the guard.
 8. **Passing our parser does not mean Virtuoso accepts the query.** Two LLM queries failed only in Virtuoso. We may not ask the database at runtime, so the fix has to come from prompts and style rules.
 9. **The SIB `sparql-examples` repo has no SPHN examples.** It covers UniProt, Bgee, Rhea and the like. Reuse its format, not its content.
