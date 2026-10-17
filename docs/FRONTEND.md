@@ -4,7 +4,8 @@ For whoever builds the user interface (module E, Odinaka). The interface lives *
 
 ## Where it lives today
 
-- `src/nl2sparql/demo/index.html`: one static file, served at `http://localhost:8080/` by the API process. Replacing that file is the zero-configuration path. If the new interface needs several files (a built bundle, images), ask module A to mount the folder as static files: a three-line change in `src/nl2sparql/api.py`.
+- `frontend/` (module E, Odinaka): the SIB DOC console, static HTML, CSS and vanilla JS with no build step. The API mounts the folder at `/console/` and `http://localhost:8080/` redirects to `/console/cli/`, so the page and the API share one origin: no proxy, no CORS. `frontend/dev_server.py` is only for working on the files against a backend elsewhere. The page calls `POST /demo/ask` through `SQ.backend.demoAsk` (`frontend/js/api.js`); `?mock=1` replays built-in fixtures without a backend.
+- `src/nl2sparql/demo/index.html`: the first minimal demo page, served at `/` only when `frontend/` is absent.
 - Run it locally with the stand-in agents, no model needed: `python -m nl2sparql --port 8080` (see README section 6). On the run machine the same page runs with the real model.
 
 ## The endpoint to call

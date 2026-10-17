@@ -30,9 +30,10 @@
       <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16"/><path d="M9 4v16"/></svg>
     </button>
     <a class="brand" href="./" id="home-logo" aria-label="SIB DOC home">
-      <img class="brand-sib" src="assets/sib-emblem.png" alt="SIB Swiss Institute of Bioinformatics" width="784" height="592">
+      <img class="brand-sib" src="assets/sib-emblem.png" alt="SIB Swiss Institute of Bioinformatics" width="784" height="592" onerror="this.style.display='none';document.getElementById('brand-text').hidden=false">
       <span class="brand-sep" aria-hidden="true"></span>
-      <img class="brand-sphn" src="assets/sphn-logo.png" alt="SPHN Swiss Personalized Health Network" width="585" height="419">
+      <img class="brand-sphn" src="assets/sphn-logo.png" alt="SPHN Swiss Personalized Health Network" width="585" height="419" onerror="this.style.display='none'">
+      <span class="brand-text" id="brand-text" hidden>SIB DOC</span>
     </a>
     <span class="chip" id="mode-chip">Mock</span>
     <nav class="top-links" aria-label="Views">

@@ -1,17 +1,19 @@
 """HTTP API. POST /nl-to-sparql follows API_specification.md exactly.
 
 The pipeline is database-agnostic: nothing behind /nl-to-sparql connects to a database.
-/demo/* routes serve the demo page only: they are not part of the judged API.
+/demo/* routes serve the demo page only: they are not part of the judged API. The team's console
+(frontend/, module E) is served at /console/ from the same origin, so it needs no proxy and no CORS.
 """
 from __future__ import annotations
 
 from importlib import resources
 
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 
 from nl2sparql.agents.console import build_console_router
-from nl2sparql.config import Settings
+from nl2sparql.config import REPO_ROOT, Settings
 from nl2sparql.factory import build_pipeline
 from nl2sparql.input_check import InputError
 from nl2sparql.orchestrator import Pipeline, PipelineError
@@ -57,8 +59,14 @@ def create_app(pipeline: Pipeline | None = None, settings: Settings | None = Non
     async def health():
         return {"status": "ok", "backend": settings.backend}
 
+    console = REPO_ROOT / "frontend"
+    if console.is_dir():  # the console's pages reference ../js and ../css, so the whole folder is mounted
+        app.mount("/console", StaticFiles(directory=str(console), html=True), name="console")
+
     @app.get("/", response_class=HTMLResponse)
     async def demo_page():
+        if console.is_dir():
+            return RedirectResponse("/console/cli/")
         return resources.files("nl2sparql").joinpath("demo/index.html").read_text(encoding="utf-8")
 
     @app.post("/demo/ask")

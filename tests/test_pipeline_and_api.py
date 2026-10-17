@@ -630,3 +630,13 @@ def test_a_retry_that_is_less_bad_than_the_first_try_is_kept():
     agent = ScriptedQueryAgent("SELECT ?x WHERE {", SOFT_HINT_QUERY)
     result = asyncio.run(pipeline_with(agent).run("How many allergy episodes are there?"))
     assert result.retries == 1 and "total_episodes" in result.sparql_query and "kept_first_try" not in result.diagnostics
+
+
+def test_the_console_is_served_by_the_api_and_the_root_redirects_to_it():
+    client = TestClient(create_app(pipeline_with(ScriptedQueryAgent(EXAMPLES["official-03"]))))
+    root = client.get("/", follow_redirects=False)
+    assert root.status_code in (302, 307) and root.headers["location"] == "/console/cli/"
+    page = client.get("/console/cli/")
+    assert page.status_code == 200 and "SIB DOC" in page.text and "/demo/ask" not in page.text  # the calls live in api.js
+    assert client.get("/console/js/api.js").status_code == 200 and "/demo/ask" in client.get("/console/js/api.js").text
+    assert client.get("/console/css/tokens.css").status_code == 200

@@ -376,3 +376,15 @@ kbd { font: inherit; border: 1px solid var(--c-line); padding: 0 5px; color: var
 .intro-band { overflow: hidden; height: 80px; transform: translate(-50%, -50%); font-family: var(--mono); font-size: 13px; line-height: 20px; white-space: nowrap; color: #5b2a6e; -webkit-mask-image: linear-gradient(90deg, transparent, #000 18%, #000 82%, transparent); mask-image: linear-gradient(90deg, transparent, #000 18%, #000 82%, transparent); }
 .intro-band span { display: block; }
 .intro-band-l { margin-left: 0; transform-origin: right center; }
+
+/* Shown instead of the logos when the image files are not there. */
+.brand-text { font-weight: 700; letter-spacing: 0.04em; }
+
+/* Phone width: the result table (bar cells of 180px) widened the page past the viewport. The answer box
+   scrolls sideways instead, and the bars get a smaller minimum. */
+@media (max-width: 520px) {
+  .entry { min-width: 0; }
+  .answer { min-width: 0; overflow-x: auto; padding: 18px 16px; }
+  .bar-cell { min-width: 120px; }
+  .tbl th, .tbl td { padding: 10px 8px; }
+}
