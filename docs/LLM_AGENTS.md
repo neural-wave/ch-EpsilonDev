@@ -298,6 +298,7 @@ This step runs on the GPU and needs the instance owner's OK. It takes about 15â€
    The fix has to come from prompts and judge style rules (with module D), since the pipeline may not query the database.
 4. **p95 latency is 16.6 s,** driven by retries on long queries. vLLM decodes at most 8 requests at once.
 5. **Three possible guard false alarms (#01, #07, #08) lower the measured accuracy.** They belong to module D ([GUARD.md](GUARD.md)).
+6. **The query agent uses real predicates on the wrong class** (`Age` with `hasValue`, `GestationalAgeAtBirth` with `hasCode`). The judge cannot see that. SIB's sparql-llm validator does, offline: [SPARQL_LLM_VALIDATOR.md](SPARQL_LLM_VALIDATOR.md).
 
 ## 9. Backlog for module B (most useful first)
 
