@@ -304,6 +304,21 @@ This step runs on the GPU and needs the instance owner's OK. It takes about 15â€
 5. **Compare the two rows** under **Measurements**.
 6. **Decide.** Keep Apertus if its detection is at least Qwen's, its false alarms are at most Qwen's, and it has no invalid JSON or cut-off answers.
 
+### Switching the served model on our Vast instance (tested 2026-10-17)
+
+`supervisorctl restart vllm` is **not enough** on this instance. It stops only the `unbuffer` wrapper, so the old `vllm serve` keeps port 18000, and the new server exits with "Address already in use". The old model even keeps answering, which hides the problem. The procedure that works, on the instance:
+
+```bash
+cp /etc/environment /etc/environment.bak                      # once
+sed -i 's#^VLLM_MODEL=.*#VLLM_MODEL="<repo>"#; s#^MODEL_NAME=.*#MODEL_NAME="<repo>"#' /etc/environment
+supervisorctl stop vllm model-ui
+kill -TERM $(pgrep -f "vllm serve" | head -1)                 # frees port 18000 in a few seconds
+supervisorctl start vllm model-ui
+tail -f /var/log/portal/vllm.log                              # wait for "Application startup complete"
+```
+
+Then point the run machine at the new model: set `LLM_QUERY_MODEL` (and `LLM_INTENT_MODEL` if it differs) in `.env`, then restart the API. Weights stay in `/workspace/models`, so switching back to a model already downloaded only takes the load time (1â€“2 min).
+
 ### Step 2: serve both models (only if Apertus wins)
 
 - **Memory:** Qwen3.5-9B needs ~19 GB in bf16 and Apertus-8B ~16 GB, which is more than the 32 GB of the RTX 5090. There are two options:
