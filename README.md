@@ -273,7 +273,9 @@ The committed `data/` snapshots describe the mock data as released. If your grap
 **Agents console:** <http://localhost:8080/agents> shows the full configuration of both agents and their prompts. It can:
 - preview exactly what each model would receive for a question, without calling any model;
 - run one question and show what each agent did (with the LLM backend, this calls the model);
-- list every saved eval report.
+- list every saved eval report, with a scoreboard of the jury's criteria.
+
+**Runs page:** <http://localhost:8080/agents/runs> charts the main metrics over every run and compares two runs question by question (what got fixed, what broke), with a note per run saying what it tested. `python eval/run_all.py --label "what changed"` runs all four evals for the current configuration and writes that note.
 
 See [docs/LLM_AGENTS.md](docs/LLM_AGENTS.md).
 

@@ -84,3 +84,12 @@ def test_report_detail_has_the_rows_and_refuses_other_files(reports_client):
     assert reports_client.get("/agents/reports/intent-20261017-090000.json").json()["rows"] == [{"id": "x"}]
     assert reports_client.get("/agents/reports/notes.json").status_code == 404
     assert reports_client.get("/agents/reports/pipeline-20261017-100000.json").status_code == 404
+
+
+def test_runs_page_and_notes(reports_client):
+    assert "Runs" in reports_client.get("/agents/runs").text
+    saved = reports_client.post("/agents/runs/note", json={"name": "intent-20261017-090000.json", "note": "prompt v2"}).json()
+    assert saved == {"name": "intent-20261017-090000.json", "note": "prompt v2"}
+    listing = reports_client.get("/agents/reports").json()["reports"]
+    assert next(r["note"] for r in listing if r["name"] == "intent-20261017-090000.json") == "prompt v2"
+    assert reports_client.post("/agents/runs/note", json={"name": "notes.json", "note": "x"}).status_code == 404

@@ -114,6 +114,10 @@ A request without retry, Qwen3.5-9B, merged system:
 
 ## 5. Protocol for a change
 
+**The short version:** `python eval/run_all.py --label "<what you changed>"`, then open <http://localhost:8080/agents/runs>, pick the previous run as A and yours as B, and read the metric deltas and the questions that got fixed or broken. Keep the change only if the holdout does not get worse. Then paste the numbers here and in the pull request.
+
+### Steps
+
 1. Branch from `main`.
 2. Change one thing.
 3. Run the evals that the change can affect (section 1), with the GPU.

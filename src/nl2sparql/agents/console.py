@@ -5,8 +5,10 @@
     POST /agents/preview  {"text": ...} -> exactly what each model would receive (no model call)
     POST /agents/check    asks each configured LLM server which models it serves (one small request each)
     POST /agents/run      {"text": ...} -> runs the whole pipeline and returns what each agent did
-    GET  /agents/reports  summaries of the saved eval reports (eval/reports/), newest first
+    GET  /agents/reports  summaries of the saved eval reports (eval/reports/), newest first, with their notes
     GET  /agents/reports/<file>  one full report, with a row per question
+    GET  /agents/runs     the runs page: metrics over runs as charts, and a run-against-run comparison
+    POST /agents/runs/note  {"name": <report file>, "note": ...} -> what a run tested (eval/reports/notes.json)
 
 Only /agents/check and /agents/run talk to the model server, and only when someone presses the button.
 """
@@ -62,8 +64,8 @@ def read_report(path: Path) -> dict | None:
     return report if isinstance(report, dict) and isinstance(report.get("summary"), dict) else None
 
 
-def report_entry(path: Path) -> dict | None:
-    """Name, kind, date and summary of one report (the rows stay on disk until asked for)."""
+def report_entry(path: Path, notes: dict | None = None) -> dict | None:
+    """Name, kind, date, note and summary of one report (the rows stay on disk until asked for)."""
     report = read_report(path)
     if report is None:
         return None
@@ -72,8 +74,19 @@ def report_entry(path: Path) -> dict | None:
         "name": path.name,
         "kind": kind or "pipeline",
         "created": f"{day[:4]}-{day[4:6]}-{day[6:]} {clock[:2]}:{clock[2:4]}",
+        "note": (notes or {}).get(path.name, ""),
         "summary": report["summary"],
     }
+
+
+def read_notes(folder: Path) -> dict:
+    """What each run tested, written by eval/run_all.py or from the runs page."""
+    path = folder / "notes.json"
+    try:
+        notes = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+    except (OSError, ValueError):
+        return {}
+    return notes if isinstance(notes, dict) else {}
 
 
 def estimate_tokens(text: str, agent: str) -> int:
@@ -188,10 +201,30 @@ def build_console_router(settings: Settings, pipeline: Pipeline) -> APIRouter:
         # RETURN_NONCOMPLIANT_QUERY says, because that query is what the query agent produced.
         return {"backend": settings.backend, **asdict(result), "flags_raised": result.intent.raised()}
 
+    @router.get("/agents/runs", response_class=HTMLResponse)
+    async def runs_page():
+        return resources.files("nl2sparql").joinpath("agents/runs.html").read_text(encoding="utf-8")
+
+    @router.post("/agents/runs/note")
+    async def note(request: Request):
+        try:
+            body = await request.json()
+        except ValueError:
+            return JSONResponse({"error": "The body must be JSON with 'name' and 'note'."}, status_code=400)
+        name = body.get("name") if isinstance(body, dict) else None
+        if not isinstance(name, str) or not REPORT_NAME_RE.match(name) or not (settings.reports_dir / name).is_file():
+            return JSONResponse({"error": f"No eval report named {name!r}."}, status_code=404)
+        notes = read_notes(settings.reports_dir)
+        notes[name] = str(body.get("note") or "")[:300]
+        settings.reports_dir.mkdir(parents=True, exist_ok=True)
+        (settings.reports_dir / "notes.json").write_text(json.dumps(notes, indent=1, ensure_ascii=False), encoding="utf-8")
+        return {"name": name, "note": notes[name]}
+
     @router.get("/agents/reports")
     async def reports():
         folder = settings.reports_dir
-        entries = [report_entry(path) for path in folder.glob("*.json")] if folder.is_dir() else []
+        notes = read_notes(folder) if folder.is_dir() else {}
+        entries = [report_entry(path, notes) for path in folder.glob("*.json")] if folder.is_dir() else []
         entries = sorted((entry for entry in entries if entry),
                          key=lambda entry: REPORT_NAME_RE.match(entry["name"]).group(2, 3), reverse=True)
         try:

@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Runs</title>
+<style>
+  :root {
+    --bg: #f3f5f7; --card: #ffffff; --ink: #18222b; --muted: #5d6b75; --line: #d6dde2; --code: #f1f4f6;
+    --accent: #1c5cc0; --ok: #1f7a45; --no: #b93d0f; --llm: #e6eefb;
+    --c1: #1c5cc0; --c2: #1f7a45; --c3: #b93d0f; --c4: #8a5cc7;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0f1418; --card: #161e24; --ink: #e2e9ed; --muted: #97a7b0; --line: #2a363d; --code: #10171b;
+            --accent: #7cb0ff; --ok: #5fd08f; --no: #ff8c55; --llm: #17263a; --c1: #7cb0ff; --c2: #5fd08f; --c3: #ff8c55; --c4: #c9a7ff; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 system-ui, -apple-system, sans-serif; }
+  main { max-width: 1320px; margin: 0 auto; padding: 28px 16px 56px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; }
+  header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px 18px; }
+  h1 { margin: 0; font-size: 26px; } h2 { margin: 0; font-size: 18px; } h3 { margin: 0; font-size: 15px; } p { margin: 0; }
+  a { color: var(--accent); }
+  .muted { color: var(--muted); font-size: 13px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; min-width: 0; }
+  .tabs { display: flex; flex-wrap: wrap; gap: 8px; }
+  .tabs button { font: inherit; padding: 7px 14px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--ink); cursor: pointer; }
+  .tabs button.on { background: var(--ink); color: var(--card); border-color: var(--ink); }
+  .charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+  .chart { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; display: grid; gap: 6px; min-width: 0; }
+  .chart svg { display: block; width: 100%; height: auto; color: var(--muted); font-family: var(--mono); }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--muted); }
+  .legend i { display: inline-block; width: 12px; height: 3px; vertical-align: middle; margin-right: 5px; border-radius: 2px; }
+  .scroll { overflow-x: auto; }
+  table.grid { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.grid th { text-align: left; font-weight: 600; color: var(--muted); padding: 6px 8px; border-bottom: 1.5px solid var(--line); white-space: nowrap; }
+  table.grid td { padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; white-space: nowrap; }
+  table.grid td.wrap { white-space: normal; min-width: 240px; }
+  table.grid tr.a td { background: color-mix(in srgb, var(--c1) 12%, transparent); }
+  table.grid tr.b td { background: color-mix(in srgb, var(--c4) 12%, transparent); }
+  input.note { font: inherit; font-size: 13px; width: 100%; min-width: 220px; padding: 4px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--card); color: var(--ink); }
+  code, pre { font-family: var(--mono); font-size: 12.5px; }
+  code { background: var(--code); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+  pre { margin: 0; background: var(--code); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 320px; overflow: auto; }
+  .good { color: var(--ok); font-weight: 600; } .bad { color: var(--no); font-weight: 600; }
+  .delta { font-variant-numeric: tabular-nums; }
+  .two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+  @media (max-width: 860px) { .two { grid-template-columns: minmax(0, 1fr); } }
+  details summary { cursor: pointer; color: var(--accent); font-size: 13px; }
+  .pill { font: 600 11px/1 var(--mono); padding: 4px 8px; border-radius: 999px; border: 1.5px solid currentColor; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Runs</h1>
+    <span class="muted">Every eval run, as charts over time and as run-against-run comparisons. <a href="/agents">Agents console</a> · how to read the numbers: <code>docs/PERFORMANCE.md</code></span>
+  </header>
+
+  <section class="card">
+    <div class="tabs" id="tabs">
+      <button data-kind="pipeline" class="on">Whole pipeline · verdicts</button>
+      <button data-kind="query">Query agent · reference SPARQL</button>
+      <button data-kind="intent">Intent agent</button>
+      <button data-kind="perf">Query time · 100,000 patients</button>
+    </div>
+    <p class="muted" id="kind-help"></p>
+    <div class="charts" id="charts"></div>
+  </section>
+
+  <section class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+      <h2>Runs <span class="muted" id="runs-count"></span></h2>
+      <span class="muted">Pick <b>A</b> and <b>B</b> to compare. The note says what the run tested: edit it here or pass <code>--label</code> to <code>eval/run_all.py</code>.</span>
+    </div>
+    <div id="runs"></div>
+  </section>
+
+  <section class="card" id="compare-card" hidden>
+    <h2 id="compare-title">Compare</h2>
+    <div id="compare"></div>
+  </section>
+</main>
+<script>
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
+const dash = "<span class='muted'>—</span>";
+const pct = v => typeof v === "number" ? `${(v * 100).toFixed(1)}%` : "—";
+const sec = v => typeof v === "number" ? `${(v / 1000).toFixed(1)} s` : "—";
+const int = v => typeof v === "number" ? String(Math.round(v)) : "—";
+const dec = v => typeof v === "number" ? v.toFixed(2) : "—";
+const shortModel = m => String(m || "").split("/").pop();
+const sum = o => Object.values(o || {}).reduce((a, b) => a + b, 0);
+const len = v => Array.isArray(v) ? v.length : null;
+const get = (o, path) => path.split(".").reduce((x, k) => (x == null ? undefined : x[k]), o);
+
+// Which numbers each kind of run has. "better" says which direction is an improvement.
+const METRICS = {
+  pipeline: [
+    {key: "dev", label: "Verdicts · dev", get: s => get(s, "by_split.dev.verdict_accuracy"), fmt: pct, pct: true, better: "up"},
+    {key: "holdout", label: "Verdicts · holdout", get: s => get(s, "by_split.holdout.verdict_accuracy"), fmt: pct, pct: true, better: "up"},
+    {key: "hblocked", label: "Allowed blocked · holdout", get: s => get(s, "by_split.holdout.allowed_blocked"), fmt: int, better: "down"},
+    {key: "hleaks", label: "Leaks · holdout", get: s => get(s, "by_split.holdout.forbidden_marked_compliant"), fmt: int, better: "down"},
+    {key: "dblocked", label: "Allowed blocked · dev", get: s => get(s, "by_split.dev.allowed_blocked"), fmt: int, better: "down"},
+    {key: "p50", label: "Latency p50", get: s => s.latency_ms_p50, fmt: sec, better: "down"},
+    {key: "p95", label: "Latency p95", get: s => s.latency_ms_p95, fmt: sec, better: "down"},
+    {key: "tokens", label: "Tokens per request", get: s => s.avg_tokens, fmt: int, better: "down"},
+    {key: "retries", label: "Retries", get: s => s.per_agent && s.per_agent.retry_reasons ? sum(s.per_agent.retry_reasons) - (s.per_agent.retry_reasons.none || 0) : undefined, fmt: int, better: "down"},
+  ],
+  query: [
+    {key: "exact", label: "Exact result", get: s => s.exact_rate, fmt: pct, pct: true, better: "up"},
+    {key: "runs", label: "Runs on Virtuoso", get: s => s.executes_rate, fmt: pct, pct: true, better: "up"},
+    {key: "hruns", label: "Runs · holdout", get: s => get(s, "by_split.holdout.executes_rate"), fmt: pct, pct: true, better: "up"},
+    {key: "first", label: "Valid on first try", get: s => s.first_try_rate, fmt: pct, pct: true, better: "up"},
+    {key: "blocked", label: "Allowed blocked", get: s => len(s.blocked_allowed), fmt: int, better: "down"},
+    {key: "qtokens", label: "Query tokens (median)", get: s => s.median_query_tokens, fmt: int, better: "down"},
+    {key: "p50", label: "Latency p50", get: s => s.latency_ms_p50, fmt: sec, better: "down"},
+    {key: "p95", label: "Latency p95", get: s => s.latency_ms_p95, fmt: sec, better: "down"},
+  ],
+  intent: [
+    {key: "hdet", label: "Detected · holdout", get: s => get(s, "by_split.holdout.detection_rate") ?? s.detection_rate, fmt: pct, pct: true, better: "up"},
+    {key: "hfa", label: "False alarms · holdout", get: s => get(s, "by_split.holdout.false_alarm_rate") ?? s.false_alarm_rate, fmt: pct, pct: true, better: "down"},
+    {key: "ddet", label: "Detected · dev", get: s => get(s, "by_split.dev.detection_rate"), fmt: pct, pct: true, better: "up"},
+    {key: "dfa", label: "False alarms · dev", get: s => get(s, "by_split.dev.false_alarm_rate"), fmt: pct, pct: true, better: "down"},
+    {key: "right", label: "Right flag", get: s => s.right_flag_rate, fmt: pct, pct: true, better: "up"},
+    {key: "tokens", label: "Tokens per call", get: s => s.median_tokens, fmt: int, better: "down"},
+    {key: "p50", label: "Latency p50", get: s => s.latency_ms_p50, fmt: sec, better: "down"},
+  ],
+  perf: [
+    {key: "gen", label: "Generated · median s", get: s => s.median_generated_seconds, fmt: dec, better: "down"},
+    {key: "ref", label: "Reference · median s", get: s => s.median_reference_seconds, fmt: dec, better: "down"},
+    {key: "ratio", label: "Ratio generated / reference", get: s => s.median_ratio_generated_over_reference, fmt: dec, better: "down"},
+    {key: "gto", label: "Generated timeouts", get: s => len(s.generated_timed_out), fmt: int, better: "down"},
+    {key: "slow", label: "Slower than ×2", get: s => len(s.slower_than_reference), fmt: int, better: "down"},
+    {key: "both", label: "Pairs complete", get: s => s.both_complete, fmt: int, better: "up"},
+  ],
+};
+const CHARTS = {  // which metrics share a chart
+  pipeline: [["dev", "holdout"], ["hblocked", "dblocked", "hleaks"], ["p50", "p95"], ["tokens"], ["retries"]],
+  query: [["exact", "runs", "hruns", "first"], ["blocked"], ["qtokens"], ["p50", "p95"]],
+  intent: [["hdet", "ddet"], ["hfa", "dfa"], ["tokens"], ["p50"]],
+  perf: [["gen", "ref"], ["gto", "slow"], ["ratio"], ["both"]],
+};
+const HELP = {
+  pipeline: "The verdict metric the jury scores, on the 198 labeled questions (31 shared + 167 intent cases) or on the 31 shared ones. Holdout is the blind exam.",
+  query: "The query agent against reference SPARQL on the dev database: does its query return the same rows as the reference? 87 questions since 17 Oct 14:00 (47 before).",
+  intent: "The intent agent alone on the 198 labeled questions: forbidden requests it flags, allowed ones it flags by mistake.",
+  perf: "Generated queries timed on the 100,000-patient database against their reference queries, with a 60 s server-side limit.",
+};
+const COLORS = ["var(--c1)", "var(--c2)", "var(--c3)", "var(--c4)"];
+const setup = s => {
+  if (!s) return "";
+  const cap = typeof s.max_tokens === "number" ? s.max_tokens : s.max_tokens && s.max_tokens.query;
+  return [s.models ? shortModel(s.models.query) : s.model ? shortModel(s.model) : "", s.prompt_versions ? `prompts ${s.prompt_versions.intent}/${s.prompt_versions.query}` : s.prompt_version ? `prompt ${s.prompt_version}` : "",
+          cap ? `cap ${cap}` : "", s.context ? `context ${s.context.examples}/${s.context.cards}/${s.context.codes}` : "", s.concurrency ? `×${s.concurrency}` : "",
+          s.questions ? `${s.questions} q` : s.queries ? `${s.queries} queries` : ""].filter(Boolean).join(" · ");
+};
+
+let reports = [], kind = "pipeline", picked = {a: null, b: null};
+const runsOf = k => reports.filter(r => r.kind === k).slice().reverse();  // chronological
+
+function lineChart(runs, metrics) {
+  const W = 520, H = 200, L = 46, R = 12, T = 14, B = 34;
+  const series = metrics.map((m, i) => ({m, color: COLORS[i % COLORS.length], values: runs.map(r => m.get(r.summary))}));
+  const allValues = series.flatMap(s => s.values).filter(v => typeof v === "number");
+  if (!allValues.length) return `<p class="muted">No data yet.</p>`;
+  const isPct = metrics[0].pct;
+  const yMax = isPct ? 1 : Math.max(...allValues, 1e-9) * 1.1, yMin = 0;
+  const x = i => runs.length === 1 ? (L + W - R) / 2 : L + (W - L - R) * i / (runs.length - 1);
+  const y = v => T + (H - T - B) * (1 - (v - yMin) / (yMax - yMin));
+  const ticks = [0, 0.25, 0.5, 0.75, 1].map(f => yMin + (yMax - yMin) * f);
+  const fmt = metrics[0].fmt;
+  let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(metrics.map(m => m.label).join(", "))} over runs">`;
+  for (const t of ticks) svg += `<line x1="${L}" x2="${W - R}" y1="${y(t)}" y2="${y(t)}" stroke="currentColor" stroke-opacity=".2"/>
+    <text x="${L - 6}" y="${y(t) + 4}" text-anchor="end" font-size="10" fill="currentColor">${esc(isPct ? `${Math.round(t * 100)}%` : fmt === sec ? `${(t / 1000).toFixed(1)}` : t >= 100 ? Math.round(t) : t.toFixed(1))}</text>`;
+  runs.forEach((r, i) => { if (runs.length <= 12 || i % Math.ceil(runs.length / 12) === 0) svg += `<text x="${x(i)}" y="${H - 18}" text-anchor="middle" font-size="9.5" fill="currentColor">${esc(r.created.slice(5))}</text>`; });
+  svg += `<text x="${(L + W - R) / 2}" y="${H - 4}" text-anchor="middle" font-size="9.5" fill="currentColor" opacity=".7">runs, oldest to newest</text>`;
+  for (const s of series) {
+    const pts = s.values.map((v, i) => typeof v === "number" ? [x(i), y(v), v, i] : null).filter(Boolean);
+    if (pts.length > 1) svg += `<polyline fill="none" stroke="${s.color}" stroke-width="2" points="${pts.map(p => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" ")}"/>`;
+    for (const p of pts) svg += `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="3.5" fill="${s.color}"><title>${esc(runs[p[3]].created)} · ${esc(s.m.label)}: ${esc(s.m.fmt(p[2]))}${runs[p[3]].note ? ` · ${esc(runs[p[3]].note)}` : ""}</title></circle>`;
+  }
+  svg += "</svg>";
+  return svg + `<div class="legend">${series.map(s => `<span><i style="background:${s.color}"></i>${esc(s.m.label)}</span>`).join("")}</div>`;
+}
+
+function renderCharts() {
+  const runs = runsOf(kind);
+  document.getElementById("kind-help").textContent = HELP[kind];
+  document.getElementById("charts").innerHTML = CHARTS[kind].map(keys => {
+    const metrics = keys.map(k => METRICS[kind].find(m => m.key === k));
+    return `<div class="chart"><h3>${esc(metrics.map(m => m.label).join(" · "))}</h3>${lineChart(runs, metrics)}</div>`;
+  }).join("");
+}
+
+function renderRuns() {
+  const runs = runsOf(kind).slice().reverse();  // newest first in the table
+  document.getElementById("runs-count").textContent = `· ${runs.length} ${kind} runs`;
+  const metrics = METRICS[kind].slice(0, 6);
+  document.getElementById("runs").innerHTML = runs.length ? `<div class="scroll"><table class="grid"><thead><tr>
+      <th>A</th><th>B</th><th>Date</th><th>Note · what this run tested</th><th>Setup</th>${metrics.map(m => `<th>${esc(m.label)}</th>`).join("")}<th></th></tr></thead><tbody>
+    ${runs.map(r => `<tr class="${picked.a === r.name ? "a" : picked.b === r.name ? "b" : ""}">
+      <td><input type="radio" name="a" value="${esc(r.name)}" ${picked.a === r.name ? "checked" : ""} aria-label="A"></td>
+      <td><input type="radio" name="b" value="${esc(r.name)}" ${picked.b === r.name ? "checked" : ""} aria-label="B"></td>
+      <td>${esc(r.created)}</td>
+      <td class="wrap"><input class="note" data-name="${esc(r.name)}" value="${esc(r.note)}" placeholder="e.g. query prompt v6"></td>
+      <td class="wrap"><span class="muted">${esc(setup(r.summary))}</span></td>
+      ${metrics.map(m => `<td>${esc(m.fmt(m.get(r.summary)))}</td>`).join("")}
+      <td><a href="/agents/reports/${encodeURIComponent(r.name)}" target="_blank">json</a></td></tr>`).join("")}
+  </tbody></table></div>` : "<p class='muted'>No runs of this kind yet.</p>";
+}
+
+// ---- Compare two runs ----
+function goodness(k, row) {  // true = fine, false = a problem, null = not applicable
+  if (k === "pipeline") return row.is_compliant == null ? null : !!row.correct_verdict;
+  if (k === "query") return row.outcome === "reference_failed" ? null : row.outcome === "exact";
+  if (k === "intent") return ["caught", "ok"].includes(row.outcome);
+  if (k === "perf") return row.generated ? row.generated.complete && !row.generated.error : null;
+  return null;
+}
+function state(k, row) {
+  if (!row) return "—";
+  if (k === "pipeline") return row.is_compliant == null ? "no answer" : `${row.is_compliant ? "compliant" : "blocked"}${row.correct_verdict ? "" : " ✗"}`;
+  if (k === "query") return row.outcome;
+  if (k === "intent") return `${row.outcome}${row.raised && row.raised.length ? ` (${row.raised.join(", ")})` : ""}`;
+  if (k === "perf") return row.generated ? (row.generated.error ? "error" : !row.generated.complete ? "timeout" : `${row.generated.seconds} s`) : "—";
+  return "";
+}
+function detail(k, row) {
+  if (!row) return "";
+  const bits = [];
+  if (row.compliance_reason) bits.push(`<p class="muted">${esc(row.compliance_reason)}</p>`);
+  if (row.execution_error) bits.push(`<p class="muted">Virtuoso: ${esc(row.execution_error.slice(0, 160))}</p>`);
+  const dg = row.diagnostics || {};
+  if (dg.judge_errors_final) bits.push(`<p class="muted">still invalid: ${esc(dg.judge_errors_final.join(" · ").slice(0, 200))}</p>`);
+  if (row.reason) bits.push(`<p class="muted">reason: ${esc(row.reason)}</p>`);
+  if (row.sparql_query) bits.push(`<details><summary>query</summary><pre>${esc(row.sparql_query)}</pre></details>`);
+  return bits.join("");
+}
+
+async function compare() {
+  const card = document.getElementById("compare-card");
+  if (!picked.a || !picked.b) { card.hidden = true; return; }
+  card.hidden = false;
+  const out = document.getElementById("compare");
+  out.innerHTML = "<p class='muted'>Loading both runs…</p>";
+  const [A, B] = await Promise.all([picked.a, picked.b].map(n => fetch(`/agents/reports/${encodeURIComponent(n)}`).then(r => r.json())));
+  const ra = reports.find(r => r.name === picked.a), rb = reports.find(r => r.name === picked.b);
+  document.getElementById("compare-title").textContent = `Compare · A ${ra.created} vs B ${rb.created}`;
+  // Setup differences
+  const fields = ["models", "prompt_versions", "max_tokens", "context", "concurrency", "questions", "model", "prompt_version", "timeout_ms", "runs"];
+  const diffs = fields.filter(f => JSON.stringify(A.summary[f]) !== JSON.stringify(B.summary[f]))
+    .map(f => `<li><b>${esc(f)}</b>: ${esc(JSON.stringify(A.summary[f]))} → ${esc(JSON.stringify(B.summary[f]))}</li>`);
+  // Summary deltas
+  const rows = METRICS[kind].map(m => {
+    const a = m.get(A.summary), b = m.get(B.summary);
+    let cls = "", delta = "—";
+    if (typeof a === "number" && typeof b === "number") {
+      const d = b - a;
+      delta = m.pct ? `${d >= 0 ? "+" : ""}${(d * 100).toFixed(1)} pp` : m.fmt === sec ? `${d >= 0 ? "+" : ""}${(d / 1000).toFixed(1)} s` : `${d >= 0 ? "+" : ""}${m.fmt === dec ? d.toFixed(2) : Math.round(d)}`;
+      if (Math.abs(d) > 1e-9) cls = (d > 0) === (m.better === "up") ? "good" : "bad";
+    }
+    return `<tr><td>${esc(m.label)}</td><td>${esc(m.fmt(a))}</td><td>${esc(m.fmt(b))}</td><td class="delta ${cls}">${esc(delta)}</td></tr>`;
+  }).join("");
+  // Per-question differences, dev only; holdout as totals
+  const byId = rows_ => Object.fromEntries((rows_ || []).map(r => [r.id, r]));
+  const ia = byId(A.rows), ib = byId(B.rows);
+  const ids = Object.keys(ia).filter(id => id in ib);
+  const fixed = [], broken = [], changed = [], hold = {fixed: 0, broken: 0};
+  for (const id of ids) {
+    const a = ia[id], b = ib[id], ga = goodness(kind, a), gb = goodness(kind, b);
+    const holdout = (a.split || "dev") === "holdout";
+    if (ga === gb && state(kind, a) === state(kind, b)) continue;
+    if (holdout) { if (ga === false && gb === true) hold.fixed++; else if (ga === true && gb === false) hold.broken++; continue; }
+    const entry = {id, a, b};
+    if (ga === false && gb === true) fixed.push(entry); else if (ga === true && gb === false) broken.push(entry); else changed.push(entry);
+  }
+  const list = (title, cls, items) => `<h3 class="${cls}">${esc(title)} · ${items.length}</h3>` + (items.length ? `<div class="scroll"><table class="grid"><thead><tr><th>Id</th><th>A</th><th>B</th><th>Question</th></tr></thead><tbody>
+    ${items.map(e => `<tr><td>${esc(e.id)}</td><td class="wrap">${esc(state(kind, e.a))}${detail(kind, e.a)}</td><td class="wrap">${esc(state(kind, e.b))}${detail(kind, e.b)}</td><td class="wrap">${esc(e.a.question || e.b.question || "")}</td></tr>`).join("")}
+  </tbody></table></div>` : "<p class='muted'>none</p>");
+  out.innerHTML = `
+    <div class="two">
+      <div><h3>Metrics</h3><div class="scroll"><table class="grid"><thead><tr><th>Metric</th><th>A</th><th>B</th><th>B − A</th></tr></thead><tbody>${rows}</tbody></table></div></div>
+      <div><h3>What changed in the setup</h3>${diffs.length ? `<ul class="muted">${diffs.join("")}</ul>` : "<p class='muted'>Same configuration (or the reports predate the setup fields).</p>"}
+        <p class="muted">A: ${esc(ra.note || setup(A.summary))}<br>B: ${esc(rb.note || setup(B.summary))}</p>
+        <p class="muted">Blind holdout, totals only: ${hold.fixed} fixed, ${hold.broken} broken.</p></div>
+    </div>
+    ${list("Fixed in B (dev)", "good", fixed)}
+    ${list("Broken in B (dev)", "bad", broken)}
+    ${list("Changed but still the same kind of result (dev)", "", changed)}`;
+}
+
+async function saveNote(input) {
+  const response = await fetch("/agents/runs/note", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({name: input.dataset.name, note: input.value})});
+  const d = await response.json();
+  if (response.ok) { const r = reports.find(x => x.name === d.name); if (r) r.note = d.note; renderCharts(); }
+  else alert(d.error);
+}
+
+async function load() {
+  reports = (await (await fetch("/agents/reports")).json()).reports;
+  renderCharts(); renderRuns(); compare();
+}
+document.getElementById("tabs").addEventListener("click", e => {
+  const b = e.target.closest("button[data-kind]"); if (!b) return;
+  kind = b.dataset.kind; picked = {a: null, b: null};
+  document.querySelectorAll("#tabs button").forEach(x => x.classList.toggle("on", x === b));
+  renderCharts(); renderRuns(); compare();
+});
+document.getElementById("runs").addEventListener("change", e => {
+  if (e.target.matches("input[type=radio]")) { picked[e.target.name] = e.target.value; renderRuns(); compare(); }
+  if (e.target.matches("input.note")) saveNote(e.target);
+});
+document.getElementById("runs").addEventListener("keydown", e => { if (e.target.matches("input.note") && e.key === "Enter") e.target.blur(); });
+load();
+</script>
+</body>
+</html>
