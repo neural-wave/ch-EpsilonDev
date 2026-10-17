@@ -82,6 +82,7 @@ def agent_setup(settings: Settings) -> dict:
         "models": {name: agent.model if llm else "stub" for name, agent in agents.items()},
         "prompt_versions": {name: agent.prompt_version for name, agent in agents.items()},
         "max_tokens": {name: agent.max_tokens for name, agent in agents.items()},
+        "context": {"examples": settings.context_examples, "cards": settings.context_cards, "codes": settings.context_codes},
     }
 
 

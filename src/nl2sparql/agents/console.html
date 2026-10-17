@@ -391,7 +391,8 @@ const setup = s => {
   if (!s || !s.models) return "";
   const cap = typeof s.max_tokens === "number" ? s.max_tokens : s.max_tokens && s.max_tokens.query;
   const prompts = s.prompt_versions ? `prompts ${s.prompt_versions.intent}/${s.prompt_versions.query}` : "";
-  return [shortModel(s.models.query), prompts, cap ? `cap ${cap}` : ""].filter(Boolean).join(" · ");
+  const ctx = s.context ? `context ${s.context.examples}/${s.context.cards}/${s.context.codes}` : "";
+  return [shortModel(s.models.query), prompts, cap ? `cap ${cap}` : "", ctx].filter(Boolean).join(" · ");
 };
 const tile = (label, value, detail, report) => `<div class="tile" data-name="${esc(report.name)}"><span class="muted">${esc(label)}</span>
   <span class="big">${value}</span><span class="muted small">${detail}</span></div>`;

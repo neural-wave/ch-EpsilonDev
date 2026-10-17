@@ -68,6 +68,10 @@ class Settings:
     llm_query_max_tokens: int = 1500  # 900 cut off 6 of 198 answers on 2026-10-17; only used when needed
     intent_prompt_version: str = "v4"  # won the intent eval on 2026-10-17 (docs/LLM_AGENTS.md section 6)
     query_prompt_version: str = "v4"  # halves the blocked allowed requests of v2 (2026-10-17)
+    # Context the query agent receives: similar examples, schema cards, code candidates.
+    context_examples: int = 3
+    context_cards: int = 6
+    context_codes: int = 5
     # Pipeline.
     virtuoso_endpoint: str = "http://localhost:8890/sparql"
     max_input_chars: int = 2000
@@ -128,6 +132,9 @@ class Settings:
             llm_query_max_tokens=int(env.get("LLM_QUERY_MAX_TOKENS", cls.llm_query_max_tokens)),
             intent_prompt_version=env.get("INTENT_PROMPT_VERSION", cls.intent_prompt_version).strip(),
             query_prompt_version=env.get("QUERY_PROMPT_VERSION", cls.query_prompt_version).strip(),
+            context_examples=int(env.get("CONTEXT_EXAMPLES", cls.context_examples)),
+            context_cards=int(env.get("CONTEXT_CARDS", cls.context_cards)),
+            context_codes=int(env.get("CONTEXT_CODES", cls.context_codes)),
             virtuoso_endpoint=env.get("VIRTUOSO_ENDPOINT", cls.virtuoso_endpoint),
             max_input_chars=int(env.get("MAX_INPUT_CHARS", cls.max_input_chars)),
             max_retries=int(env.get("MAX_RETRIES", cls.max_retries)),

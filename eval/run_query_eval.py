@@ -189,6 +189,7 @@ async def main_async(args) -> None:
                   else {"intent": "stub", "query": "stub"},
         "prompt_versions": {"intent": settings.intent_prompt_version, "query": settings.query_prompt_version},
         "max_tokens": query_agent.max_tokens,
+        "context": {"examples": settings.context_examples, "cards": settings.context_cards, "codes": settings.context_codes},
         "concurrency": args.concurrency,
     }
     summary = summarize(rows, setup)

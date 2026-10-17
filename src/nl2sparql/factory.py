@@ -32,6 +32,9 @@ def build_pipeline(settings: Settings, exclude_exact_examples: bool = False) -> 
         examples,
         schema,
         terminology,
+        k_examples=settings.context_examples,
+        k_cards=settings.context_cards,
+        k_codes=settings.context_codes,
         exclude_exact_examples=exclude_exact_examples,
     )
     if settings.backend == "llm":
