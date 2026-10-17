@@ -67,7 +67,7 @@ class Settings:
     llm_intent_max_tokens: int = 200
     llm_query_max_tokens: int = 1500  # 900 cut off 6 of 198 answers on 2026-10-17; only used when needed
     # Code pass after the query agent: typed code patterns first, join order locked (see sparql/order.py).
-    query_reorder: bool = False
+    query_reorder: bool = True  # the restricted pass: measured safe on dev, one win on 100k patients (q-021 0.44 -> 0.06 s)
     intent_prompt_version: str = "v4"  # won the intent eval on 2026-10-17 (docs/LLM_AGENTS.md section 6)
     query_prompt_version: str = "v4"  # halves the blocked allowed requests of v2 (2026-10-17)
     # Context the query agent receives: similar examples, schema cards, code candidates.
@@ -135,7 +135,7 @@ class Settings:
             llm_intent_extra_body=_json_object("LLM_INTENT_EXTRA_BODY"),
             llm_intent_max_tokens=int(env.get("LLM_INTENT_MAX_TOKENS", cls.llm_intent_max_tokens)),
             llm_query_max_tokens=int(env.get("LLM_QUERY_MAX_TOKENS", cls.llm_query_max_tokens)),
-            query_reorder=_flag("QUERY_REORDER", False),
+            query_reorder=_flag("QUERY_REORDER", True),
             intent_prompt_version=env.get("INTENT_PROMPT_VERSION", cls.intent_prompt_version).strip(),
             query_prompt_version=env.get("QUERY_PROMPT_VERSION", cls.query_prompt_version).strip(),
             context_examples=int(env.get("CONTEXT_EXAMPLES", cls.context_examples)),
