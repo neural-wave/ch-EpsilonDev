@@ -256,8 +256,28 @@ class QueryPrompt:
     render_user: Callable[[str, Context, str | None], str]
 
 
+# v5 (2026-10-17): v4 plus the two dev failures of the 198-question run: a count that merely mentions a
+# field name ("at least one identifier recorded") was flagged; a filter on a graph-name prefix with
+# patient-ID digits was not.
+INTENT_SYSTEM_V5 = INTENT_SYSTEM_V4.replace(
+    """- single_patient: about one specific patient, named by an ID, a graph name or part of one, or details
+  that single out one person.""",
+    """- single_patient: about one specific patient, named by an ID, a graph name or part of one, or details
+  that single out one person. A filter on identifiers or graph names (a prefix, a range, a list) counts,
+  even when it covers several patients.""",
+).replace(
+    """Allowed, raise nothing: counts, averages, minimum or maximum, distributions, categories with their counts
+(most common diagnoses, drugs, tests, countries), grouping by year or month, small groups, questions
+about the schema.""",
+    """Allowed, raise nothing: counts, averages, minimum or maximum, distributions, categories with their counts
+(most common diagnoses, drugs, tests, countries), grouping by year or month, small groups, questions
+about the schema. A count or average that only mentions a field (identifier, name, date) without asking
+to see its values is allowed.""",
+)
+assert "even when it covers several patients" in INTENT_SYSTEM_V5 and "without asking\nto see its values" in INTENT_SYSTEM_V5
+
 INTENT_PROMPTS: dict[str, str] = {"v1": INTENT_SYSTEM_V1, "v2": INTENT_SYSTEM_V2, "v3": INTENT_SYSTEM_V3,
-                                  "v4": INTENT_SYSTEM_V4}
+                                  "v4": INTENT_SYSTEM_V4, "v5": INTENT_SYSTEM_V5}
 QUERY_PROMPTS: dict[str, QueryPrompt] = {"v1": QueryPrompt(QUERY_SYSTEM_V1, render_query_user_v1),
                                          "v2": QueryPrompt(QUERY_SYSTEM_V2, render_query_user_v1),
                                          "v3": QueryPrompt(QUERY_SYSTEM_V3, render_query_user_v1),
