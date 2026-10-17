@@ -1,6 +1,8 @@
-# Project Status and Remaining Work
+# Historical project status and remaining-work checklist
 
-Status reviewed on **17 October 2026** against the root [README](README.md), module guides, tracked source/tests/scripts, and current Git state. The root README is the project-wide source of truth. This checklist distinguishes merged implementation, reported evidence, and work that still needs a fresh run, real graph access, team decisions, or submission action.
+> Historical checklist retained for traceability. Its revision, test counts, and backlog are not current verification. Use the [project README](../../README.md) and [validation record](../RESULTS_VALIDATION.md) for current delivery status.
+
+Status reviewed on **17 October 2026** against the root [README](../../README.md), module guides, tracked source/tests/scripts, and current Git state. The root README is the project-wide source of truth. This checklist distinguishes merged implementation, reported evidence, and work that still needs a fresh run, real graph access, team decisions, or submission action.
 
 **Current checkout:** `main` at `49ebc29e2977fa9470bda51854bd7f93bd6a275c`. This is the revision inspected for this checklist; it was **not** test-run in this environment. The root README reports 244 tests passing locally and in pull-request CI, but that report does not establish that exact SHA was tested. The local `.venv311` has no `bin/python` and no usable pytest installation. Rerun the suite on this revision before claiming it verified.
 
