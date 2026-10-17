@@ -13,9 +13,10 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from nl2sparql.agents.console import build_console_router
+from nl2sparql.assist import clarify
 from nl2sparql.config import REPO_ROOT, Settings
 from nl2sparql.factory import build_pipeline
-from nl2sparql.input_check import InputError
+from nl2sparql.input_check import InputError, normalize_text
 from nl2sparql.orchestrator import Pipeline, PipelineError
 from nl2sparql.virtuoso import VirtuosoClient
 
@@ -68,6 +69,20 @@ def create_app(pipeline: Pipeline | None = None, settings: Settings | None = Non
         if console.is_dir():
             return RedirectResponse("/console/cli/")
         return resources.files("nl2sparql").joinpath("demo/index.html").read_text(encoding="utf-8")
+
+    @app.post("/demo/clarify")
+    async def demo_clarify(request: Request):
+        """"Did you mean...?" choices for a vague question, before it is asked. Code only: no model call."""
+        try:
+            body = await request.json()
+        except ValueError:
+            return JSONResponse({"error": "The body must be JSON with a 'text' field."}, status_code=400)
+        try:
+            text = normalize_text(body.get("text") if isinstance(body, dict) else None, settings.max_input_chars)
+        except InputError as error:
+            return JSONResponse({"error": str(error)}, status_code=400)
+        found = clarify(text, pipeline.context_builder.terminology)
+        return found.to_json() if found else {"prompt": None, "choices": []}
 
     @app.post("/demo/ask")
     async def demo_ask(request: Request):

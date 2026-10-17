@@ -243,8 +243,8 @@
   };
   const STAGE_LABEL = { retrieve: "retrieve", template: "template", llm: "model", validate: "validate", compliance: "rules" };
 
-  async function ask(question) {
-    if (live) return askLive(question);
+  async function ask(question, opts = {}) {
+    if (live) return askLive(question, opts);
     const e = entry("ask", question);
     const p = add(e, '<div class="progress">starting</div>');
     const t0 = performance.now();
@@ -312,12 +312,17 @@
     return s.replace(/^.*[\/#]/, "");
   }
 
+  // "1 patient matches", "767 patients match": the count decides singular or plural.
+  const isOne = (v) => Number(String(v).replace(/,/g, "")) === 1;
+  const patientsWord = (v) => (isOne(v) ? "patient" : "patients");
+
   function sentence(question, res, result, fixture) {
     if (fixture && fixture.answer && result) return fixture.answer.replace("{0}", result.rows[0] ? result.rows[0][0] : "");
     if (!result || !result.rows.length) return "The query ran but returned no rows.";
     if (result.rows.length === 1 && result.columns.length === 1) {
+      const v = result.rows[0][0];
       const term = KNOWN_TERMS.find((t) => question.toLowerCase().includes(t));
-      return term ? `${result.rows[0][0]} patients have ${term}.` : `${result.rows[0][0]} patients match.`;
+      return term ? `${v} ${patientsWord(v)} ${isOne(v) ? "has" : "have"} ${term}.` : `${v} ${patientsWord(v)} ${isOne(v) ? "matches" : "match"}.`;
     }
     return `${result.rows.length} groups. The largest is ${readable(result.rows[0][0], res.trace && res.trace.candidate_codes)} with ${result.rows[0][1]}.`;
   }
@@ -480,8 +485,14 @@
     });
   }
 
-  async function askLive(question) {
+  // opts.final: the question came from a "Did you mean" choice, so it is not checked again.
+  async function askLive(question, opts = {}) {
     const e = entry("ask", question);
+    if (!opts.final) {
+      let c = null;
+      try { c = await SQ.backend.clarify(question); } catch (err) { c = null; } // an older backend: just ask
+      if (c && c.choices && c.choices.length) { reportClarify(e, c); return; }
+    }
     const stop = thinking(e);
     const from = e.children.length - 1; // first child added after the loader
     try {
@@ -508,7 +519,7 @@
     if (rows.length === 1 && d.columns.length === 1) {
       const v = rows[0][0];
       const col = d.columns[0];
-      return /^(count|countresult|n|total|patients?)$/i.test(col) ? `${nice(v)} patients match.` : `${nice(v)} ${humanCol(col)}.`;
+      return /^(count|countresult|n|total|patients?)$/i.test(col) ? `${nice(v)} ${patientsWord(v)} ${isOne(v) ? "matches" : "match"}.` : `${nice(v)} ${humanCol(col)}.`;
     }
     return `${rows.length} ${rows.length === 1 ? "row" : "groups"}. The first is ${rows[0][0]}${rows[0].length > 1 ? `, with ${nice(rows[0][1])} ${humanCol(d.columns[1])}` : ""}.`;
   }
@@ -530,6 +541,18 @@
     return `<table class="tbl result-tbl"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
   }
 
+  // Buttons that send a new question through the whole pipeline; data-final skips the vagueness check.
+  function choiceButtons(choices) {
+    return `<div class="choice-row">${choices.map((c) =>
+      `<button type="button" class="choice-btn" data-ask="${esc(c.question)}" data-final="1">${esc(c.label)}</button>`).join("")}</div>`;
+  }
+
+  function reportClarify(e, c) {
+    add(e, `<div class="clarify"><span class="suggest-label">${esc(c.prompt || "Did you mean…")}</span>
+      ${choiceButtons(c.choices)}
+      <span class="dim small-note">Pick one, so the answer counts what you mean instead of a guess.</span></div>`);
+  }
+
   function reportLive(e, question, d) {
     const tm = d.timings_ms || {};
     const meta = fmtMs(tm.total || 0);
@@ -544,7 +567,8 @@
       const countedHtml = counted ? `<p class="counted"><span class="counted-label">Counted</span><span>${esc(counted)}</span></p>` : "";
       if (d.executed && rows.length === 1 && d.columns.length === 1) {
         const col = d.columns[0];
-        const label = /^(count|countresult|n|total|patients?)$/i.test(col) ? "patients match your question" : humanCol(col);
+        const label = /^(count|countresult|n|total|patients?)$/i.test(col)
+          ? (isOne(rows[0][0]) ? "patient matches your question" : "patients match your question") : humanCol(col);
         add(e, `<div class="answer is-result">${verdictLine}
           <div class="result-hero"><span class="result-number">${esc(nice(rows[0][0]))}</span><span class="result-label">${esc(label)}</span></div>${countedHtml}</div>`);
       } else if (d.executed && rows.length) {
@@ -727,7 +751,7 @@
 
   // ---------- input ----------
 
-  async function handle(raw) {
+  async function handle(raw, opts = {}) {
     const text = raw.trim();
     if (!text) return;
     history.push(text);
@@ -745,7 +769,7 @@
         const e = entry("cmd", text);
         await cmd.fn(e, rest.join(" "));
       } else {
-        await ask(text);
+        await ask(text, opts);
       }
     } finally {
       busy = false;
@@ -858,7 +882,7 @@
   // Clickable example and attack rows, and suggested questions
   out.addEventListener("click", (e) => {
     const sug = e.target.closest("[data-ask]");
-    if (sug && !busy) return handle(sug.dataset.ask);
+    if (sug && !busy) return handle(sug.dataset.ask, { final: sug.dataset.final === "1" });
     const row = e.target.closest("tr[data-try]");
     if (row && !busy) handle(`try ${row.dataset.try}`);
   });
