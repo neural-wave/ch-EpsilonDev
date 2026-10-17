@@ -40,7 +40,7 @@ class Judge:
             return JudgeResult(fixed, [f"Syntax error: {parsed.error}"])
         if parsed.query is None:
             return JudgeResult(fixed)  # updates: nothing to check here, the guard rejects them
-        errors = []
+        errors = _style_errors(fixed)
         for iri in sorted(collect_iris(parsed.algebra)):
             term = str(iri)[len(SPHN):] if str(iri).startswith(SPHN) else None
             if term and not self.schema.in_data(term):

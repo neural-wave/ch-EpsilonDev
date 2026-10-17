@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from decimal import Decimal
 
 from rdflib import Literal, URIRef, Variable
 from rdflib.namespace import RDF
@@ -49,6 +50,7 @@ def check_rules(parsed: ParsedQuery, kinds: PropertyKinds, settings: RuleSetting
     violations += _single_patient(facts, kinds, settings)
     violations += _whole_graph(facts)
     if facts.touches_patient_data:
+        violations += _minimum_group_size(parsed.algebra, facts)
         violations += _projection(parsed, facts)
     return list(dict.fromkeys(violations))  # drop duplicates, keep order
 
@@ -104,7 +106,9 @@ def _identifier_comparisons(expr, facts: QueryFacts):
             ):
                 yield ", ".join(f'"{c}"' for c in constants)
     if expr.name in STRING_MATCHERS:
-        target, pattern = expr.get("arg1", expr.get("text")), expr.get("arg2", expr.get("pattern"))
+        # CompValue.get takes no default, so look the keys up explicitly: REGEX uses text/pattern.
+        target = expr.get("arg1") if "arg1" in expr else expr.get("text")
+        pattern = expr.get("arg2") if "arg2" in expr else expr.get("pattern")
         if (
             expression_sensitivity(target, facts) is Sensitivity.IDENTIFIER
             and isinstance(pattern, Literal)
@@ -127,6 +131,80 @@ def _whole_graph(facts: QueryFacts) -> list[Violation]:
             continue
         return []  # at least one pattern restricts by a concrete property or class
     return [Violation("R3", "The query matches the whole graph without restricting it to a concept.")]
+
+
+def _minimum_group_size(algebra, facts: QueryFacts) -> list[Violation]:
+    """Reject HAVING clauses that keep groups containing exactly one patient.
+
+    rdflib represents a HAVING clause as a Filter above an AggregateJoin. The
+    aggregate result is an internal variable such as ``__agg_2__``; the
+    aggregate map built by ``analyse`` lets us identify the original
+    ``COUNT(DISTINCT ?g)`` safely without inspecting the query text.
+    """
+    node = algebra.p
+    while isinstance(node, CompValue):
+        if node.name == "Filter":
+            if _is_single_patient_count(node.expr, facts):
+                return [
+                    Violation(
+                        "R2",
+                        "HAVING keeps groups containing exactly one patient. Use a minimum group size greater than one.",
+                    )
+                ]
+            node = node.p
+            continue
+        if node.name in ("Project", "OrderBy", "Extend", "Distinct", "Reduced", "Slice", "ToMultiSet"):
+            node = node.p
+            continue
+        break
+    return []
+
+
+FLIPPED_OPERATORS = {"=": "=", "<": ">", "<=": ">=", ">": "<", ">=": "<="}
+
+
+def _is_single_patient_count(expr, facts: QueryFacts) -> bool:
+    """True when the condition keeps only groups whose count is 1, e.g. = 1, < 2, <= 1, IN (1).
+
+    A conjunction keeps only such groups as soon as one of its parts does.
+    """
+    if not isinstance(expr, CompValue):
+        return False
+    if expr.name == "ConditionalAndExpression":
+        return any(_is_single_patient_count(part, facts) for part in [expr.expr, *(expr.other or [])])
+    if expr.name != "RelationalExpression" or expr.other is None:
+        return False
+    if expr.op in ("IN", "NOT IN"):
+        if expr.op == "IN" and _counts_one_patient(expr.expr, facts):
+            kept = {_number(value) for value in expr.other}
+            return None not in kept and {count for count in kept if count >= 1} == {1}
+        return False
+    for counted, constant, op in ((expr.expr, expr.other, expr.op), (expr.other, expr.expr, FLIPPED_OPERATORS.get(expr.op))):
+        limit = _number(constant)
+        if op is None or limit is None or not _counts_one_patient(counted, facts):
+            continue
+        if (op == "=" and limit == 1) or (op == "<" and 1 < limit <= 2) or (op == "<=" and 1 <= limit < 2):
+            return True
+    return False
+
+
+def _counts_one_patient(variable, facts: QueryFacts) -> bool:
+    """A count of 1 here means one patient: a row count, or a distinct count of patients or records."""
+    aggregate = facts.aggregates.get(variable) if isinstance(variable, Variable) else None
+    if aggregate is None or aggregate.name != "Aggregate_Count":
+        return False
+    if aggregate.distinct not in (True, "DISTINCT"):
+        return True  # COUNT(*) or COUNT(?x) = 1 means a single matching row
+    return isinstance(aggregate.vars, Variable) and expression_sensitivity(aggregate.vars, facts) >= Sensitivity.INSTANCE
+
+
+def _number(value) -> float | None:
+    if not isinstance(value, Literal):
+        return None
+    number = value.toPython()
+    if isinstance(number, bool) or not isinstance(number, (int, float, Decimal)):
+        return None
+    return float(number)
 
 
 def _projection(parsed: ParsedQuery, facts: QueryFacts) -> list[Violation]:
