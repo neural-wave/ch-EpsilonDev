@@ -153,7 +153,6 @@ window.SQ = window.SQ || {};
 
   SQ.backend = {
     demoAsk: (text) => call("POST", "/demo/ask", { text }),          // verdict, rephrase, timings, rows
-    clarify: (text) => call("POST", "/demo/clarify", { text }),      // "Did you mean...?" choices, no model call
     agentsRun: (text) => call("POST", "/agents/run", { text }),      // full result: flags, violations, retries
     preview: (text) => call("POST", "/agents/preview", { text }),    // context the model sees, no model call
     health: () => call("GET", "/health"),

@@ -4,7 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from conftest import PREFIXES, load_examples
+from conftest import DATA_DIR, PREFIXES, load_examples
+from nl2sparql.context.schema import SchemaCards
 from nl2sparql.judge_checks.syntax import HINTS, diagnose, normalize
 from nl2sparql.sparql.parse import parse_sparql
 from nl2sparql.sparql.prefixes import add_missing_prefixes, fix_standard_prefixes
@@ -12,6 +13,8 @@ from nl2sparql.sparql.prefixes import add_missing_prefixes, fix_standard_prefixe
 EVAL_DIR = Path(__file__).resolve().parents[1] / "eval"
 SNOMED = "PREFIX snomed: <http://snomed.info/id/>\n"
 BIF = "PREFIX bif: <bif:>\n"
+INFERENCE = ' OPTION (inference "https://biomedit.ch/rdf/sphn-resource/global")'
+DATA_TERMS = SchemaCards.load(DATA_DIR / "schema_cards.json").data_terms
 
 
 def hints_for(query: str) -> list[str]:
@@ -19,11 +22,16 @@ def hints_for(query: str) -> list[str]:
     return diagnose(query)
 
 
-def repaired(query: str) -> tuple[str, list[str]]:
+def repaired(query: str, data_terms=None) -> tuple[str, list[str]]:
     assert parse_sparql(query).kind == "Invalid"
-    fixed, applied = normalize(query)
+    fixed, applied = normalize(query, data_terms)
     assert parse_sparql(fixed).kind == "SelectQuery", fixed
     return fixed, applied
+
+
+def load_team_examples() -> list[dict]:
+    lines = (DATA_DIR / "team_examples.jsonl").read_text(encoding="utf-8").splitlines()
+    return [json.loads(line) for line in lines if line.strip()]
 
 
 def operator_chain(algebra) -> list[str]:
@@ -44,7 +52,9 @@ def dev_reference_queries() -> list[tuple[str, str]]:
     return queries
 
 
-VALID_QUERIES = [(example["id"], example["sparql"]) for example in load_examples()] + dev_reference_queries()
+VALID_QUERIES = ([(example["id"], example["sparql"]) for example in load_examples() + load_team_examples()]
+                 + dev_reference_queries())
+assert len(VALID_QUERIES) == 64  # 16 official + 3 team examples + 45 dev references
 
 
 # q-008, first try: class alternatives with "|" and GROUP BY true
@@ -161,6 +171,66 @@ WHERE {
 ORDER BY DESC(?patient_count)
 """
 
+# intent-029, first try: the schema card's template "?c a snomed:<code>" copied literally, next to the typed pattern
+INTENT029_FIRST = PREFIXES + SNOMED + """SELECT ?snomed_code (COUNT(DISTINCT ?g) AS ?patients) (COUNT(DISTINCT ?lab_test) AS ?count)
+WHERE {
+  GRAPH ?g {
+    ?lab_test a sphn:LabTestEvent ;
+              sphn:hasLabTest ?lab_test_node .
+  }
+  {
+    ?lab_test_node sphn:hasCode ?code .
+    ?code a snomed:<code> OPTION (inference "https://biomedit.ch/rdf/sphn-resource/global") .
+    ?code a ?concept .
+  }
+  BIND (REPLACE(STR(?concept), "^.*/", "") AS ?snomed_code)
+}
+GROUP BY ?snomed_code
+ORDER BY DESC(?count)
+"""
+
+# q-027, first try: the total of the share computed by a subquery inside the SELECT expression
+Q027_FIRST = PREFIXES + """SELECT ?group_label
+       (COUNT(DISTINCT ?g) AS ?patients)
+       (ROUND(1000.0 * COUNT(DISTINCT ?g) / (SELECT COUNT(DISTINCT ?g2) WHERE { GRAPH ?g2 { ?x a sphn:HealthcareEncounter . } })) / 10 AS ?pct)
+WHERE {
+  {
+    SELECT ?g (COUNT(DISTINCT ?encounter) AS ?encounter_count)
+    WHERE {
+      GRAPH ?g { ?encounter a sphn:HealthcareEncounter . }
+    }
+    GROUP BY ?g
+  }
+  BIND (IF(?encounter_count = 1, "1", IF(?encounter_count <= 5, "2 to 5", "more than 5")) AS ?group_label)
+}
+GROUP BY ?group_label
+ORDER BY ?group_label
+"""
+
+# official-02, first try: a GROUP BY inside the WHERE block of each UNION branch's sub-select
+OFFICIAL02_FIRST = PREFIXES + BIF + """SELECT ?cohort (AVG(?duration_days) AS ?avg_duration)
+WHERE {
+  {
+    SELECT ?g (AVG(bif:datediff('day', ?start, ?end)) AS ?duration_days)
+    WHERE {
+      GRAPH ?g { ?case a sphn:AdministrativeCase ; sphn:hasAdmissionDateTime ?start ; sphn:hasDischargeDateTime ?end . }
+      GROUP BY ?g
+    }
+  }
+  UNION
+  {
+    SELECT ?g (AVG(bif:datediff('day', ?start, ?end)) AS ?duration_days)
+    WHERE {
+      GRAPH ?g { ?case a sphn:AdministrativeCase ; sphn:hasAdmissionDateTime ?start ; sphn:hasDischargeDateTime ?end . }
+      GROUP BY ?g
+    }
+  }
+  BIND (IF(EXISTS { GRAPH ?g { ?dx a sphn:BilledDiagnosis } }, "cholera", "other") AS ?cohort)
+}
+GROUP BY ?cohort
+ORDER BY ?cohort
+"""
+
 # gen-096: an IF chain missing one closing parenthesis
 GEN096 = PREFIXES + """SELECT ?age_decade (COUNT(DISTINCT ?g) AS ?patient_count)
 WHERE {
@@ -218,7 +288,33 @@ def test_diagnoses_if_chain_missing_a_parenthesis():
     ]
     without_if = PREFIXES + "SELECT (COUNT(DISTINCT ?g AS ?n) WHERE { GRAPH ?g { ?x a sphn:Age } }"
     assert hints_for(without_if) == [
-        "Parentheses are not balanced: 2 '(' but 1 ')'. Close every function call and every (expression AS ?name)."
+        "Parentheses are not balanced: 2 '(' but 1 ')'. The '(' that opens \"(COUNT(DISTINCT ?g AS ?n) WHERE { GRAPH "
+        "?g { ?x a sphn:Age }...\" is never closed: close every function call inside it and then the (expression AS ?name)."
+    ]
+
+
+def test_parenthesis_hint_names_the_expression_at_fault_outside_an_if_chain():
+    # q-071, first try: ROUND(...) misses its ')' while the BIND(IF(...)) further down is fine, so the IF-chain
+    # recipe would send the model to rewrite the wrong line
+    query = PREFIXES + """SELECT (COUNT(DISTINCT ?g) AS ?patients)
+       (ROUND(1000.0 * COUNT(DISTINCT ?g) / ?total / 10 AS ?pct)
+       (MAX(?n) AS ?max_tests)
+WHERE {
+  { SELECT ?g (COUNT(DISTINCT ?e) AS ?n) WHERE { GRAPH ?g { ?e a sphn:LabTestEvent } } GROUP BY ?g }
+  BIND (IF(?n >= 10, ?g, ?unbound) AS ?g_with_10)
+}
+"""
+    assert hints_for(query) == [
+        "Parentheses are not balanced: 11 '(' but 10 ')'. The '(' that opens \"(ROUND(1000.0 * COUNT(DISTINCT ?g) / "
+        "?total / 10 AS ?pct)\" is never closed: close every function call inside it and then the (expression AS ?name)."
+    ]
+    named_call = PREFIXES + "SELECT ?r WHERE { GRAPH ?g { ?x sphn:hasValue ?v } BIND(ROUND(?v AS ?r) }"
+    assert hints_for(named_call)[0].endswith("The '(' that opens \"BIND(ROUND(?v AS ?r) }\" is never closed: close every "
+                                             "function call inside it and then the (expression AS ?name).")
+    extra = PREFIXES + "SELECT (COUNT(DISTINCT ?g)) AS ?n) WHERE { GRAPH ?g { ?x a sphn:Age } }"
+    assert hints_for(extra) == [
+        "Parentheses are not balanced: 2 '(' but 3 ')'. The ')' ending \"SELECT (COUNT(DISTINCT ?g)) AS ?n)\" closes "
+        "nothing: remove it or open the parenthesis it needs."
     ]
 
 
@@ -257,6 +353,54 @@ WHERE {
 }
 """
     assert hints_for(query) == [HINTS["member_access"], HINTS["null"]]
+    # "or use OPTIONAL" steered the model into OPTIONAL { BIND(...) } blocks (q-055, q-064): the hint now gives
+    # the two recipes that work, a per-patient number and an absent pattern
+    assert "or use OPTIONAL" not in HINTS["null"]
+    assert "SUM(IF(?n >= 10, 1, 0))" in HINTS["null"] and "OPTIONAL { GRAPH ?g { ... } BIND(?g AS ?x) }" in HINTS["null"]
+
+
+def test_class_alternatives_hint_ignores_a_logical_or():
+    # q-022, first try: type patterns joined with || inside FILTER are the type-in-expression mistake, not "A | B"
+    query = PREFIXES + SNOMED + """SELECT ?care_type (COUNT(DISTINCT ?g) AS ?stays)
+WHERE {
+  GRAPH ?g {
+    ?ch sphn:hasTypeCode ?code .
+    FILTER (?code a snomed:371883000 || ?code a snomed:394656005 || ?code a snomed:304903009)
+    BIND (IF(?code a snomed:371883000, "Outpatient", "Inpatient") AS ?care_type)
+  }
+}
+GROUP BY ?care_type
+"""
+    assert hints_for(query) == [HINTS["type_in_expression"]]
+
+
+def test_diagnoses_a_card_placeholder_outside_a_type_pattern():
+    # The placeholder as a triple's object or a compared value is not repaired (its meaning is not mechanical), so
+    # the hint names it; one inside a string is not syntax
+    as_object = PREFIXES + SNOMED + "SELECT ?x WHERE { GRAPH ?g { ?x sphn:hasCode snomed:<code> . } }"
+    assert hints_for(as_object) == [HINTS["placeholder"].format(term="snomed:<code>")]
+    assert normalize(as_object) == (as_object, [])
+    compared = PREFIXES + "SELECT ?c WHERE { GRAPH ?g { ?x sphn:hasCode ?c . FILTER (?c = icd-10-gm:<code>) } }"
+    assert hints_for(compared) == [HINTS["placeholder"].format(term="icd-10-gm:<code>")]
+    in_string = PREFIXES + 'SELECT ?c WHERE { GRAPH ?g { ?x sphn:hasValue "snomed:<code>" } } GROUP BY true'
+    assert hints_for(in_string) == [HINTS["group_by_constant"].format(value="true")]
+
+
+def test_diagnoses_a_scalar_subquery_it_cannot_hoist():
+    # the subquery reuses ?g, a variable of the outer query: its meaning per row is not mechanical
+    correlated = Q027_FIRST.replace("?g2", "?g")
+    assert normalize(correlated) == (correlated, [])
+    assert hints_for(correlated) == [HINTS["scalar_subquery"]]
+    # inside a GRAPH block, where a block hoisted to the top of WHERE would not be visible to the BIND
+    nested = PREFIXES + ("SELECT ?r WHERE { GRAPH ?g { ?x sphn:hasValue ?v . "
+                         "BIND (?v / (SELECT COUNT(?y) WHERE { ?y a sphn:Age }) AS ?r) } }")
+    assert normalize(nested) == (nested, [])
+    assert hints_for(nested) == [HINTS["scalar_subquery"]]
+    # with modifiers of its own it is not one value
+    grouped = PREFIXES + ("SELECT ((SELECT COUNT(?y) WHERE { ?y a ?t } GROUP BY ?t) AS ?n) "
+                          "WHERE { GRAPH ?g { ?x a sphn:Age } }")
+    assert normalize(grouped) == (grouped, [])
+    assert hints_for(grouped) == [HINTS["scalar_subquery"]]
 
 
 def test_diagnoses_bare_iri_unprefixed_property_and_unknown_function():
@@ -351,10 +495,88 @@ GROUP BY ?category
     assert normalize(conflict) == (conflict, []) and hints_for(conflict) == [HINTS["group_by_inside"]]
 
 
+def test_normalize_drops_the_card_placeholder_typed_on_a_code():
+    fixed, applied = repaired(INTENT029_FIRST)
+    assert applied == ["dropped ?code a snomed:<code>, the card's placeholder (any code)"]
+    assert fixed == "\n".join(line for line in INTENT029_FIRST.split("\n") if "snomed:<code>" not in line)
+    assert diagnose(fixed) == []
+    # inside a predicate chain, opening a chain, closing a block, and written as rdf:type without OPTION
+    chain = PREFIXES + SNOMED + "SELECT ?c WHERE { GRAPH ?g { ?x sphn:hasCode ?c ; a snomed:<code>" + INFERENCE + " ; sphn:hasValue ?v . } }"
+    assert repaired(chain) == (chain.replace(" ; a snomed:<code>" + INFERENCE, ""),
+                               ["dropped a snomed:<code>, the card's placeholder (any code)"])
+    opening = PREFIXES + "SELECT ?c WHERE { GRAPH ?g { ?c a icd-10-gm:<code>" + INFERENCE + " ; sphn:hasValue ?v . } }"
+    assert repaired(opening) == (opening.replace("a icd-10-gm:<code>" + INFERENCE + " ; ", ""),
+                                 ["dropped ?c a icd-10-gm:<code>, the card's placeholder (any code)"])
+    closing = PREFIXES + "SELECT ?c WHERE { GRAPH ?g { ?x sphn:hasCode ?c . OPTIONAL { ?c rdf:type chop:<code> } } }"
+    assert repaired(closing) == (closing.replace("?c rdf:type chop:<code> ", ""),
+                                 ["dropped ?c a chop:<code>, the card's placeholder (any code)"])
+    # official-05, first try: the placeholder twice, then NULL; the placeholder goes and NULL gets its hint
+    official05 = PREFIXES + SNOMED + """SELECT ?route (COUNT(DISTINCT ?g) AS ?patients) (COUNT(DISTINCT ?administered_patient) AS ?administered)
+WHERE {
+  { SELECT DISTINCT ?g ?route WHERE { GRAPH ?g { ?p a sphn:DrugPrescription ; sphn:hasAdministrationRouteCode ?route . } ?route a snomed:<code>""" + INFERENCE + """ . } }
+  OPTIONAL { { SELECT DISTINCT ?g WHERE { GRAPH ?g { ?a a sphn:DrugAdministrationEvent ; sphn:hasAdministrationRouteCode ?route . } ?route a snomed:<code>""" + INFERENCE + """ . } } BIND (?g AS ?administered_patient) }
+  BIND (IF(BOUND(?administered_patient), ?g, NULL) AS ?administered_patient)
+}
+GROUP BY ?route
+"""
+    fixed, applied = normalize(official05)
+    assert applied == ["dropped ?route a snomed:<code>, the card's placeholder (any code)"] * 2
+    assert "<code>" not in fixed and parse_sparql(fixed).kind == "Invalid" and diagnose(fixed) == [HINTS["null"]]
+
+
+def test_normalize_hoists_a_scalar_subquery_into_where():
+    fixed, applied = repaired(Q027_FIRST)
+    assert applied == ['hoisted the subquery "(SELECT COUNT(DISTINCT ?g2) WHERE { GRAPH ?g2 { ?x a sphn:He..." '
+                       'into WHERE as ?scalar_1']
+    assert "(ROUND(1000.0 * COUNT(DISTINCT ?g) / ?scalar_1) / 10 AS ?pct)" in fixed
+    assert "WHERE {\n  { SELECT (COUNT(DISTINCT ?g2) AS ?scalar_1) WHERE { GRAPH ?g2 { ?x a sphn:HealthcareEncounter . } } }\n  {\n" in fixed
+    assert fixed.endswith("}\nGROUP BY ?group_label ?scalar_1\nORDER BY ?group_label\n")
+    assert diagnose(fixed) == []
+    # the same subquery twice shares one variable; a SELECT of aggregates gets the GROUP BY it lacked, before
+    # ORDER BY; an aliased subquery keeps its name
+    twice = PREFIXES + ("SELECT (COUNT(DISTINCT ?g) / (SELECT COUNT(DISTINCT ?h) WHERE { GRAPH ?h { ?y a sphn:Age } }) AS ?share)\n"
+                        "       ((SELECT COUNT(DISTINCT ?h) WHERE { GRAPH ?h { ?y a sphn:Age } }) AS ?total)\n"
+                        "WHERE { GRAPH ?g { ?x a sphn:BilledDiagnosis } }\nORDER BY ?total\n")
+    fixed, applied = repaired(twice)
+    assert len(applied) == 1 and fixed.count("{ SELECT (COUNT(DISTINCT ?h) AS ?scalar_1) WHERE") == 1
+    assert "(COUNT(DISTINCT ?g) / ?scalar_1 AS ?share)" in fixed and "(?scalar_1 AS ?total)" in fixed
+    assert fixed.endswith("WHERE {\n  { SELECT (COUNT(DISTINCT ?h) AS ?scalar_1) WHERE { GRAPH ?h { ?y a sphn:Age } } } "
+                          "GRAPH ?g { ?x a sphn:BilledDiagnosis } }\nGROUP BY ?scalar_1\nORDER BY ?total\n")
+    aliased = PREFIXES + ("SELECT ?v ((SELECT (COUNT(?y) AS ?all) WHERE { ?y a sphn:Age }) AS ?total) "
+                          "WHERE { GRAPH ?g { ?x sphn:hasValue ?v } }")
+    fixed, applied = repaired(aliased)
+    assert "(?all AS ?total)" in fixed and "{ SELECT (COUNT(?y) AS ?all) WHERE { ?y a sphn:Age } }" in fixed
+    assert "GROUP BY" not in fixed  # nothing is aggregated in the outer query
+
+
+def test_normalize_prefixes_a_bare_property_the_data_has():
+    # q-032, dropped retry: hasSpecialtyName without its prefix was the only error; the cards say it is a data term
+    query = PREFIXES + ("SELECT ?name (COUNT(DISTINCT ?g) AS ?patients) WHERE { GRAPH ?g { ?e a sphn:HealthcareEncounter ; "
+                        "sphn:hasTherapeuticArea ?area . ?area hasSpecialtyName ?name } } GROUP BY ?name\n")
+    assert normalize(query) == (query, [])  # without the data's terms nothing is guessed
+    assert hints_for(query) == [HINTS["bare_property"].format(term="hasSpecialtyName")]
+    fixed, applied = repaired(query, DATA_TERMS)
+    assert fixed == query.replace("?area hasSpecialtyName", "?area sphn:hasSpecialtyName")
+    assert applied == ["wrote sphn:hasSpecialtyName for the bare hasSpecialtyName"]
+    # a name the data lacks stays for the hint, and the term check once the model has prefixed it
+    assert normalize(query.replace("hasSpecialtyName", "hasSpecialityName"), DATA_TERMS)[1] == []
+    # the sphn: prefix is declared when the query had none, and a string is not a term
+    bare = 'SELECT ?n WHERE { ?x hasCode ?n ; sphn:hasValue "hasCode" }'
+    fixed, applied = normalize(bare, {"hasCode"})
+    assert fixed.startswith("PREFIX sphn: <") and fixed.endswith('?x sphn:hasCode ?n ; sphn:hasValue "hasCode" }')
+    assert parse_sparql(fixed).kind == "SelectQuery"
+
+
+def test_normalize_moves_every_misplaced_group_by():
+    fixed, applied = repaired(OFFICIAL02_FIRST)
+    assert applied == ["moved GROUP BY from inside WHERE to after its closing brace"] * 2
+    assert len(re.findall(r"\}\s*GROUP BY \?g\s*\}", fixed)) == 2 and "GROUP BY ?g\n    }" not in fixed
+
+
 @pytest.mark.parametrize("query", [query for _, query in VALID_QUERIES], ids=[qid for qid, _ in VALID_QUERIES])
 def test_valid_queries_get_no_hints_and_are_left_byte_identical(query):
     assert diagnose(query) == []
-    assert normalize(query) == (query, [])
+    assert normalize(query, DATA_TERMS) == (query, [])
     assert fix_standard_prefixes(query) == query
 
 

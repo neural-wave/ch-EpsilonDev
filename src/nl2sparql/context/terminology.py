@@ -11,6 +11,10 @@ SNOMED CT semantic tags such as "(finding)" removed and simple plurals folded ("
 ("diabetes" finds "Diabetes mellitus" because the index shows the two always go together; "hospital"
 does not find "Death in hospital"). The subcodes of a matched classification code (A00 -> A00.0,
 A00.1, A00.9) follow the direct matches. Ties keep the index order, so results are deterministic.
+
+Given the SPHN class names, a code whose label only spells out a class name ("Imaging (procedure)"
+for sphn:ImagingProcedure) is dropped: no reference uses such a code, and the model typed the intent
+of an imaging procedure with it twice.
 """
 from __future__ import annotations
 
@@ -18,9 +22,11 @@ import json
 import math
 import re
 from collections import Counter, defaultdict
+from collections.abc import Iterable
 from pathlib import Path
 
 from nl2sparql.context.bm25 import tokenize
+from nl2sparql.context.schema import words
 from nl2sparql.models import CodeEntry
 
 ICD_CODE_RE = re.compile(r"\b([A-Z]\d{2}(?:\.\d{1,2})?)\b")
@@ -44,6 +50,17 @@ def _word(token: str) -> str:
 
 def label_words(text: str) -> set[str]:
     return {_word(token) for token in tokenize(SEMANTIC_TAG_RE.sub("", text))}
+
+
+def class_name_words(class_names: Iterable[str]) -> set[frozenset[str]]:
+    """The word sets of the class names made of two or more words: what a code label may not restate
+    ("Imaging (procedure)" is sphn:ImagingProcedure; a one-word name such as Death stays a concept)."""
+    found = set()
+    for name in class_names:
+        parts = words(name)
+        if len(parts) >= 2:
+            found.add(frozenset(_word(token) for token in tokenize(" ".join(parts))))
+    return found
 
 
 def parent_code(code: str) -> str | None:
@@ -140,7 +157,8 @@ class TerminologyIndex:
             }
         return self._implied[word]
 
-    def candidates(self, text: str, k: int = 5) -> list[CodeEntry]:
+    def candidates(self, text: str, k: int = 5, class_names: Iterable[str] = ()) -> list[CodeEntry]:
+        """The best k codes for the text; with class_names, none whose label restates a class name."""
         if k <= 0:
             return []
         score_by_code = {code: 10.0 for code in ICD_CODE_RE.findall(text) if code in self.by_code}
@@ -158,8 +176,16 @@ class TerminologyIndex:
             code = self.entries[position].code
             if score >= 0.5 and score > score_by_code.get(code, 0.0):
                 score_by_code[code] = score
-        ranked = sorted(score_by_code, key=lambda code: (-score_by_code[code], self.position[code]))
+        restated = class_name_words(class_names)
+        ranked = [code for code in sorted(score_by_code, key=lambda code: (-score_by_code[code], self.position[code]))
+                  if not self._restates(code, restated)]
         return [self.by_code[code] for code in self._with_children(ranked[:k], k)]
+
+    def _restates(self, code: str, class_words: set[frozenset[str]]) -> bool:
+        """True when one of the code's labels, semantic tag included, is exactly the words of a class name."""
+        return bool(class_words) and any(
+            frozenset(_word(token) for token in tokenize(label)) in class_words for label in self.by_code[code].labels
+        )
 
     def _with_children(self, codes: list[str], k: int) -> list[str]:
         """The direct matches, then the subcodes the index knows for each of them, as far as k allows.

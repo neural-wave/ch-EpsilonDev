@@ -30,7 +30,7 @@ request ─► input check ─┬─► intent agent (LLM, JSON) ─────
 - **The query agent** gets the request and the context (3 similar examples, schema cards, code candidates) and writes one SPARQL query. It translates literally, forbidden parts included, so the guard can judge them.
 - **The judge and the guard are code, not models** (module D, see [GUARD.md](GUARD.md)). The judge repairs what needs no model (prefixes, three syntax mistakes, inference on a variable class, a date plus a duration, a typed value-set entry), checks syntax with hints that name the real error, terms absent from the data, and the three families of checks in `judge_checks/` (variable scope, semantics, schema). The guard applies the five rules to the query and combines them with the intent flags.
 
-**Retry rules.** The judge and the guard each have one retry (`MAX_RETRIES` per checker), so the query agent is called at most three times per request:
+**Retry rules.** The judge and the guard each have one retry (`MAX_RETRIES` per checker), and the judge gets one more when its first retry was spent on syntax errors alone (`judge x2`), so the query agent is called at most four times per request, inside `REQUEST_TIMEOUT_SECONDS`:
 - **The judge** asks for it when the query is invalid. The orchestrator first waits for the intent result, because a flagged request gets no retry at all.
 - **The guard** asks for it only when the request is not flagged and the query breaks a rule.
 - **A flagged request** never gets a retry, from the judge or from the guard.
@@ -74,9 +74,11 @@ Settings come from environment variables (README §7). Each agent has its own:
 | Prompt version | `INTENT_PROMPT_VERSION` (v4) | `QUERY_PROMPT_VERSION` (v4) |
 | JSON mode | on | off |
 
-Both agents also share `LLM_TIMEOUT_SECONDS` and `LLM_VERIFY_TLS`, and the temperature is always 0. The console shows the resolved values, with secrets hidden.
+Both agents also share `LLM_TIMEOUT_SECONDS` and `LLM_VERIFY_TLS`. The temperature is 0 unless the extra request fields set it (`"temperature"`, `"top_p"`, `"top_k"`), which only a thinking-mode experiment does. The console shows the resolved values, with secrets hidden.
 
-**Qwen3.x needs thinking off**: `LLM_EXTRA_BODY='{"chat_template_kwargs": {"enable_thinking": false}}'`. Otherwise it spends its whole answer budget thinking and returns nothing.
+**The model in use** (since 17 October 21:00) is `cyankiwi/Qwen3.6-27B-AWQ-INT4` for both agents; before, `Qwen/Qwen3.5-9B`. Every model change, its reason, its reports and the decision are in [MODEL_HISTORY.md](MODEL_HISTORY.md); add an entry there whenever you change the model or what it sees.
+
+**Qwen3.x needs thinking off**: `LLM_EXTRA_BODY='{"chat_template_kwargs": {"enable_thinking": false}}'`. Otherwise it spends its whole answer budget thinking and returns nothing. To test thinking on, give it room and sampling as Qwen's model card asks (greedy decoding loops): `LLM_EXTRA_BODY='{"chat_template_kwargs": {"enable_thinking": true}, "temperature": 0.6, "top_p": 0.95, "top_k": 20}'`, `LLM_INTENT_EXTRA_BODY='{"chat_template_kwargs": {"enable_thinking": false}}'`, `LLM_QUERY_MAX_TOKENS=8000`, `LLM_TIMEOUT_SECONDS=300`, `REQUEST_TIMEOUT_SECONDS=400`.
 
 ## 4. What every request records
 
@@ -88,12 +90,15 @@ Both agents also share `LLM_TIMEOUT_SECONDS` and `LLM_VERIFY_TLS`, and the tempe
 
 | Key | Meaning |
 |---|---|
-| `retry_reason` | `judge`, `guard` or `judge+guard`: who asked for a retry |
-| `first_try_sparql` | The first answer; when both checkers retried, the retry the second one rejected is in `rejected_retry_sparql` |
+| `retry_reason` | `judge`, `judge x2`, `guard`, `judge+guard` or `judge x2+guard`: who asked for a retry (`x2`: the judge's extra call after a retry spent on syntax errors alone) |
+| `first_try_sparql` | The first answer; when the judge asked twice, the first retry is in `first_retry_sparql`; when both checkers retried, the retry the guard rejected is in `rejected_retry_sparql` |
+| `kept_first_try`, `kept_first_retry`, `worse_retry_sparql` | A judge retry that was worse than the attempt before it was dropped: its errors, and the dropped answer |
+| `guard_kept_first_try`, `guard_worse_retry_sparql` | The guard's retry still broke a rule or did not parse and was worse by the judge's severity, so the attempt the guard rejected stays the answer |
+| `judge_retry_skipped` | `deadline`: the judge's extra call would not have fitted before `REQUEST_TIMEOUT_SECONDS` |
 | `judge_repairs` | What the judge fixed without the model (`GROUP BY true` dropped, a prefix rewritten, ...) |
 | `intent_flag_cleared` | `asks_for_identifiers` was cleared by the counting-request post-check |
-| `judge_errors_first_try`, `guard_violations_first_try` | Why the first try was rejected |
-| `judge_errors_final` | Still invalid after the retry |
+| `judge_errors_first_try`, `judge_errors_first_retry`, `guard_violations_first_try` | Why an attempt was rejected: the first try by the judge, the first retry by the judge (before its extra call), the attempt the guard saw first |
+| `judge_errors_final` | The judge's errors on the answer returned; absent when it is clean |
 | `cut_off` | Steps whose answer hit the answer cap: `intent`, `query`, `query_retry` |
 | `intent_invalid_json` | The intent answer was not the expected JSON |
 | `intent_fallback` | The keyword rules gave the flags instead of the model: `error` (the call failed), `invalid_json` or `cut_off` |
@@ -105,7 +110,7 @@ Both agents also share `LLM_TIMEOUT_SECONDS` and `LLM_VERIFY_TLS`, and the tempe
 
 The keyword rules detect less (74% on the 73 intent questions), so a fallback is a safety net, not a substitute.
 
-When the query agent's answer was cut off and the judge rejects it, the retry feedback starts with *"Your previous answer was cut off at the length limit. Write a shorter query and no explanation."*
+When the query agent's answer was cut off and the judge or the guard rejects it, the retry feedback starts with *"Your previous answer was cut off at the length limit. Write a shorter query and no explanation."*
 
 ## 5. Measuring
 

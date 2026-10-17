@@ -1,12 +1,39 @@
-name: tests
+name: Project CI/CD
 
 on:
+  pull_request:
   push:
     branches: [main]
-  pull_request:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish the tested image to GHCR (main or version tag only)
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  NL2SPARQL_BACKEND: stub
+  DEMO_PUBLIC_MODE: 'false'
+  DEMO_MIN_GROUP_SIZE: disabled
+  PYTHONDONTWRITEBYTECODE: '1'
+  DOCKER_BUILD_RECORD_UPLOAD: 'false'
 
 jobs:
-  pytest:
+  repository:
+    name: Release-file boundary
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -14,8 +41,7 @@ jobs:
         # The oldest supported version, the team's default, and the newest: rdflib 7.1.1 broke on 3.14.
         python-version: ["3.11", "3.12", "3.14"]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           python-version: ${{ matrix.python-version }}
       - run: pip install -r requirements.txt

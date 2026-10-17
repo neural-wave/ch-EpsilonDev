@@ -12,7 +12,9 @@ __agg_N__ names restart in every sub-select, so an Extend is only ever resolved 
 AggregateJoin below it.
 
 Every check takes the ParsedQuery of parse_sparql and returns hint sentences that name the variable.
-A false alarm costs the request its retry, so each check prefers a miss over a doubtful hit.
+A false alarm costs the request its retry, so each check prefers a miss over a doubtful hit. The remedy
+of a hint is built from the query's own variables: the model follows the hint to the letter, and the
+17 October runs showed a patient-level template (BIND(?g AS ?x)) copied into columns that count records.
 """
 from __future__ import annotations
 
@@ -23,9 +25,18 @@ from rdflib import Literal, URIRef, Variable
 from rdflib.namespace import RDF
 from rdflib.plugins.sparql.parserutils import CompValue
 
+from nl2sparql.context.schema import words
 from nl2sparql.sparql.parse import ParsedQuery
 from nl2sparql.sparql.prefixes import SPHN
 
+# Words that name patients or records in a column alias, shared with the semantic checks.
+PATIENT_WORDS = ("patient", "subject", "people", "person", "individual")
+RECORD_WORDS = (
+    "record", "episode", "event", "stay", "case", "prescription", "diagnos", "procedure", "test", "visit",
+    "admission", "administration", "intake", "sample", "measurement", "follow", "allerg", "consent", "variant",
+    "surger", "radiother", "drug", "lab", "report", "entry", "entries",
+)
+ALIAS_WORD_RE = re.compile(r"[A-Z]?[a-z]+|[A-Z]+|\d+")
 AGGREGATE_NAMES = {
     "Aggregate_Count": "COUNT", "Aggregate_Sum": "SUM", "Aggregate_Avg": "AVG", "Aggregate_Min": "MIN",
     "Aggregate_Max": "MAX", "Aggregate_Sample": "SAMPLE", "Aggregate_GroupConcat": "GROUP_CONCAT",
@@ -273,25 +284,90 @@ def _unbound_in_scope(project, select_star: bool) -> list[str]:
                 "or a pattern that binds it."
             )
     for (name, variable), aggregate in aggregates.items():
+        rendered = f"{name}({'DISTINCT ' if aggregate.distinct else ''}?{variable})"
         if variable in nested:
             hints.append(
-                f"{name}(?{variable}): ?{variable} is not bound in this scope "
-                "(a sub-select only exports the variables it projects)."
+                f"{rendered}: ?{variable} is not bound in this scope (a sub-select only exports the variables "
+                f"it projects): add ?{variable} to the sub-select's SELECT."
             )
         elif name == "COUNT":
-            hints.append(
-                f"{name}(?{variable}): nothing binds ?{variable}. Count a subgroup with "
-                f"OPTIONAL {{ GRAPH ?g {{ <condition> }} BIND(?g AS ?{variable}) }} and COUNT(DISTINCT ?{variable})."
-            )
+            hints.append(_unbound_count_hint(project, variable, rendered))
         else:
             hint = (
-                f"{name}(?{variable}): nothing binds ?{variable}: add BIND(<expression> AS ?{variable}) "
+                f"{rendered}: nothing binds ?{variable}: add BIND(<expression> AS ?{variable}) "
                 "or a pattern that binds it."
             )
             if name in ("AVG", "MAX", "MIN") and any(word in str(variable).lower() for word in PER_PATIENT_WORDS):
                 hint += " " + _per_patient_sketch(project, variable)
             hints.append(hint)
     return hints
+
+
+def _unbound_count_hint(project, variable, rendered: str) -> str:
+    """The remedy for a COUNT over a variable nothing binds, from the alias and the records in scope.
+
+    ?guided_proc next to a typed ?proc, or any alias named after records, counts records: the remedy
+    binds the record of the pattern. Only an alias named after patients, or after nothing, gets the
+    patient subgroup BIND(?g AS ?x) (q-060's ?g_with_abx); the 17 October runs copied that form into
+    record columns (q-011, q-074, q-076) and the counts came out as patients.
+    """
+    records = _typed_records(project.p)
+    name = str(variable)
+    # ?guided_proc names ?proc even when a sub-select hides it (q-074): the alias was derived from the record.
+    suffix = next((record for record in _typed_records(project.p, in_scope_only=False) if name != str(record) and name.endswith(f"_{record}")), None)
+    if suffix is not None:
+        return (
+            f"{rendered}: nothing binds ?{variable}. It counts ?{suffix} records, so bind the record, not the patient: "
+            f"OPTIONAL {{ GRAPH ?g {{ <condition on ?{suffix}> }} BIND(?{suffix} AS ?{variable}) }} and "
+            f"COUNT(DISTINCT ?{variable})."
+        )
+    alias_words = _alias_words(variable)
+    if _mentions(alias_words, RECORD_WORDS) and not _mentions(alias_words, PATIENT_WORDS):
+        record = _matching_record(alias_words, records)
+        if record is not None:
+            return (
+                f"{rendered}: nothing binds ?{variable}. The column counts records: bind the sphn:{records[record]} "
+                f"record of that pattern, BIND(?{record} AS ?{variable}), and COUNT(DISTINCT ?{variable}); or one row "
+                "per kind with VALUES (?concept ?kind) { ... } and GROUP BY ?kind."
+            )
+        return (
+            f"{rendered}: nothing binds ?{variable}. The column counts records: COUNT(DISTINCT ?record) of that "
+            "pattern, or one row per kind with VALUES (?concept ?kind) { ... } and GROUP BY ?kind."
+        )
+    return (
+        f"{rendered}: nothing binds ?{variable}. Count a subgroup with "
+        f"OPTIONAL {{ GRAPH ?g {{ <condition> }} BIND(?g AS ?{variable}) }} and COUNT(DISTINCT ?{variable})."
+    )
+
+
+def _typed_records(pattern, in_scope_only: bool = True) -> dict[Variable, str]:
+    """Variable -> SPHN class of every '?x a sphn:Class' pattern under the pattern, by default only the
+    records the scope can read (its own patterns and what its sub-selects project)."""
+    records: dict[Variable, str] = {}
+    in_scope = _in_scope(pattern) if in_scope_only else None
+    for subject, predicate, obj in (triple for bgp in _find(pattern, "BGP") for triple in bgp.triples):
+        if predicate == RDF.type and isinstance(subject, Variable) and isinstance(obj, URIRef) and str(obj).startswith(SPHN):
+            if in_scope is None or subject in in_scope:
+                records.setdefault(subject, str(obj)[len(SPHN):])
+    return records
+
+
+def _matching_record(alias_words: list[str], records: dict[Variable, str]) -> Variable | None:
+    """The record whose class shares a word with the alias (?telephone_followup -> ?record a sphn:FollowUp),
+    else the first record of the scope."""
+    for record, cls in records.items():
+        class_words = words(cls)
+        if any(len(word) >= 4 and (word.startswith(part) or part.startswith(word)) for word in alias_words for part in class_words):
+            return record
+    return next(iter(records), None)
+
+
+def _alias_words(alias: Variable) -> list[str]:
+    return [word.lower() for word in ALIAS_WORD_RE.findall(str(alias))]
+
+
+def _mentions(alias_words: list[str], stems: tuple) -> bool:
+    return any(word.startswith(stem) for word in alias_words for stem in stems)
 
 
 def _per_patient_sketch(project, variable) -> str:

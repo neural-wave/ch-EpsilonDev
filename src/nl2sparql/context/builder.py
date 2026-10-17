@@ -30,8 +30,10 @@ class ContextBuilder:
         examples = self.examples.search(text, self.k_examples, exclude_exact=self.exclude_exact_examples)
         # Classes named in the question first, then the ones the retrieved examples use.
         examples_sparql = "\n".join(example.sparql for example in examples)
+        # No candidate that only restates a class name; a candidate that is a value-set member pulls its class's card.
+        code_candidates = self.terminology.candidates(text, self.k_codes, class_names=self.schema.classes)
         return Context(
             examples=examples,
-            schema_cards=self.schema.cards_for(text, self.k_cards, examples_sparql=examples_sparql),
-            code_candidates=self.terminology.candidates(text, self.k_codes),
+            schema_cards=self.schema.cards_for(text, self.k_cards, examples_sparql=examples_sparql, codes=code_candidates),
+            code_candidates=code_candidates,
         )

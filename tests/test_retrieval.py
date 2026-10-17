@@ -1,5 +1,7 @@
 """Retrieval fixes of 17 October: example shapes and the team's retrieval-only examples (#17),
-terminology candidates matched by one word, English aliases and subcodes (#16)."""
+terminology candidates matched by one word, English aliases and subcodes (#16), and the dev reference
+queries as retrieval examples behind CONTEXT_DEV_REFERENCES (lever B)."""
+import asyncio
 import json
 import sys
 from pathlib import Path
@@ -7,10 +9,14 @@ from pathlib import Path
 import pytest
 
 from conftest import DATA_DIR
+from nl2sparql.agents.query_examples import FALLBACK_QUERY
 from nl2sparql.config import Settings
 from nl2sparql.context import ExampleBank, SchemaCards, TerminologyIndex
-from nl2sparql.context.examples import needed_shape
-from nl2sparql.context.terminology import parent_code
+from nl2sparql.context.bm25 import normalize_text
+from nl2sparql.context.examples import DEV_REFERENCE_SOURCE, needed_shape, reference_shape
+from nl2sparql.context.terminology import class_name_words, parent_code
+from nl2sparql.factory import DEV_REFERENCES_PATH, build_pipeline
+from nl2sparql.input_check import normalize_text as check_input
 from nl2sparql.judge import Judge
 from nl2sparql.models import CodeEntry, Example
 from nl2sparql.sparql.parse import parse_sparql
@@ -172,6 +178,159 @@ def test_real_bank_offers_the_team_examples_for_their_shapes():
     assert "official-03" not in [item.id for item in bank.search(bank.examples[2].question, k=3, exclude_exact=True)]
 
 
+# --- Lever B: the dev reference queries as retrieval examples (CONTEXT_DEV_REFERENCES) ---------------
+
+
+def query_rows(split: str) -> list[dict]:
+    """Rows of eval/query_questions.jsonl. Holdout rows are only counted and compared, never printed."""
+    lines = DEV_REFERENCES_PATH.read_text(encoding="utf-8").splitlines()
+    return [row for row in map(json.loads, filter(str.strip, lines)) if row["split"] == split]
+
+
+def test_dev_references_follow_the_official_and_team_examples_with_derived_shapes(tmp_path):
+    assert DEV_REFERENCES_PATH == Path(__file__).resolve().parents[1] / "eval" / "query_questions.jsonl"
+    official_and_team = ExampleBank.load(DATA_DIR / "examples.jsonl")
+    bank = ExampleBank.load(DATA_DIR / "examples.jsonl", DEV_REFERENCES_PATH)
+    dev = query_rows("dev")
+    assert len(official_and_team.examples) == 19 and len(dev) == 45
+    assert bank.examples[:19] == official_and_team.examples and bank.shapes[:19] == official_and_team.shapes
+    assert [(item.id, item.question, item.sparql, item.compliant, item.source) for item in bank.examples[19:]] == [
+        (row["id"], row["question"], row["reference_sparql"], True, DEV_REFERENCE_SOURCE) for row in dev]
+    shapes = dict(zip((item.id for item in bank.examples), bank.shapes))
+    assert {key: shapes[key] for key in ("q-001", "q-003", "q-013", "q-022", "q-025", "q-029", "q-068", "q-071")} == {
+        "q-001": "breakdown", "q-003": "plain", "q-013": "conditional_count",
+        "q-022": "conditional_count",  # a share of stays: BIND(?case AS ?x) in the OPTIONAL block
+        "q-025": "two_cohort", "q-029": "breakdown",  # BIND(?g AS ?x) in a UNION branch is no share
+        "q-068": "two_cohort", "q-071": "plain",  # GROUP BY ?g in a sub-select is no breakdown
+    }
+    # A machine without eval/: the flag does nothing.
+    assert ExampleBank.load(DATA_DIR / "examples.jsonl", tmp_path / "missing.jsonl").examples == official_and_team.examples
+
+
+def holdout_leaks(bank: ExampleBank) -> tuple[int, int, int, int]:
+    """The number of holdout rows, then how many of their ids, questions and queries the bank holds.
+    Only numbers leave this function, so a failing test prints no holdout text (not even with -l)."""
+    holdout = query_rows("holdout")
+    questions = {normalize_text(item.question) for item in bank.examples}
+    return (len(holdout),
+            len({row["id"] for row in holdout} & {item.id for item in bank.examples}),
+            sum(normalize_text(row["question"]) in questions for row in holdout),
+            len({row["reference_sparql"] for row in holdout} & {item.sparql for item in bank.examples}))
+
+
+def test_no_holdout_row_ever_enters_the_bank():
+    rows, *leaked = holdout_leaks(ExampleBank.load(DATA_DIR / "examples.jsonl", DEV_REFERENCES_PATH))
+    assert rows > 0 and leaked == [0, 0, 0]
+
+
+def test_dev_reference_reader_keeps_only_rows_marked_dev(tmp_path):
+    (tmp_path / "examples.jsonl").write_text(
+        json.dumps({"id": "o", "question": "alpha", "sparql": "SELECT", "compliant": True}) + "\n")
+    references = tmp_path / "query_questions.jsonl"
+    rows = [
+        {"id": "d", "question": "beta", "reference_sparql": "SELECT * WHERE { ?s ?p ?o }", "split": "dev"},
+        {"id": "h", "question": "gamma", "reference_sparql": "SELECT", "split": "holdout"},
+        {"id": "h-incomplete", "split": "holdout"},  # skipped before its fields are read
+        {"id": "n", "question": "delta", "reference_sparql": "SELECT"},  # no split: the eval says dev, the bank skips it
+        {"id": "c", "question": "epsilon", "reference_sparql": "SELECT", "split": "Dev"},
+    ]
+    references.write_text("\n".join(json.dumps(row) for row in rows) + "\n\n", encoding="utf-8")
+    bank = ExampleBank.load(tmp_path / "examples.jsonl", references)
+    assert [(item.id, item.source) for item in bank.examples] == [("o", ""), ("d", DEV_REFERENCE_SOURCE)]
+    assert bank.shapes == ["plain", "plain"]
+    references.write_text(json.dumps({"id": "h", "question": "do not quote me", "split": "holdout"}) + "\n"
+                          + json.dumps({"id": "d", "question": 7, "reference_sparql": "SELECT", "split": "dev"}) + "\n")
+    with pytest.raises(ValueError, match=r"dev references file .* line 2: field 'question'") as error:
+        ExampleBank.load(tmp_path / "examples.jsonl", references)
+    assert "quote" not in str(error.value)
+    references.write_text("[1, 2]\n")
+    with pytest.raises(ValueError, match="line 1: row must be a JSON object"):
+        ExampleBank.load(tmp_path / "examples.jsonl", references)
+
+
+COHORT_SPLIT = 'BIND (IF(EXISTS { GRAPH ?g { ?dx a sphn:BilledDiagnosis . } }, "cholera", "other") AS ?cohort)'
+PATIENT_SHARE = "OPTIONAL { GRAPH ?g { ?event a sphn:AdverseEvent . } BIND (?g AS ?ae_patient) }"
+
+
+@pytest.mark.parametrize("sparql,shape", [
+    (f"SELECT ?cohort (COUNT(DISTINCT ?g) AS ?n) WHERE {{ GRAPH ?g {{ ?s a sphn:AdministrativeSex . }} {COHORT_SPLIT} }} "
+     "GROUP BY ?cohort", "two_cohort"),
+    (f"SELECT ?cohort (COUNT(DISTINCT ?ae_patient) AS ?n) WHERE {{ GRAPH ?g {{ ?s a sphn:AdministrativeSex . }} "
+     f"{PATIENT_SHARE} {COHORT_SPLIT} }} GROUP BY ?cohort", "two_cohort"),  # a cohort comparison wins over a share
+    (f"SELECT (COUNT(DISTINCT ?ae_patient) AS ?n) WHERE {{ GRAPH ?g {{ ?a a sphn:Allergy . }} {PATIENT_SHARE} }}",
+     "conditional_count"),
+    ("SELECT ?decade (COUNT(DISTINCT ?fatal) AS ?n) WHERE { GRAPH ?g { ?event a sphn:AdverseEvent . } "
+     "optional { GRAPH ?g { ?event sphn:hasOutcome ?o . } bind(?event as ?fatal) } } GROUP BY ?decade", "conditional_count"),
+    ("SELECT ?sex (COUNT(DISTINCT ?bmi_patient) AS ?n) WHERE { { GRAPH ?g { ?b a sphn:BodyMassIndex . } "
+     "BIND (?g AS ?bmi_patient) } UNION { GRAPH ?g { ?r a sphn:BloodPressure . } } } GROUP BY ?sex", "breakdown"),
+    ("SELECT (COUNT(DISTINCT ?p) AS ?n) WHERE { GRAPH ?g { ?b a sphn:Birth . } "
+     "OPTIONAL { GRAPH ?g { ?d a sphn:Death . } } BIND (?g AS ?p) }", "plain"),  # the BIND is outside the OPTIONAL
+    ("SELECT (MAX(?tests) AS ?most) WHERE { { SELECT ?g (COUNT(?e) AS ?tests) WHERE { GRAPH ?g { ?e a sphn:LabTestEvent . } } "
+     "GROUP BY ?g } }", "plain"),
+    ("select ?year (count(*) as ?n) where { ?e sphn:hasDateTime ?t . bind(year(?t) as ?year) } group by ?year", "breakdown"),
+    ("SELECT ?s (COUNT(*) AS ?n) { ?x ?p ?s } GROUP BY ?s VALUES ?s { 1 2 }", "breakdown"),  # no WHERE, trailing VALUES
+    ("SELECT (COUNT(DISTINCT ?x) AS ?n) WHERE { GRAPH ?g { ?b a sphn:Birth . } "
+     "BIND (IF(NOT EXISTS { GRAPH ?g { ?c a sphn:Nationality . } }, ?g, ?none) AS ?x) }", "plain"),
+    ("SELECT (COUNT(DISTINCT ?g) AS ?patients) WHERE { GRAPH ?g { ?dx a sphn:BilledDiagnosis . } }", "plain"),
+])
+def test_reference_shape_rules(sparql, shape):
+    assert reference_shape(sparql) == shape
+
+
+def test_reference_shape_reproduces_the_hand_tags_but_one():
+    """Calibration on the hand-tagged files: only official-04, a share counted by IF(NOT EXISTS ...), differs."""
+    bank = ExampleBank.load(DATA_DIR / "examples.jsonl")
+    differing = [item.id for item, shape in zip(bank.examples, bank.shapes) if reference_shape(item.sparql) != shape]
+    assert differing == ["official-04"]
+
+
+def test_official_examples_win_ties_over_dev_references(tmp_path):
+    (tmp_path / "examples.jsonl").write_text(
+        json.dumps({"id": "o", "question": "cholera patients by year", "sparql": "SELECT", "compliant": True}) + "\n")
+    references = tmp_path / "query_questions.jsonl"
+    references.write_text(json.dumps({"id": "d", "question": "cholera patients by sex", "reference_sparql": "SELECT",
+                                      "split": "dev"}) + "\n")
+    bank = ExampleBank.load(tmp_path / "examples.jsonl", references)
+    assert [item.id for item in bank.search("How many cholera patients?", k=2)] == ["o", "d"]
+
+
+class RecordingQueryAgent:
+    """Stands in for the model: records the text and the examples it is shown, answers a fixed query."""
+
+    def __init__(self):
+        self.shown: list[tuple[str, list[str]]] = []
+
+    async def generate(self, text, context, feedback=None):
+        self.shown.append((text, [item.id for item in context.examples]))
+        return FALLBACK_QUERY, 0
+
+
+def test_a_dev_question_never_retrieves_its_own_reference():
+    """The eval runs the pipeline with exclude_exact_examples=True. The orchestrator hands the context
+    builder the input-checked text, and the exclusion must match each reference on exactly that text."""
+    pipeline = build_pipeline(Settings(data_dir=DATA_DIR, log_path=None, context_dev_references=True),
+                              exclude_exact_examples=True)
+    pipeline.query_agent = agent = RecordingQueryAgent()
+    bank, dev = pipeline.context_builder.examples, query_rows("dev")
+
+    async def run_all():
+        for row in dev:
+            await pipeline.run(row["question"])
+
+    asyncio.run(run_all())
+    assert len(bank.examples) == 64 and len(dev) == 45 and holdout_leaks(bank)[1:] == (0, 0, 0)
+    shown = {}
+    for text, found in agent.shown:
+        shown.setdefault(text, []).append(found)
+    for row in dev:
+        text = check_input(row["question"])
+        assert normalize_text(text) == normalize_text(row["question"]) and shown.get(text), row["id"]
+        assert all(row["id"] not in found for found in shown[text]), row["id"]
+        # Without the exclusion its own reference is the best match, and the exclusion drops nothing else.
+        assert bank.search(text, k=1)[0].id == row["id"], row["id"]
+        assert len(bank.search(text, k=len(bank.examples), exclude_exact=True)) == len(bank.examples) - 1, row["id"]
+
+
 # --- #16: terminology candidates ----------------------------------------------------------------
 
 
@@ -276,3 +435,25 @@ def test_subcodes_follow_a_matched_code_without_displacing_direct_matches():
 ])
 def test_parent_code(code, parent):
     assert parent_code(code) == parent
+
+
+def test_a_candidate_whose_label_restates_a_class_name_is_dropped_for_the_next_one():
+    """"Imaging (procedure)" only spells out sphn:ImagingProcedure (q-057 and q-074 typed the intent with it);
+    a label with more words, or a one-word class name, stays a candidate."""
+    index = TerminologyIndex([
+        CodeEntry("https://example.test/snomed/363679005", "363679005", "SNOMED CT", ("Imaging (procedure)",)),
+        CodeEntry("https://example.test/snomed/429892002", "429892002", "SNOMED CT", ("Guidance intent (qualifier value)",)),
+        CodeEntry("https://example.test/snomed/363680008", "363680008", "SNOMED CT", ("Diagnostic imaging (procedure)",)),
+        CodeEntry("https://example.test/snomed/419620001", "419620001", "SNOMED CT", ("Death (event)",)),
+        CodeEntry("https://example.test/snomed/75367002", "75367002", "SNOMED CT", ("Blood pressure (observable entity)",)),
+    ])
+    classes = ["ImagingProcedure", "Death", "BloodPressure", "DrugAdministrationEvent"]
+    question = "How many diagnostic imaging procedures were done to guide another, and how many deaths and blood pressures?"
+    codes = lambda **kw: [entry.code for entry in index.candidates(question, **kw)]  # noqa: E731
+    assert codes(k=2) == ["363679005", "363680008"]  # without class names nothing is dropped
+    assert codes(k=2, class_names=classes) == ["363680008", "419620001"]  # the freed slot goes to the next candidate
+    assert codes(k=5) == ["363679005", "363680008", "419620001", "75367002"]
+    assert codes(k=5, class_names=classes) == ["363680008", "419620001", "75367002"]
+    assert class_name_words(classes) == {frozenset({"imaging", "procedure"}), frozenset({"blood", "pressure"}),
+                                         frozenset({"drug", "administration", "event"})}
+    assert index.candidates("", class_names=classes) == [] and index.candidates(question, k=0, class_names=classes) == []
