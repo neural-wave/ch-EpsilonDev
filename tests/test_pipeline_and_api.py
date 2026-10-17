@@ -234,8 +234,7 @@ def test_judge_error_uses_the_retry():
     agent = ScriptedQueryAgent("SELECT ?x WHERE {", EXAMPLES["official-03"])
     result = asyncio.run(pipeline_with(agent).run("Cholera by sex?"))
     assert result.is_compliant and result.retries == 1 and result.tokens_consumed == 110
-    assert agent.feedback[1].startswith("Syntax error")
-    assert "The rejected query was:\n" in agent.feedback[1] and "SELECT ?x WHERE {" in agent.feedback[1]
+    assert agent.feedback[1].startswith("Syntax error") and "rejected query" not in agent.feedback[1]
     assert result.diagnostics["retry_reason"] == "judge"
     assert result.diagnostics["judge_errors_first_try"][0].startswith("Syntax error")
     assert result.tokens_consumed == sum(result.tokens_by_step.values())
@@ -275,12 +274,13 @@ def test_keyword_fallback_keeps_the_request_alive_when_the_intent_model_fails():
     assert result.diagnostics["intent_fallback"] == "error" and "intent_invalid_json" not in result.diagnostics
 
 
-def test_retry_feedback_can_leave_the_previous_query_out():
+def test_retry_feedback_can_carry_the_previous_query():
     agent = ScriptedQueryAgent(EXAMPLES["official-12"], EXAMPLES["official-03"])
     pipeline = pipeline_with(agent)
-    pipeline.retry_with_previous_query = False
+    pipeline.retry_with_previous_query = True
     asyncio.run(pipeline.run("Cholera cases by sex?"))
-    assert agent.feedback[1].startswith("The previous query breaks the privacy rules") and "rejected query" not in agent.feedback[1]
+    assert agent.feedback[1].startswith("The previous query breaks the privacy rules")
+    assert "The rejected query was:\n" in agent.feedback[1] and "GROUP_CONCAT" in agent.feedback[1]
 
 
 def test_guard_retry_failure_keeps_the_first_query_and_verdict():

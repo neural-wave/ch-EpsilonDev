@@ -34,7 +34,8 @@ The jury scores three things: **time per request**, **verdict correctness** agai
 | 17 Oct 13:20 | **intent v4, query v4, cap 1,500**, index + value sets, context 3/6/5 | | 94.0% (1 leak of 88, 8 of 61 allowed blocked) | **91.8%** (2 leaks of 29, 2 of 20 allowed blocked) | 3.8 s / 13.7 s (4 at a time) | ~3,800 |
 | 17 Oct 13:31 | as above, **2 examples instead of 3** (rejected) | | query eval only: queries that run 77% → 60%, allowed blocked 5 → 13, exact 3 → 1, query tokens 3,369 → 3,908 (more guard retries) | | | |
 | 17 Oct 13:39 | query **v5** (v4 + speed rules incl. `DEFINE sql:select-option "order"`), rejected | | 93.3% (1 leak, 9 allowed blocked) | **81.6%** (2 leaks, 7 of 20 allowed blocked) | 3.7 s / 19.7 s | ~4,090 |
-| next | query v6: v4 + "inference only on concrete codes" + "only the patterns the question needs", without the DEFINE | | | | | |
+| 17 Oct 14:20 | v4 + **retry feedback carries the rejected query** (rejected) | | 94.0% | **85.7%** (2 leaks, 5 allowed blocked) | 3.8 s / 14.5 s | ~3,850 |
+| 17 Oct 14:35 | v4 again, same configuration (**noise check**) | | | | | |
 
 ### Intent agent alone
 
@@ -95,7 +96,7 @@ A request without retry, Qwen3.5-9B, merged system:
 ## 4. Levers, ranked by expected gain
 
 **Time**
-1. **Fewer retries.** Better judge hints and the Virtuoso-only checks in code (module D); shorter, simpler queries from the prompt (module B).
+1. **Fewer retries.** Better judge hints and the Virtuoso-only checks in code (module D); shorter, simpler queries from the prompt (module B). ~~Showing the model its rejected query on the retry~~: measured on 17 October and rejected: the model copies the broken query instead of fixing it (judge retries ending valid 8/18 → 3/19, queries that run 67% → 48%).
 2. **A faster model for the query agent.** Qwen3-Coder-30B-A3B (4-bit) answered in 3.6 s / 7.5 s against 6.9 s / 19 s, with similar quality but a worse intent agent. The code supports one model per agent (`LLM_INTENT_*`): the 9B for the intent agent, the 30B for queries, on a second GPU instance.
 3. ~~Two examples instead of three~~: measured on 17 October and rejected. With 2 examples fewer queries run (77% → 60%), more allowed questions are blocked (5 → 13) and the retries cost more tokens than the example saved. The examples carry the house style; keep 3.
 

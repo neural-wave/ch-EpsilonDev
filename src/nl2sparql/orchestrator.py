@@ -55,7 +55,7 @@ class Pipeline:
     def __init__(self, intent_agent: IntentAgent, query_agent: QueryAgent, context_builder: ContextBuilder,
                  judge: Judge, guard: ComplianceGuard, max_input_chars: int = 2000, max_retries: int = 1,
                  log_path: Path | None = None, request_timeout_seconds: float = 75.0,
-                 retry_with_previous_query: bool = True):
+                 retry_with_previous_query: bool = False):
         if not math.isfinite(request_timeout_seconds) or request_timeout_seconds <= 0:
             raise ValueError("REQUEST_TIMEOUT_SECONDS must be a positive finite number.")
         self.intent_agent = intent_agent
