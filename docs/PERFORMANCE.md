@@ -36,6 +36,7 @@ The jury scores three things: **time per request**, **verdict correctness** agai
 | 17 Oct 13:39 | query **v5** (v4 + speed rules incl. `DEFINE sql:select-option "order"`), rejected | | 93.3% (1 leak, 9 allowed blocked) | **81.6%** (2 leaks, 7 of 20 allowed blocked) | 3.7 s / 19.7 s | ~4,090 |
 | 17 Oct 14:20 | v4 + **retry feedback carries the rejected query** (rejected) | | 94.0% | **85.7%** (2 leaks, 5 allowed blocked) | 3.8 s / 14.5 s | ~3,850 |
 | 17 Oct 14:35 | v4 again, same configuration (**noise check**) | | 94.6% (1 leak, 7 allowed blocked) | **87.8%** (2 leaks, 4 of 20 allowed blocked) | 3.8 s / 20.2 s | ~3,820 |
+| 17 Oct 14:45 | query **v6** (v4 + inference only on concrete codes, only the patterns the question needs; no DEFINE), rejected: no signal | | 96.0% (1 leak, 5 allowed blocked) | **89.8%** (2 leaks, 3 of 20 allowed blocked) | 3.7 s / 12.6 s | ~3,930 |
 
 **Noise.** Two runs of the same configuration (13:20 and 14:35) differ by 4 points on the holdout (2 of its 49 questions) and flip 9 of the 198 verdicts (7 dev, 2 holdout; dev net +1). Vllm samples at temperature 0 but batching makes the answers non-deterministic, and one holdout question is worth 2 points. So a single run cannot see a change smaller than about 5 holdout points: judge a change on all 198 and on *which* questions flipped (the runs page lists them), not on the holdout percentage alone, and run the final candidate twice before it becomes the default.
 
@@ -64,8 +65,9 @@ The jury scores three things: **time per request**, **verdict correctness** agai
 | 17 Oct 13:00 | **v4** (default) | Qwen3.5-9B, merged system | index + value sets | **1,500** | **3** | **77% (87%)** | 57% | **5** | 3,369 | 6.4 s / 18.3 s |
 | 17 Oct 13:34 | v5 (rejected) | Qwen3.5-9B, merged system | index + value sets | 1,500 | 4 (1 holdout) | 66% (80%) | 72% | 5 | 3,372 | 6.2 s / 11.5 s |
 | 17 Oct 14:10 | **v4, 87 questions** (new baseline; 47 before) | Qwen3.5-9B, merged system | index + value sets | 1,500 | 4 (1 holdout) | 67% (68%) | 62% | 9 | 3,345 | 6.6 s / 16.0 s |
+| 17 Oct 14:41 | v6, 87 questions (rejected) | Qwen3.5-9B, merged system | index + value sets | 1,500 | 4 (1 holdout) | 63% (64%) | 64% | 12 | 3,356 | 6.2 s / 15.7 s |
 
-Reading: the context (codes) made more queries run; the prompt v4 halved the blocked allowed questions; a bigger model did not change the exact-result rate, only the speed. On the 198-question verdict set, v4 with the 1,500 cap took the holdout from 83.7% to 91.8%: 7 dev questions fixed, 3 broken (#08 unparseable, #10 and one more grouped by a record node), retries 33 → 24, cut-off answers 10 → 4. Holdout exact results are 0 in every run: the hard questions are not solved by any configuration yet.
+Reading: the context (codes) made more queries run; the prompt v4 halved the blocked allowed questions; a bigger model did not change the exact-result rate, only the speed. Prompt v6 is within the noise of v4 on the verdict set (dev +1.4 / +2.0 points, holdout between the two v4 runs) and slightly worse on the query eval (queries that run 67% → 63%, blocked 9 → 12; 10 dev questions better, 12 worse): no signal, v4 stays. The failures of the v4 configuration are analyzed case by case in [FAILURE_ANALYSIS.md](FAILURE_ANALYSIS.md), with the fixes ranked by the cases they cover; most of them are code (judge checks, guard policy, context builder), not prompt wording. On the 198-question verdict set, v4 with the 1,500 cap took the holdout from 83.7% to 91.8%: 7 dev questions fixed, 3 broken (#08 unparseable, #10 and one more grouped by a record node), retries 33 → 24, cut-off answers 10 → 4. Holdout exact results are 0 in every run: the hard questions are not solved by any configuration yet.
 
 ### Query time on 100,000 patients
 
