@@ -28,7 +28,7 @@ def test_intent_agent_inherits_the_shared_settings(env):
     intent = Settings.from_env().agent("intent")
     assert intent.model == "Qwen/Qwen3.5-9B" and intent.base_url == "http://shared:18000/v1"
     assert intent.api_key == "shared-key" and intent.extra_body == {"chat_template_kwargs": {"enable_thinking": False}}
-    assert intent.max_tokens == 200 and intent.prompt_version == "v2"
+    assert intent.max_tokens == 200 and intent.prompt_version == "v4"
 
 
 def test_intent_agent_can_have_its_own_server_model_and_options(env):

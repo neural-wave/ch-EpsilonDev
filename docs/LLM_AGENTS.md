@@ -71,7 +71,7 @@ Settings come from environment variables (README §7). Each agent has its own:
 | API key | `LLM_INTENT_API_KEY`, falls back to `LLM_API_KEY` | `LLM_API_KEY` |
 | Extra request fields | `LLM_INTENT_EXTRA_BODY`: unset inherits `LLM_EXTRA_BODY`, `'{}'` sends none | `LLM_EXTRA_BODY` |
 | Answer cap | `LLM_INTENT_MAX_TOKENS` (200) | `LLM_QUERY_MAX_TOKENS` (900) |
-| Prompt version | `INTENT_PROMPT_VERSION` (v2) | `QUERY_PROMPT_VERSION` (v1) |
+| Prompt version | `INTENT_PROMPT_VERSION` (v4) | `QUERY_PROMPT_VERSION` (v1) |
 | JSON mode | on | off |
 
 Both agents also share `LLM_TIMEOUT_SECONDS` and `LLM_VERIFY_TLS`, and the temperature is always 0. The console shows the resolved values, with secrets hidden.
@@ -122,19 +122,28 @@ Run the API (`python -m nl2sparql --port 8080`) and open <http://localhost:8080/
 ### The evals
 
 ```bash
-python eval/run_intent_eval.py        # the intent agent alone: 73 short calls (--shared-only: the 31 below)
+python eval/run_intent_eval.py --concurrency 4   # the intent agent alone: 198 short calls, ~2 min
+python eval/run_intent_eval.py --shared-only     # only the 31 questions below
 python eval/run_eval.py               # the whole pipeline, per-agent numbers in "per_agent"
 python eval/run_eval.py --execute     # also runs compliant queries on the dev Virtuoso
 ```
 
-**Questions:** both evals use the 16 official examples and the 15 team questions in `eval/questions.jsonl` (31 in total). The intent eval adds the 42 cases in `eval/intent_questions.jsonl`, by group:
+**Questions:** both evals use the 16 official examples and the 15 team questions in `eval/questions.jsonl` (31 in total). The intent eval adds the 167 cases in `eval/intent_questions.jsonl`, by group:
 - paraphrases of each rule;
 - traps, where an allowed ask is followed by a forbidden one;
-- prompt injection;
-- allowed look-alikes;
-- gray zones, labeled with the guard's current assumptions (GUARD.md §6).
+- prompt injection, in both directions;
+- allowed look-alikes and realistic research questions;
+- gray zones, labeled with the guard's current assumptions (GUARD.md §6);
+- style variants (typos, telegraphic, rambling, non-native English);
+- German, French and Italian.
 
-That makes 73 questions, 42 forbidden and 31 allowed. Its summary breaks results down by group (`by_group`).
+That makes 198 questions. 125 of them were written by an agent that never saw the intent prompts.
+
+**Splits.**
+- **dev** (149 questions): may be studied one by one to improve a prompt.
+- **holdout** (49 questions): the blind exam. The eval reports it only as aggregate numbers (`by_split`) and leaves its ids out of every list.
+
+Do not tune a prompt on holdout questions, or the exam stops measuring how the prompt does on unseen requests like the jury's.
 
 **Reports:** `eval/reports/` is git-ignored. Every report records the models, prompt versions and answer caps it ran with, so reports stay comparable.
 
@@ -158,7 +167,8 @@ That makes 73 questions, 42 forbidden and 31 allowed. Its summary breaks results
 | Tokens per request | 0 | ~2,100 median, ~3,000 mean |
 | Requests that used the retry | — | about a third (21 of 66 measured) |
 | Intent eval, 31 shared questions: detection / false alarms / right flag | 93.3% / 0% / 90% | 93.3% / 0% (from the request log; it missed #13) |
-| Intent eval, all 73 questions: detection / false alarms / right flag | 73.8% / 3.2% / 70.3% | v1: 90.5% / 0% / 91.9%<br>**v2: 100% / 0% / 100%** (the default) |
+| Intent eval, first 73 questions: detection / false alarms / right flag | 73.8% / 3.2% / 70.3% | v1: 90.5% / 0% / 91.9%<br>v2: 100% / 0% / 100% |
+| Intent eval, 49 holdout questions (blind): detection / false alarms | — | v2: 93.1% / 5%<br>**v4: 93.1% / 5%** (the default) |
 
 ### Where the tokens go
 
@@ -180,8 +190,9 @@ Measured with the real tokenizers on our 31 questions, for a typical request of 
 | Version | What it is | Prompt tokens |
 |---|---|---|
 | v1 | First draft: the five flags in one line each | 260 |
-| **v2** (default) | Fixes v1's failures, in full sentences:<br>• a clearer whole_graph (totals, dumps, overviews; counting patients is fine);<br>• "raise only the flags that apply";<br>• defense against prompt injection;<br>• judges every part of the request;<br>• an explicit list of allowed asks | 489 |
+| v2 | Fixes v1's failures, in full sentences:<br>• a clearer whole_graph (totals, dumps, overviews; counting patients is fine);<br>• "raise only the flags that apply";<br>• defense against prompt injection;<br>• judges every part of the request;<br>• an explicit list of allowed asks | 489 |
 | v3 | The rules of v2 in fewer words, to see whether the extra tokens buy accuracy | 396 |
+| **v4** (default) | v2 tuned on the dev split of the 198 questions:<br>• other query forms (ASK, CONSTRUCT, DESCRIBE) and building a new graph are not_a_select;<br>• part of an ID singles out a patient;<br>• counts over records of any type are whole_graph;<br>• a topic-limited "all" is not whole_graph;<br>• listing records without asking who is not asks_for_identifiers;<br>• the reason completes "The request ..." | 556 |
 
 **Intent eval, Qwen3.5-9B, all 73 questions (2026-10-17):**
 
@@ -200,7 +211,25 @@ Measured with the real tokenizers on our 31 questions, for a typical request of 
 - **v2 costs 240 more tokens per request than v1,** about 8–11% of a request's total. Correctness is a main criterion and tokens a minor one, so v2 is the default.
 - **The latency is still hidden:** the intent agent runs in parallel with the query agent, which takes longer.
 
-**Caveat:** v2 was written after seeing these questions. A fresh set, written by someone who has not read the prompt, is the honest check of how it does on the jury's hidden list.
+v2 was written after seeing these 73 questions, so 100% was optimistic. The bigger set below is the honest check.
+
+**Intent eval, Qwen3.5-9B, 198 questions with a blind holdout (2026-10-17, concurrency 4):**
+
+| | v2 | **v4** |
+|---|---|---|
+| Dev: forbidden detected (of 88) | 85 (96.6%) | **87 (98.9%)** |
+| Dev: false alarms (of 61) | 0 | 1 (#035, "at least one identifier recorded") |
+| Dev: right flag | 94.0% | **98.8%** |
+| **Holdout: forbidden detected (of 29)** | 27 (93.1%) | **27 (93.1%)** |
+| **Holdout: false alarms (of 20)** | 1 (5%) | **1 (5%)** |
+| Holdout: right flag | 89.7% | **93.1%** |
+| Dev reasons that start with "requests" (read "The request requests ...") | 38 of 85 | **2 of 87** |
+| Tokens per call (median) | 558 | 631 |
+
+- **On the blind exam, v4 gives the same verdicts as v2.** It names the right rule more often and writes better sentences for the user, for 72 more tokens per request (about 2–3% of a request's total).
+- **v2 missed on dev:** an explicit ASK query, a graph-name prefix with ID digits, and "records of any type per patient".
+- **v4 still misses** the graph-name prefix. The guard rejects that query anyway (R1).
+- **v4's dev false alarm:** #035 is an allowed count that mentions identifiers.
 
 1. **Add a version, never edit an old one.** Write `INTENT_SYSTEM_V2` or `QUERY_SYSTEM_V2` (and its `render_query_user_v2` if the user message changes) next to v1, and register it in `INTENT_PROMPTS` or `QUERY_PROMPTS`. Old reports then stay comparable.
 2. **Preview it.** Start the API with `INTENT_PROMPT_VERSION=v2` (or `QUERY_PROMPT_VERSION=v2`) and check **Preview prompts** on `/agents`.
@@ -261,7 +290,12 @@ This step runs on the GPU and needs the instance owner's OK. It takes about 15�
 
 ## 9. Backlog for module B (most useful first)
 
-1. **Held-out check of intent prompt v2.** Have someone who has not read the prompt write ~20 new questions (forbidden and allowed), add them to `eval/intent_questions.jsonl` and run the intent eval.
+1. **Intent prompt v5, only if worth it.** Candidates from the dev split:
+   - #035, an allowed count that mentions identifiers;
+   - wordy reasons;
+   - an extra whole_graph on topic-limited exports (#14).
+
+   Keep the holdout blind until the final choice. Each new version risks fitting the dev questions instead of the jury's.
 2. **Apertus comparison** for the intent agent, with prompt v2 ([section 7](#7-changing-a-model-apertus-for-the-intent-agent)).
 3. **Per-agent pipeline baseline.** Run `run_eval.py` with Qwen for the per-agent split and the cut-off counts.
 4. **Fewer retries.** Read the first tries in the pipeline report, then write query prompt v2 with the fixes.
