@@ -49,7 +49,7 @@ def test_factory_builds_one_client_per_agent(env):
     pipeline = build_pipeline(Settings(**{**settings.__dict__, "data_dir": DATA_DIR, "log_path": None}))
     assert pipeline.intent_agent.client.base_url == "http://intent:18001/v1"
     assert pipeline.query_agent.client.base_url == "http://shared:18000/v1"
-    assert pipeline.intent_agent.max_tokens == 200 and pipeline.query_agent.max_tokens == 900
+    assert pipeline.intent_agent.max_tokens == 200 and pipeline.query_agent.max_tokens == 1500
     assert type(pipeline.intent_agent.fallback).__name__ == "HeuristicIntentAgent"
 
 

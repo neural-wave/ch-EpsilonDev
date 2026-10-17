@@ -65,7 +65,7 @@ class Settings:
     llm_intent_extra_body: dict | None = None
     # Per-agent generation limits and prompt versions.
     llm_intent_max_tokens: int = 200
-    llm_query_max_tokens: int = 900
+    llm_query_max_tokens: int = 1500  # 900 cut off 6 of 198 answers on 2026-10-17; only used when needed
     intent_prompt_version: str = "v4"  # won the intent eval on 2026-10-17 (docs/LLM_AGENTS.md section 6)
     query_prompt_version: str = "v2"  # fewer retries and blocked allowed requests than v1 (2026-10-17)
     # Pipeline.

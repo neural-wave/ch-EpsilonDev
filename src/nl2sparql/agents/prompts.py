@@ -191,6 +191,26 @@ QUERY_SYSTEM_V3 = QUERY_SYSTEM_V2.replace(
 assert "code typed as one of" in QUERY_SYSTEM_V3 and "no MEDIAN" in QUERY_SYSTEM_V3  # both edits applied
 
 
+# v4 (2026-10-17): v3 plus what the 198-question pipeline eval showed. Allowed requests were blocked
+# because the query grouped by the code node of each record (one row per record: "the 10 most common
+# diagnoses" with GROUP BY ?code) or because a long answer did not parse or was cut off.
+QUERY_SYSTEM_V4 = QUERY_SYSTEM_V3.replace(
+    """- Measured values are Quantity nodes: ?x sphn:hasQuantity ?q . ?q sphn:hasValue ?value .""",
+    """- Measured values are Quantity nodes: ?x sphn:hasQuantity ?q . ?q sphn:hasValue ?value .
+- A code node belongs to one record. To group by a category (the most common diagnoses, drugs, tests,
+  routes), group by the concept class of the code: ?x sphn:hasCode ?c . ?c a ?concept and GROUP BY
+  ?concept. Never group by or return ?c, ?g or any identifier.""",
+).replace(
+    """Speed:""",
+    """Shape:
+- Prefer one SELECT with GROUP BY. Use a subquery only for a count of counts, and never nest more than
+  one. Keep the query short: a long query is more likely to be malformed or cut off.
+
+Speed:""",
+)
+assert "GROUP BY\n  ?concept" in QUERY_SYSTEM_V4 and "Shape:" in QUERY_SYSTEM_V4  # both edits applied
+
+
 def render_query_user_v1(text: str, context: Context, feedback: str | None) -> str:
     parts = []
     if context.schema_cards:
@@ -216,7 +236,8 @@ INTENT_PROMPTS: dict[str, str] = {"v1": INTENT_SYSTEM_V1, "v2": INTENT_SYSTEM_V2
                                   "v4": INTENT_SYSTEM_V4}
 QUERY_PROMPTS: dict[str, QueryPrompt] = {"v1": QueryPrompt(QUERY_SYSTEM_V1, render_query_user_v1),
                                          "v2": QueryPrompt(QUERY_SYSTEM_V2, render_query_user_v1),
-                                         "v3": QueryPrompt(QUERY_SYSTEM_V3, render_query_user_v1)}
+                                         "v3": QueryPrompt(QUERY_SYSTEM_V3, render_query_user_v1),
+                                         "v4": QueryPrompt(QUERY_SYSTEM_V4, render_query_user_v1)}
 
 
 def intent_prompt(version: str) -> str:

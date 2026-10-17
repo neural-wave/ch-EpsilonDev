@@ -25,7 +25,7 @@ def test_config_shows_both_agents_and_hides_secrets(client):
     assert intent["implementation"] == "HeuristicIntentAgent" and intent["uses_llm"] is False
     assert query["implementation"] == "ExampleQueryAgent" and query["stand_in"]
     assert intent["json_mode"] is True and query["json_mode"] is False
-    assert intent["max_answer_tokens"] == 200 and query["max_answer_tokens"] == 900
+    assert intent["max_answer_tokens"] == 200 and query["max_answer_tokens"] == 1500
     assert "secret-token-123" not in str(config) and intent["api_key"].startswith("set (")
     assert config["context"]["examples_in_bank"] == 16 and config["pipeline"]["schema_classes_loaded"] == 164
 
