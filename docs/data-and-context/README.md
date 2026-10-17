@@ -15,6 +15,18 @@ This guide separates completed local work from real-graph validation. The root [
 
 The existing real-data integration path is offline: `scripts/profile_data.py` produces local RDF-derived snapshots, and `scripts/build_terminology_index.py` builds a local terminology index. The application reads those files at request time. **Do not add a live Virtuoso connection to `ContextBuilder`, pipeline construction, or `POST /nl-to-sparql`.**
 
+## Code implementation status
+
+There are **no known unimplemented Data and Context code items** in the current checklist. The profile generator, sanitized profile comparator, terminology-index builder, local-file loaders, and request-time context integration are already implemented. The unchecked Santiago items below are required runs and evidence collection, not requests to write those tools. Any further code change depends on issues found when Santiago runs them.
+
+| Capability | Code status | Still required |
+| --- | --- | --- |
+| Generate profile snapshots from dev RDF | Implemented in `scripts/profile_data.py` | Run against Santiago's dev graph; compare output with committed snapshots. |
+| Compare profile snapshots without exposing entries | Implemented and covered by synthetic tests in `scripts/compare_data_profile.py` | Run against the generated real profile; record aggregate result. |
+| Generate restricted terminology index | Implemented in `scripts/build_terminology_index.py` | Build the local ignored asset on Santiago's machine and measure it there. |
+| Load context assets at request time | Implemented in `ContextBuilder` and the factory | Validate with the real generated assets and configured evaluation. |
+| Tune retrieval/performance | No evidence-backed change identified | Measure on dev/perf first; implement a change only if results justify it. |
+
 ## Completed by you locally
 
 - [x] Confirmed `ExampleBank`, `SchemaCards`, `TerminologyIndex`, and `ContextBuilder` work from local files.
@@ -65,9 +77,11 @@ git diff --check
 - [x] Pushed the helper and synthetic tests on `guardjudge`; this guide records the handoff requirements.
 - [x] Confirmed the helper and fixtures contain only aggregate-reporting logic and synthetic profile data; no `.env`, generated `assets/` terminology files, graph data, patient-level results, or raw evaluation reports were added.
 
-## Remaining work for Santiago — actual dev RDF graph required
+## Remaining execution and validation for Santiago — actual dev RDF graph required
 
 **Status:** not run from this checkout. It has no `.env` or generated `assets/` terminology index, and there is no recorded real-graph profile or evaluation. Use the configured run machine and the endpoint/IRIs documented in the root README and [docs/DATA.md](../DATA.md).
+
+The tools and commands in this section already exist. The open boxes track running them against the real environment, reviewing the results, and making evidence-driven follow-up changes if needed.
 
 **Required real-data test for the new helper:** the three passing unit tests use fabricated profile files only. They do not validate the CLI with Santiago's RDF-derived snapshots. Santiago must run the workflow below on the configured dev graph and record the sanitized aggregate result before marking profile freshness complete.
 
