@@ -1,7 +1,8 @@
 """The pipeline: input check, then intent agent in parallel with context -> query agent -> judge,
 then the compliance guard. The judge and the guard each have their own retry budget (MAX_RETRIES per
 checker), and the judge gets one extra call when its retry was bought by syntax errors alone, so with the
-default of 1 the query agent is called at most four times per request, all inside the request deadline."""
+default of 1 the query agent is called at most four times per request, all inside the request deadline.
+With QUERY_CANDIDATES above 1, the first call is a best-of-N generation (Pipeline._best_candidate)."""
 from __future__ import annotations
 
 import asyncio
@@ -13,6 +14,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from nl2sparql.agents.base import IntentAgent, QueryAgent
+from nl2sparql.agents.query_llm import QueryReply
 from nl2sparql.context.builder import ContextBuilder
 from nl2sparql.guard.decision import ComplianceGuard
 from nl2sparql.input_check import normalize_text
@@ -130,9 +132,14 @@ class Pipeline:
     def __init__(self, intent_agent: IntentAgent, query_agent: QueryAgent, context_builder: ContextBuilder,
                  judge: Judge, guard: ComplianceGuard, max_input_chars: int = 2000, max_retries: int = 1,
                  log_path: Path | None = None, request_timeout_seconds: float = 75.0,
-                 retry_with_previous_query: bool = False):
+                 retry_with_previous_query: bool = False, query_candidates: int = 1,
+                 query_candidate_temperature: float = 0.7):
         if not math.isfinite(request_timeout_seconds) or request_timeout_seconds <= 0:
             raise ValueError("REQUEST_TIMEOUT_SECONDS must be a positive finite number.")
+        if query_candidates < 1:
+            raise ValueError("QUERY_CANDIDATES must be 1 or more.")
+        if query_candidates > 1 and not (math.isfinite(query_candidate_temperature) and query_candidate_temperature > 0):
+            raise ValueError("QUERY_CANDIDATE_TEMPERATURE must be a positive finite number.")
         self.intent_agent = intent_agent
         self.query_agent = query_agent
         self.context_builder = context_builder
@@ -143,6 +150,8 @@ class Pipeline:
         self.log_path = log_path
         self.request_timeout_seconds = request_timeout_seconds
         self.retry_with_previous_query = retry_with_previous_query
+        self.query_candidates = query_candidates  # answers of the first generation; 1 = one greedy request
+        self.query_candidate_temperature = query_candidate_temperature
 
     async def run(self, raw_text: str) -> PipelineResult:
         deadline = asyncio.get_running_loop().time() + self.request_timeout_seconds
@@ -246,10 +255,15 @@ class Pipeline:
 
     async def _generate(self, text: str, context: Context, feedback: str | None, run: _Run,
                         intent_task: asyncio.Task[IntentFlags]) -> _Attempt:
-        """Query agent + judge. The first call counts as "query", any later one as "query_retry"."""
+        """Query agent + judge. The first call counts as "query", any later one as "query_retry". With
+        QUERY_CANDIDATES above 1 the first call asks for several candidates; the retries stay single and start
+        from the kept candidate."""
         started = time.perf_counter()
         step = "query" if feedback is None else "query_retry"
-        attempt = await self._ask_and_judge(text, context, feedback, step, run)
+        if step == "query" and self._samples_candidates():
+            attempt = await self._best_candidate(text, context, run)
+        else:
+            attempt = await self._ask_and_judge(text, context, feedback, step, run)
         # The first generation runs alongside the intent agent, but a forbidden request is never retried.
         if attempt.verdict.errors and run.can_retry("judge") and not (await intent_task).flagged and run.take_retry("judge"):
             run.note_rejected("judge_errors_first_try", attempt.verdict.errors, attempt.sparql)
@@ -315,6 +329,61 @@ class Pipeline:
         if truncated:
             run.note_cut_off(step)
         return sparql, truncated
+
+    def _samples_candidates(self) -> bool:
+        """Best-of-N needs an agent that can also sample (LLMQueryAgent); any other agent answers once."""
+        return (self.query_candidates > 1 and hasattr(self.query_agent, "generate_detailed")
+                and hasattr(self.query_agent, "sample_detailed"))
+
+    async def _best_candidate(self, text: str, context: Context, run: _Run) -> _Attempt:
+        """The first generation with QUERY_CANDIDATES = N above 1. The judge checks every candidate with the
+        question, a cut-off one too, and the least bad is kept: the lowest severity, then a complete answer over
+        a cut-off one, then the greedy answer, then the lower index. "candidates" records (severity, cut off)
+        per candidate, the greedy one first, and "candidate_chosen" the kept one's index; cut_off and
+        judge_repairs describe the kept candidate, as they describe the one answer without candidates."""
+        attempts = []
+        for index, reply in enumerate(await self._ask_for_candidates(text, context, run)):
+            try:
+                verdict = await asyncio.to_thread(self.judge.check, reply.sparql, text)
+            except Exception as error:
+                if index == 0:  # the greedy answer fails the request, as without candidates
+                    raise
+                logger.warning("judge failed on query candidate %d (0 is the greedy one), dropped: %s", index, error)
+                continue
+            attempts.append(_Attempt(verdict, reply.truncated))
+        chosen = min(range(len(attempts)), key=lambda i: (severity(attempts[i].verdict), attempts[i].cut_off))
+        attempt = attempts[chosen]
+        run.diagnostics["candidates"] = [(severity(candidate.verdict), candidate.cut_off) for candidate in attempts]
+        run.diagnostics["candidate_chosen"] = chosen
+        run.note_repairs(attempt.verdict.repairs)
+        if attempt.cut_off:
+            run.note_cut_off("query")
+        return attempt
+
+    async def _ask_for_candidates(self, text: str, context: Context, run: _Run) -> list[QueryReply]:
+        """The greedy answer (the usual request) and N-1 answers sampled at QUERY_CANDIDATE_TEMPERATURE by a second
+        request sent at the same time with the same prompt. Both requests' tokens count as "query". A failed
+        sampled request leaves the greedy answer alone; a failed greedy one fails the request, as without
+        candidates. Both run inside the request deadline, which cancels them."""
+        sampling = asyncio.ensure_future(self.query_agent.sample_detailed(
+            text, context, self.query_candidates - 1, self.query_candidate_temperature))
+        started = time.perf_counter()
+        try:
+            greedy = await self.query_agent.generate_detailed(text, context, None)
+        except BaseException:
+            sampling.cancel()
+            await asyncio.gather(sampling, return_exceptions=True)
+            raise
+        # A retry is one greedy call: the greedy request's time is what the judge's extra retry is expected to cost.
+        run.note_query_call(time.perf_counter() - started)
+        try:
+            samples = await sampling
+        except Exception as error:
+            logger.warning("sampled query candidates failed, the greedy answer goes on alone: %s", error)
+            samples = []
+        replies = [greedy, *samples]
+        run.add_tokens("query", sum(reply.tokens for reply in replies))
+        return replies
 
     @staticmethod
     def _timed(run: _Run, key: str, function):

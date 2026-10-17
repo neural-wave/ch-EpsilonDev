@@ -782,3 +782,220 @@ def test_the_console_is_served_by_the_api_and_the_root_redirects_to_it():
     assert client.get("/console/css/tokens.css").status_code == 200
     for logo in ("sib-emblem.png", "sphn-logo.png"):  # a root .gitignore rule once kept them out of the repository
         assert client.get(f"/console/cli/assets/{logo}").headers["content-type"] == "image/png"
+
+
+# Best-of-N query candidates (QUERY_CANDIDATES): the real LLM query agent on a fake OpenAI-compatible server.
+import json  # noqa: E402
+import logging  # noqa: E402
+
+import httpx  # noqa: E402
+
+from nl2sparql.agents import LLMQueryAgent  # noqa: E402
+from nl2sparql.judge import severity  # noqa: E402
+from nl2sparql.llm import LLMClient  # noqa: E402
+
+CHOLERA_BY_SEX = "How many patients have cholera, by sex?"
+BROKEN_QUERY = "SELECT ?x WHERE {"
+RENAMED_03 = EXAMPLES["official-03"].replace("?sex", "?gender")  # judge-clean like official-03, told apart by ?gender
+
+
+def fenced(sparql):
+    return f"```sparql\n{sparql}\n```"
+
+
+class FakeLLMServer:
+    """A request without "n" gets the next greedy answer (None: HTTP 500), the request with "n" the sampled answers;
+    answers are (text, finish_reason). Usage as vLLM reports it: the prompt once per request, every answer's
+    completion."""
+
+    def __init__(self, greedy, sampled=(), prompt_tokens=100, completion_tokens=20, sampled_status=200,
+                 sampled_delay=0.0, greedy_waits_for_sampled=False):
+        self.greedy, self.sampled = list(greedy), list(sampled)
+        self.prompt_tokens, self.completion_tokens = prompt_tokens, completion_tokens
+        self.sampled_status, self.sampled_delay = sampled_status, sampled_delay
+        self.greedy_waits_for_sampled = greedy_waits_for_sampled  # the greedy answer comes only once both are in flight
+        self.sampled_arrived = asyncio.Event()
+        self.sampled_cancelled = False
+        self.requests = []
+
+    @property
+    def bodies(self):
+        return [json.loads(request.content) for request in self.requests]
+
+    def client(self):
+        return LLMClient("http://gpu/v1", transport=httpx.MockTransport(self.handle))
+
+    async def handle(self, request):
+        self.requests.append(request)
+        body = json.loads(request.content)
+        if "n" in body:
+            self.sampled_arrived.set()
+            try:
+                await asyncio.sleep(self.sampled_delay)
+            except asyncio.CancelledError:
+                self.sampled_cancelled = True
+                raise
+            if self.sampled_status != 200:
+                return httpx.Response(self.sampled_status, json={"error": "sampling failed"})
+            return self._answer(self.sampled[: body["n"]])
+        if self.greedy_waits_for_sampled:
+            await asyncio.wait_for(self.sampled_arrived.wait(), timeout=2)
+        answer = self.greedy.pop(0)
+        if answer is None:
+            return httpx.Response(500, json={"error": "model server down"})
+        return self._answer([answer])
+
+    def _answer(self, answers):
+        return httpx.Response(200, json={
+            "choices": [{"index": index, "message": {"content": text}, "finish_reason": finish}
+                        for index, (text, finish) in enumerate(answers)],
+            "usage": {"prompt_tokens": self.prompt_tokens, "completion_tokens": self.completion_tokens * len(answers)},
+        })
+
+
+class RecordingJudge:
+    def __init__(self, delegate):
+        self.delegate = delegate
+        self.calls = []
+
+    def check(self, sparql, question=None):
+        self.calls.append((sparql, question))
+        return self.delegate.check(sparql, question)
+
+
+def best_of(candidates, server):
+    """The pipeline built with QUERY_CANDIDATES=candidates, its LLM query agent on the fake server."""
+    pipeline = build_pipeline(settings(query_candidates=candidates))
+    pipeline.query_agent = LLMQueryAgent(server.client(), "coder")
+    pipeline.intent_agent = FixedIntentAgent()
+    return pipeline
+
+
+def test_one_candidate_sends_exactly_the_requests_of_a_single_answer():
+    server = FakeLLMServer([(BROKEN_QUERY, "stop"), (fenced(EXAMPLES["official-03"]), "stop")],
+                           sampled=[(fenced(RENAMED_03), "stop")])
+    pipeline = best_of(1, server)
+    result = asyncio.run(pipeline.run(CHOLERA_BY_SEX))
+    assert result.is_compliant and result.retries == 1 and len(server.requests) == 2
+    assert all(set(body) == {"model", "messages", "temperature", "max_tokens"} and body["temperature"] == 0
+               for body in server.bodies)
+    assert result.tokens_by_step == {"intent": 10, "query": 120, "query_retry": 120}
+    assert "candidates" not in result.diagnostics and "candidate_chosen" not in result.diagnostics
+    # The first request is, byte for byte, the one a plain chat call sends with the first prompt.
+    reference = FakeLLMServer([(fenced(EXAMPLES["official-03"]), "stop")])
+    agent = pipeline.query_agent
+    messages = agent.messages(CHOLERA_BY_SEX, pipeline.context_builder.build(CHOLERA_BY_SEX))
+    asyncio.run(reference.client().chat("coder", messages, max_tokens=agent.max_tokens))
+    assert server.requests[0].content == reference.requests[0].content
+
+
+def test_three_candidates_are_judged_with_the_question_and_the_clean_one_is_kept():
+    server = FakeLLMServer([(BROKEN_QUERY, "stop")], [(fenced(SOFT_HINT_QUERY), "stop"), (fenced(EXAMPLES["official-03"]), "stop")],
+                           greedy_waits_for_sampled=True)
+    pipeline = best_of(3, server)
+    judge = pipeline.judge = RecordingJudge(pipeline.judge)
+    result = asyncio.run(pipeline.run(CHOLERA_BY_SEX))
+    assert result.is_compliant and result.retries == 0 and len(server.requests) == 2
+    greedy, sampling = server.bodies
+    assert "n" not in greedy and greedy["temperature"] == 0
+    assert sampling["n"] == 2 and sampling["temperature"] == 0.7
+    assert sampling["messages"] == greedy["messages"] and sampling["max_tokens"] == greedy["max_tokens"]
+    assert [question for _, question in judge.calls] == [CHOLERA_BY_SEX] * 3
+    candidates = result.diagnostics["candidates"]
+    assert [rank for rank, _ in candidates] == [severity(judge.delegate.check(sparql, CHOLERA_BY_SEX)) for sparql, _ in judge.calls]
+    assert candidates[0][0][0] == 3 and candidates[1][0][0] == 1 and candidates[2] == ((0, 0), False)
+    assert result.diagnostics["candidate_chosen"] == 2 and "?cholera_patient" in result.sparql_query
+
+
+def test_a_tie_keeps_the_greedy_candidate_then_the_lower_index():
+    server = FakeLLMServer([(fenced(EXAMPLES["official-03"]), "stop")], [(fenced(RENAMED_03), "stop")] * 2)
+    result = asyncio.run(best_of(3, server).run(CHOLERA_BY_SEX))
+    assert result.diagnostics["candidates"] == [((0, 0), False)] * 3 and result.diagnostics["candidate_chosen"] == 0
+    assert "?gender" not in result.sparql_query
+    server = FakeLLMServer([(BROKEN_QUERY, "stop")], [(fenced(RENAMED_03), "stop"), (fenced(EXAMPLES["official-03"]), "stop")])
+    result = asyncio.run(best_of(3, server).run(CHOLERA_BY_SEX))
+    assert result.diagnostics["candidate_chosen"] == 1 and "?gender" in result.sparql_query
+
+
+def test_a_cut_off_candidate_is_judged_and_loses_to_a_clean_complete_one():
+    # The greedy answer hit max_tokens after a complete query: clean but cut off, it loses the tie.
+    server = FakeLLMServer([("```sparql\n" + EXAMPLES["official-03"], "length")], [(fenced(RENAMED_03), "stop")])
+    result = asyncio.run(best_of(2, server).run(CHOLERA_BY_SEX))
+    assert result.diagnostics["candidates"] == [((0, 0), True), ((0, 0), False)]
+    assert result.diagnostics["candidate_chosen"] == 1 and "cut_off" not in result.diagnostics
+    # Cut off mid-query, it does not parse and loses by severity.
+    server = FakeLLMServer([("```sparql\n" + BROKEN_QUERY, "length")], [(fenced(RENAMED_03), "stop")])
+    result = asyncio.run(best_of(2, server).run(CHOLERA_BY_SEX))
+    (rank, cut_off), clean = result.diagnostics["candidates"]
+    assert rank[0] == 3 and cut_off and clean == ((0, 0), False)
+    assert result.diagnostics["candidate_chosen"] == 1 and result.retries == 0 and "?gender" in result.sparql_query
+
+
+def test_the_retry_stays_single_and_starts_from_the_kept_candidate():
+    server = FakeLLMServer([("```sparql\n" + BROKEN_QUERY, "length"), (fenced(EXAMPLES["official-03"]), "stop")],
+                           [(fenced(SOFT_HINT_QUERY), "stop"), (BROKEN_QUERY, "stop")])
+    result = asyncio.run(best_of(3, server).run(CHOLERA_BY_SEX))
+    assert result.is_compliant and result.retries == 1 and len(server.requests) == 3
+    retry = server.bodies[2]
+    assert "n" not in retry and retry["temperature"] == 0
+    feedback = retry["messages"][1]["content"]
+    errors = result.diagnostics["judge_errors_first_try"]
+    assert errors and all(error in feedback for error in errors) and CUT_OFF_FEEDBACK not in feedback
+    assert result.diagnostics["candidate_chosen"] == 1 and "?married" in result.diagnostics["first_try_sparql"]
+    assert "cut_off" not in result.diagnostics  # only the dropped greedy answer was cut off
+    assert result.tokens_by_step == {"intent": 10, "query": 120 + 140, "query_retry": 120}
+
+
+def test_the_tokens_of_both_requests_add_up():
+    # The prompt once per request and every answer's completion: (1000 + 50) + (1000 + 2 x 50).
+    server = FakeLLMServer([(fenced(EXAMPLES["official-03"]), "stop")], [(fenced(SOFT_HINT_QUERY), "stop"), (BROKEN_QUERY, "stop")],
+                           prompt_tokens=1000, completion_tokens=50)
+    result = asyncio.run(best_of(3, server).run(CHOLERA_BY_SEX))
+    assert result.tokens_by_step == {"intent": 10, "query": 2150} and result.tokens_consumed == 2160
+
+
+def test_a_failed_sampled_request_leaves_the_greedy_answer_alone(caplog):
+    server = FakeLLMServer([(BROKEN_QUERY, "stop"), (fenced(EXAMPLES["official-03"]), "stop")], sampled_status=500)
+    with caplog.at_level(logging.WARNING, logger="nl2sparql.orchestrator"):
+        result = asyncio.run(best_of(3, server).run(CHOLERA_BY_SEX))
+    assert result.is_compliant and result.retries == 1 and len(server.requests) == 3
+    assert len(result.diagnostics["candidates"]) == 1 and result.diagnostics["candidate_chosen"] == 0
+    assert result.tokens_by_step == {"intent": 10, "query": 120, "query_retry": 120}
+    assert "sampled query candidates failed" in caplog.text
+
+
+def test_a_failed_greedy_request_fails_the_request_and_cancels_the_sampled_one():
+    server = FakeLLMServer([None], [(fenced(RENAMED_03), "stop")] * 2, sampled_delay=5, greedy_waits_for_sampled=True)
+    started = time.perf_counter()
+    with pytest.raises(PipelineError, match="Query generation failed"):
+        asyncio.run(best_of(3, server).run(CHOLERA_BY_SEX))
+    assert server.sampled_cancelled and time.perf_counter() - started < 2
+
+
+def test_agents_that_cannot_sample_answer_once_whatever_the_setting():
+    agent = ScriptedQueryAgent(EXAMPLES["official-03"])
+    pipeline = pipeline_with(agent)
+    pipeline.query_candidates = 3
+    result = asyncio.run(pipeline.run("Cholera by sex?"))
+    assert result.is_compliant and result.diagnostics == {} and agent.feedback == [None]
+
+
+@pytest.mark.parametrize("overrides,setting", [
+    ({"query_candidates": 0}, "QUERY_CANDIDATES"),
+    ({"query_candidates": 3, "query_candidate_temperature": 0}, "QUERY_CANDIDATE_TEMPERATURE"),
+    ({"query_candidates": 3, "query_candidate_temperature": float("nan")}, "QUERY_CANDIDATE_TEMPERATURE"),
+])
+def test_query_candidate_settings_are_checked(overrides, setting):
+    with pytest.raises(ValueError, match=setting):
+        build_pipeline(settings(**overrides))
+    assert build_pipeline(settings(query_candidate_temperature=0)).query_candidates == 1  # unused with one candidate
+
+
+def test_the_request_deadline_cancels_both_candidate_requests():
+    server = FakeLLMServer([(fenced(EXAMPLES["official-03"]), "stop")], [(fenced(RENAMED_03), "stop")] * 2, sampled_delay=5)
+    pipeline = best_of(3, server)
+    pipeline.request_timeout_seconds = 0.3
+    started = time.perf_counter()
+    with pytest.raises(PipelineError, match="Request timed out after 0.3 seconds"):
+        asyncio.run(pipeline.run(CHOLERA_BY_SEX))
+    assert server.sampled_cancelled and time.perf_counter() - started < 1

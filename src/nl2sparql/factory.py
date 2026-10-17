@@ -64,6 +64,8 @@ def build_pipeline(settings: Settings, exclude_exact_examples: bool = False) -> 
         retry_with_previous_query=settings.retry_with_previous_query,
         log_path=settings.log_path,
         request_timeout_seconds=settings.request_timeout_seconds,
+        query_candidates=settings.query_candidates,
+        query_candidate_temperature=settings.query_candidate_temperature,
     )
 
 

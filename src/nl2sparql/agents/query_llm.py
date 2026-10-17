@@ -5,7 +5,7 @@ import re
 from dataclasses import dataclass
 
 from nl2sparql.agents.prompts import QUERY_PROMPTS, QueryPrompt
-from nl2sparql.llm import LLMClient
+from nl2sparql.llm import LLMClient, LLMReply
 from nl2sparql.models import Context
 from nl2sparql.sparql.order import reorder
 
@@ -61,6 +61,16 @@ class LLMQueryAgent:
 
     async def generate_detailed(self, text: str, context: Context, feedback: str | None = None) -> QueryReply:
         reply = await self.client.chat(self.model, self.messages(text, context, feedback), max_tokens=self.max_tokens)
+        return self._query_reply(reply)
+
+    async def sample_detailed(self, text: str, context: Context, n: int, temperature: float) -> list[QueryReply]:
+        """n more answers to the first prompt (no feedback) from one request at `temperature`: the best-of-N
+        candidates next to the greedy answer of generate_detailed. The prompt is the same, so vLLM's prefix cache
+        serves it. The request's tokens are on the first reply (LLMClient.sample)."""
+        replies = await self.client.sample(self.model, self.messages(text, context), n, temperature, self.max_tokens)
+        return [self._query_reply(reply) for reply in replies]
+
+    def _query_reply(self, reply: LLMReply) -> QueryReply:
         sparql = extract_sparql(reply.text)
         if self.reorder_patterns:
             sparql = reorder(sparql)

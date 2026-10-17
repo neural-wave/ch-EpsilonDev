@@ -116,3 +116,16 @@ def test_retry_budget_per_checker_comes_from_the_environment(env):
 def test_unknown_agent_name_is_rejected():
     with pytest.raises(ValueError, match="Unknown agent"):
         Settings().agent("judge")
+
+
+def test_query_candidates_come_from_the_environment(env):
+    env.delenv("QUERY_CANDIDATES", raising=False)
+    env.delenv("QUERY_CANDIDATE_TEMPERATURE", raising=False)
+    default = Settings.from_env()
+    assert (default.query_candidates, default.query_candidate_temperature) == (1, 0.7)
+    assert build_pipeline(replace(default, data_dir=DATA_DIR, log_path=None)).query_candidates == 1
+    env.setenv("QUERY_CANDIDATES", "3")
+    env.setenv("QUERY_CANDIDATE_TEMPERATURE", "0.9")
+    settings = Settings.from_env()
+    pipeline = build_pipeline(replace(settings, data_dir=DATA_DIR, log_path=None))
+    assert (settings.query_candidates, pipeline.query_candidates, pipeline.query_candidate_temperature) == (3, 3, 0.9)

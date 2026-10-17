@@ -57,6 +57,16 @@ def test_llm_client_merges_extra_body():
                        extra_body={"chat_template_kwargs": {"enable_thinking": False}})
     run(LLMIntentAgent(client, "m").classify("hi"))
     assert seen[0]["chat_template_kwargs"] == {"enable_thinking": False} and seen[0]["model"] == "m"
+    assert seen[0]["temperature"] == 0
+
+
+def test_llm_client_extra_body_may_set_the_sampling():
+    # Thinking mode must not decode greedily (Qwen's model card: endless repetitions), so the extra body may override it.
+    seen = []
+    thinking = {"chat_template_kwargs": {"enable_thinking": True}, "temperature": 0.6, "top_p": 0.95}
+    client = LLMClient("http://gpu/v1", transport=fake_server("{}", seen), extra_body=thinking)
+    run(LLMIntentAgent(client, "m").classify("hi"))
+    assert seen[0]["temperature"] == 0.6 and seen[0]["top_p"] == 0.95 and seen[0]["model"] == "m"
 
 
 def test_llm_query_agent_extracts_sparql_from_a_fenced_answer():
@@ -454,3 +464,33 @@ def test_judge_asks_for_the_record_count_the_question_asks_for():
         "The question asks how many drug prescriptions, but the query counts only patients. "
         "Add (COUNT(DISTINCT ?prescription) AS ?drug_prescriptions) next to (COUNT(DISTINCT ?g) AS ?patients)."
     ]
+
+
+def test_llm_query_agent_samples_candidates_from_the_first_prompt_in_one_request():
+    seen = []
+
+    def handler(request):
+        seen.append(json.loads(request.content))
+        return httpx.Response(200, json={
+            "choices": [{"index": 0, "message": {"content": "```sparql\nSELECT ?a WHERE { ?a ?p ?o }\n```"}, "finish_reason": "stop"},
+                        {"index": 1, "message": {"content": "```sparql\nSELECT ?b WHERE {"}, "finish_reason": "length"}],
+            "usage": {"prompt_tokens": 100, "completion_tokens": 45},
+        })
+
+    # The candidate temperature wins over one in the extra body; the rest of the extra body is kept.
+    client = LLMClient("http://gpu/v1", transport=httpx.MockTransport(handler), extra_body={"temperature": 0.6, "top_p": 0.95})
+    agent = LLMQueryAgent(client, "coder")
+    replies = run(agent.sample_detailed("q", Context(), 2, 0.7))
+    assert [reply.sparql for reply in replies] == ["SELECT ?a WHERE { ?a ?p ?o }\n", "SELECT ?b WHERE {\n"]
+    assert [reply.tokens for reply in replies] == [145, 0]  # one usage per request, on the first answer
+    assert [reply.truncated for reply in replies] == [False, True]
+    assert seen[0]["n"] == 2 and seen[0]["temperature"] == 0.7 and seen[0]["top_p"] == 0.95
+    assert seen[0]["messages"] == agent.messages("q", Context()) and seen[0]["max_tokens"] == 900
+
+
+def test_llm_client_sample_raises_on_a_failed_or_empty_answer():
+    with pytest.raises(LLMError):
+        run(LLMClient("http://gpu/v1", transport=failing_server()).sample("m", [], 2, 0.7))
+    empty = httpx.MockTransport(lambda request: httpx.Response(200, json={"choices": [], "usage": {}}))
+    with pytest.raises(LLMError, match="no choices"):
+        run(LLMClient("http://gpu/v1", transport=empty).sample("m", [], 2, 0.7))

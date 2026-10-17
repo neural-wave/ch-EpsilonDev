@@ -73,6 +73,10 @@ class Settings:
     query_reorder: bool = True  # the restricted pass: measured safe on dev, one win on 100k patients (q-021 0.44 -> 0.06 s)
     intent_prompt_version: str = "v4"  # won the intent eval on 2026-10-17 (docs/LLM_AGENTS.md section 6)
     query_prompt_version: str = "v4"  # halves the blocked allowed requests of v2 (2026-10-17)
+    # Best-of-N first generation: the greedy answer plus N-1 sampled ones from a second request sent at the same
+    # time; the judge keeps the least bad (Pipeline._best_candidate). 1 = one greedy request, as before.
+    query_candidates: int = 1
+    query_candidate_temperature: float = 0.7  # sampling temperature of candidates 2..N
     # Context the query agent receives: similar examples, schema cards, code candidates.
     context_examples: int = 3
     context_cards: int = 8  # the picker now follows one link from a named class; two more slots keep that from pushing out named classes
@@ -144,6 +148,8 @@ class Settings:
             query_reorder=_flag("QUERY_REORDER", True),
             intent_prompt_version=env.get("INTENT_PROMPT_VERSION", cls.intent_prompt_version).strip(),
             query_prompt_version=env.get("QUERY_PROMPT_VERSION", cls.query_prompt_version).strip(),
+            query_candidates=int(env.get("QUERY_CANDIDATES", cls.query_candidates)),
+            query_candidate_temperature=float(env.get("QUERY_CANDIDATE_TEMPERATURE", cls.query_candidate_temperature)),
             context_examples=int(env.get("CONTEXT_EXAMPLES", cls.context_examples)),
             context_cards=int(env.get("CONTEXT_CARDS", cls.context_cards)),
             context_codes=int(env.get("CONTEXT_CODES", cls.context_codes)),
