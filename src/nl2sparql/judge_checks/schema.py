@@ -5,6 +5,9 @@ node, a value-set entry typed or placed on the wrong class, and a code system th
 are all valid SPARQL that answers empty or wrong rows on the real data. Every check here prefers a
 miss to a false alarm, because a false alarm costs the request its only retry: a hint fires only when
 the cards say the pattern cannot match (one class per record, one target per link, a known value set).
+Two shapes with one correct form are rewritten instead (REWRITES): a typed value-set entry, and a
+GROUP BY key that is the year-versioned class of an ICD-10-GM or CHOP code node, which becomes the
+year-free code.
 
 Variables are matched by name across the whole query, except across the branches of a UNION, which
 never join. rdflib traps: Variable is a str subclass, so isinstance checks come before str checks;
@@ -23,8 +26,9 @@ from rdflib.namespace import RDF
 from rdflib.plugins.sparql.parserutils import CompValue
 
 from nl2sparql.context.schema import SchemaCards, words
+from nl2sparql.judge_checks.scope import EXISTS_NAMES, _expression_variables, _find, _is_projected_key
 from nl2sparql.sparql.parse import ParsedQuery, parse_sparql
-from nl2sparql.sparql.prefixes import SPHN, STANDARD_PREFIXES
+from nl2sparql.sparql.prefixes import IRIS_STRINGS_COMMENTS_RE, SPHN, STANDARD_PREFIXES
 
 BOILERPLATE = ("hasDataProvider", "hasSourceSystem", "hasSubjectPseudoIdentifier")
 CODE_TARGETS = ("Code", "Terminology")
@@ -40,6 +44,11 @@ REPLACEMENT_RATIO = 0.75  # one property of the class this close to the missing 
 SUGGESTION_RATIO = 0.8  # "Did you mean" needs near-identical names: hasSample is never offered for hasSex
 TYPE_RE = r"(?:a|rdf:type)"
 OPTION_RE = r"(?:\s*OPTION\s*\([^)]*\))?"
+# The code of a class IRI without its coding year: chop/2016/00.03 and chop/00.03 both give 00.03.
+YEAR_FREE_CODE = 'REPLACE(STR(?{versioned}), "^.*/", "")'
+# The pattern parts every solution matches: an OPTIONAL's or a MINUS's right side, a UNION branch and a
+# sub-select are not walked into.
+REQUIRED_PARTS = {"Join": ("p1", "p2"), "LeftJoin": ("p1",), "Minus": ("p1",), "Filter": ("p",), "Extend": ("p",), "Graph": ("p",)}
 
 
 @dataclass(frozen=True)
@@ -495,6 +504,202 @@ def rewrite_typed_value_set(text: str, schema: SchemaCards) -> tuple[str, list[s
     return text, repairs
 
 
+def rewrite_year_versioned_code_key(text: str, schema: SchemaCards) -> tuple[str, list[str]]:
+    """GROUP BY ?k where '?c a ?k' types an ICD-10-GM or CHOP code node: those classes carry the coding
+    year (chop/2016/00.03, chop/2017/00.03), so every code comes back once per year (official-06: 31 rows
+    instead of 4). The node is typed ?k_versioned instead and the end of its group binds the year-free
+    code, BIND (REPLACE(STR(?k_versioned), "^.*/", "") AS ?k), so the years merge into one row per code.
+    When ?c is also typed with a concrete code (the category the question names, ?c a chop:00.0 OPTION
+    (inference ...)), FILTER (?k != "00.0") drops the category's own code, which is none of its kinds:
+    the official-06 reference keeps only the subcodes.
+
+    The code system comes from the record's card ("code_system") or from the concrete code. Gives up when
+    anything but SELECT, GROUP BY and ORDER BY reads ?k (a label lookup, a VALUES block, a FILTER or a
+    BIND need the class IRI), when '?c a ?k' sits in an OPTIONAL, a UNION or a MINUS, and when the result
+    does not keep every pattern and column.
+    """
+    repairs: list[str] = []
+    if schema.empty:
+        return text, repairs
+    failed: set[Variable] = set()
+    for _ in range(4):
+        parsed = parse_sparql(text)
+        if parsed.kind != "SelectQuery" or parsed.algebra is None:
+            break
+        candidate = next((found for found in _year_versioned_keys(parsed, schema) if found[1] not in failed), None)
+        if candidate is None:
+            break
+        code, key, parents = candidate
+        rewritten = _key_from_year_free_code(text, key, parents)
+        if rewritten is not None and _renamed_type_only(parsed, rewritten, code, key, schema):
+            text = rewritten
+            dropped = f"; {_parent_filter(key, parents)} drops the code ?{code} is typed with" if parents else ""
+            repairs.append(
+                f"Grouped ?{key} by the year-free code: '?{code} a ?{key}' yields one ICD-10-GM or CHOP class per code "
+                f"and coding year (chop/2016/00.03, chop/2017/00.03), so the node is typed ?{key}_versioned and "
+                f"?{key} is {YEAR_FREE_CODE.format(versioned=f'{key}_versioned')}{dropped}."
+            )
+        else:
+            failed.add(key)
+    return text, repairs
+
+
+def _year_versioned_keys(parsed: ParsedQuery, schema: SchemaCards) -> list[tuple[Variable, Variable, list[str]]]:
+    """(code node, GROUP BY key, codes the node is also typed with) for every key that only '?code a ?key'
+    binds, on a node every solution types, of an ICD-10-GM or CHOP code."""
+    analysis = _Analysis(parsed.algebra, schema)
+    found = []
+    for group in _find(parsed.algebra, "Group"):
+        required = _required_triples(group.p)
+        for key in group.expr or ():
+            if not isinstance(key, Variable) or key in analysis.values_vars or any(key == other for _, other, _ in found):
+                continue
+            mentions = [pattern for pattern in analysis.patterns if key in (pattern.subject, pattern.predicate, pattern.object)]
+            code = mentions[0].subject if len(mentions) == 1 else None
+            if not isinstance(code, Variable) or code == key or (code, RDF.type, key) not in required:
+                continue
+            parents = _code_parents(analysis, code, required, schema)
+            if parents is not None and _read_only_as_key(parsed.algebra, key):
+                found.append((code, key, parents))
+    return found
+
+
+def _required_triples(node) -> set[tuple]:
+    """The triples every solution of the pattern matches (REQUIRED_PARTS)."""
+    if not isinstance(node, CompValue):
+        return set()
+    if node.name == "BGP":
+        return set(node.triples)
+    return set().union(*(_required_triples(node.get(part)) for part in REQUIRED_PARTS.get(node.name, ())))
+
+
+def _code_parents(analysis: _Analysis, code: Variable, required: set[tuple], schema: SchemaCards) -> list[str] | None:
+    """The codes (year-free) of the concrete classes the node is typed with, when the node holds ICD-10-GM
+    or CHOP codes by its record's card or by those classes; None when that is not known or another
+    system is involved."""
+    concrete = sorted(str(obj) for subject, predicate, obj in required if subject == code and predicate == RDF.type and isinstance(obj, URIRef))
+    if any(not iri.startswith(HIERARCHICAL_NAMESPACES) for iri in concrete):
+        return None  # a SNOMED CT or sphn class on the node: not a year-versioned code
+    systems = {_system_of(iri) for iri in concrete}
+    for pattern, prop in analysis.links():
+        if pattern.object == code:
+            name = analysis.single_class(pattern.subject, pattern)
+            if name is not None:
+                systems.add(schema.classes[name]["properties"].get(prop, {}).get("code_system"))
+    systems.discard(None)
+    if not systems or not systems <= {"ICD-10-GM", "CHOP"}:
+        return None
+    return sorted({iri.rsplit("/", 1)[-1] for iri in concrete})
+
+
+def _read_only_as_key(algebra, key: Variable) -> bool:
+    """Nothing reads ?key but SELECT (as itself, or as the SAMPLE rdflib makes of a projected key),
+    GROUP BY and ORDER BY."""
+    samples = set()
+    for join in _find(algebra, "AggregateJoin"):
+        for aggregate in join.A:
+            if key in _expression_variables(aggregate.vars):
+                if aggregate.name != "Aggregate_Sample":
+                    return False
+                samples.add(aggregate.res)
+    for node in _find(algebra, "Extend"):
+        read = _expression_variables(node.expr)
+        if key in read or (read & samples and not _is_projected_key(node)):
+            return False
+    for name in ("Filter", "LeftJoin"):
+        for node in _find(algebra, name):
+            if node.expr is not None and (key in _expression_variables(node.expr) or _expression_variables(node.expr) & samples):
+                return False
+    for name in EXISTS_NAMES:
+        if any(_mentions_variable(node, key) for node in _find(algebra, name)):
+            return False
+    return not any(node.term == key for node in _find(algebra, "Graph"))
+
+
+def _mentions_variable(node, variable: Variable) -> bool:
+    if isinstance(node, Variable):
+        return node == variable
+    if isinstance(node, CompValue):
+        return any(_mentions_variable(value, variable) for key, value in node.items() if not key.startswith("_"))
+    if isinstance(node, dict):
+        return any(_mentions_variable(key, variable) or _mentions_variable(value, variable) for key, value in node.items())
+    if isinstance(node, (list, tuple, set)):
+        return any(_mentions_variable(item, variable) for item in node)
+    return False
+
+
+def _key_from_year_free_code(text: str, key: Variable, parents: list[str]) -> str | None:
+    """Rename ?key to ?key_versioned in its one type pattern and bind ?key to the year-free code (and
+    filter out the parent codes) at the end of the group that holds the pattern; None when the pattern is
+    not written as '?code a ?key' or the new name is taken."""
+    masked = IRIS_STRINGS_COMMENTS_RE.sub(lambda match: " " * len(match.group(0)), text)
+    versioned = f"{key}_versioned"
+    if re.search(_variable_re(versioned), masked):
+        return None
+    typed = list(re.finditer(rf"(?:(?<![\w:?$-])a|(?<![\w-])rdf:type)\s+({_variable_re(str(key))})", masked))
+    if len(typed) != 1:
+        return None
+    start, end = typed[0].span(1)
+    opening = _enclosing_brace(masked, start)
+    closing = _closing_brace(masked, opening) if opening is not None else None
+    if closing is None:
+        return None
+    statements = [f"BIND ({YEAR_FREE_CODE.format(versioned=versioned)} AS ?{key})"] + ([_parent_filter(key, parents)] if parents else [])
+    line_start = text.rfind("\n", 0, closing) + 1
+    if text[line_start:closing].strip():  # the brace closes a line with content: the statements go inline
+        position, insertion = closing, ("" if text[closing - 1].isspace() else " ") + " ".join(statements) + " "
+    else:
+        triple_line = text[text.rfind("\n", 0, start) + 1:]
+        indent = triple_line[:len(triple_line) - len(triple_line.lstrip(" \t"))]
+        position, insertion = line_start, "".join(f"{indent}{statement}\n" for statement in statements)
+    return text[:start] + f"?{versioned}" + text[end:position] + insertion + text[position:]
+
+
+def _parent_filter(key: Variable, parents: list[str]) -> str:
+    codes = ", ".join(f'"{parent}"' for parent in parents)
+    return f"FILTER (?{key} != {codes})" if len(parents) == 1 else f"FILTER (?{key} NOT IN ({codes}))"
+
+
+def _enclosing_brace(masked: str, position: int) -> int | None:
+    depth = 0
+    for index in range(position - 1, -1, -1):
+        if masked[index] == "}":
+            depth += 1
+        elif masked[index] == "{":
+            if depth == 0:
+                return index
+            depth -= 1
+    return None
+
+
+def _closing_brace(masked: str, opening: int) -> int | None:
+    depth = 0
+    for index in range(opening, len(masked)):
+        if masked[index] == "{":
+            depth += 1
+        elif masked[index] == "}":
+            depth -= 1
+            if depth == 0:
+                return index
+    return None
+
+
+def _renamed_type_only(parsed: ParsedQuery, rewritten: str, code: Variable, key: Variable, schema: SchemaCards) -> bool:
+    """True when the rewrite only renamed the class variable of '?code a ?key', kept every column and
+    binds ?key with the new BIND."""
+    reparsed = parse_sparql(rewritten)
+    if reparsed.kind != parsed.kind or reparsed.algebra is None or _duplicate_projection(reparsed.algebra):
+        return False
+    if [list(node.PV) for node in _find(reparsed.algebra, "Project")] != [list(node.PV) for node in _find(parsed.algebra, "Project")]:
+        return False
+    before = Counter((pattern.subject, pattern.predicate, pattern.object) for pattern in _Analysis(parsed.algebra, schema).patterns)
+    before[(code, RDF.type, key)] -= 1
+    before[(code, RDF.type, Variable(f"{key}_versioned"))] += 1
+    after = Counter((pattern.subject, pattern.predicate, pattern.object) for pattern in _Analysis(reparsed.algebra, schema).patterns)
+    bound = any(node.var == key and not _is_projected_key(node) for node in _find(reparsed.algebra, "Extend"))
+    return +before == after and bound
+
+
 def _value_index(schema: SchemaCards) -> dict[str, list[tuple[str, str, str]]]:
     """Full IRI of every value-set entry -> [(class, property, label)]."""
     index: dict[str, list[tuple[str, str, str]]] = defaultdict(list)
@@ -703,4 +908,4 @@ def suggest_missing_term(term: str, schema: SchemaCards) -> str:
 
 
 CHECKS = [check_class_property, check_record_link_typed, check_typed_value_set, check_value_set_member, check_code_system]
-REWRITES = [rewrite_typed_value_set]
+REWRITES = [rewrite_typed_value_set, rewrite_year_versioned_code_key]

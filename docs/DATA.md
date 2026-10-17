@@ -86,6 +86,7 @@ Pattern used everywhere:
 ```
 
 - **Codes carry a year** (`icd-10-gm/2022/A00.1`). The inference option makes `icd-10-gm:A00` match every year and every subcode. Without it nothing matches.
+- **Group ICD-10-GM and CHOP codes by the year-free code.** `?c a ?concept` yields the year-versioned class, so `GROUP BY ?concept` returns one row per code and year (official-06: 31 rows instead of 4). The reference groups by `BIND (REPLACE(STR(?concept), "^.*/", "") AS ?code)`, which both `chop/2016/00.03` and `chop/00.03` turn into `00.03`. The judge rewrites a key bound only by `?c a ?key` this way, and drops the code the node is typed with when there is one (`chop:00.0` is not one of its own kinds); it leaves the key alone when a label lookup, a `VALUES` block, a `FILTER` or a `BIND` reads it.
 - **Codes used in the examples:**
   - `icd-10-gm:A00`: cholera.
   - `icd-10-gm:E11`: type 2 diabetes.

@@ -1,10 +1,13 @@
 import copy
+import json
+import re
 from pathlib import Path
 
 import pytest
 
 from conftest import DATA_DIR, load_examples
 from nl2sparql.context import SchemaCards
+from nl2sparql.judge import Judge
 from nl2sparql.judge_checks.schema import (
     CHECKS,
     REWRITES,
@@ -14,10 +17,11 @@ from nl2sparql.judge_checks.schema import (
     check_typed_value_set,
     check_value_set_member,
     rewrite_typed_value_set,
+    rewrite_year_versioned_code_key,
     suggest_missing_term,
 )
 from nl2sparql.sparql.parse import parse_sparql
-from nl2sparql.sparql.prefixes import add_missing_prefixes
+from nl2sparql.sparql.prefixes import add_missing_prefixes, fix_standard_prefixes
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 GRAPH_COUNT = "SELECT (COUNT(DISTINCT ?g) AS ?n) WHERE { GRAPH ?g { %s } }"
@@ -187,6 +191,143 @@ def test_rewrite_leaves_the_query_when_it_cannot_do_it_cleanly(schema):
     assert rewrite_typed_value_set("SELECT ?x WHERE {", schema) == ("SELECT ?x WHERE {", [])
 
 
+# official-06's answer in the 17 October runs (query-20261017-210737): ?concept is the year-versioned CHOP
+# class (chop/2016/00.03, chop/2017/00.03, ...), so it returned 31 rows instead of the reference's 4 codes.
+OFFICIAL_06_ANSWER = """DEFINE sql:select-option "order"
+PREFIX sphn-individual: <https://biomedit.ch/rdf/sphn-schema/sphn/individual#>
+PREFIX bif: <bif:>
+PREFIX sphn: <https://biomedit.ch/rdf/sphn-schema/sphn#>
+PREFIX chop: <https://biomedit.ch/rdf/sphn-resource/chop/>
+
+SELECT ?concept
+       (COUNT(DISTINCT ?procedure) AS ?count)
+       (ROUND(1000.0 * COUNT(DISTINCT ?principal) / COUNT(DISTINCT ?procedure)) / 10 AS ?principal_pct)
+       (ROUND(10 * AVG(?hours)) / 10 AS ?avg_hours)
+WHERE {
+  GRAPH ?g {
+    ?code a chop:00.0 OPTION (inference "https://biomedit.ch/rdf/sphn-resource/global") .
+    ?procedure sphn:hasCode ?code .
+    ?code a ?concept .
+    ?procedure a sphn:BilledProcedure ;
+               sphn:hasStartDateTime ?start ;
+               sphn:hasEndDateTime ?end .
+    OPTIONAL {
+      ?procedure sphn:hasRank sphn-individual:Principal .
+      BIND (?procedure AS ?principal)
+    }
+  }
+  BIND (bif:datediff("hour", ?start, ?end) AS ?hours)
+}
+GROUP BY ?concept
+ORDER BY DESC(?count)
+"""
+YEAR_FREE_REPAIR = (
+    "Grouped ?concept by the year-free code: '?code a ?concept' yields one ICD-10-GM or CHOP class per code and "
+    "coding year (chop/2016/00.03, chop/2017/00.03), so the node is typed ?concept_versioned and ?concept is "
+    'REPLACE(STR(?concept_versioned), "^.*/", "")'
+)
+
+
+def test_rewrite_year_versioned_code_key_merges_the_years_of_official_06(schema):
+    rewritten, repairs = rewrite_year_versioned_code_key(OFFICIAL_06_ANSWER, schema)
+    assert repairs == [YEAR_FREE_REPAIR + '; FILTER (?concept != "00.0") drops the code ?code is typed with.']
+    assert rewritten == OFFICIAL_06_ANSWER.replace("?code a ?concept .", "?code a ?concept_versioned .").replace(
+        "      BIND (?procedure AS ?principal)\n    }\n",
+        "      BIND (?procedure AS ?principal)\n    }\n"
+        '    BIND (REPLACE(STR(?concept_versioned), "^.*/", "") AS ?concept)\n'
+        '    FILTER (?concept != "00.0")\n',
+    )
+    assert parse_sparql(rewritten).kind == "SelectQuery"
+    assert rewrite_year_versioned_code_key(rewritten, schema) == (rewritten, [])  # ?concept is now the BIND's
+
+
+def test_judge_repairs_official_06_without_new_errors(schema):
+    verdict = Judge(schema).check(OFFICIAL_06_ANSWER)
+    assert verdict.errors == []
+    assert [repair for repair in verdict.repairs if repair.startswith("Grouped ?concept")] == [
+        YEAR_FREE_REPAIR + '; FILTER (?concept != "00.0") drops the code ?code is typed with.'
+    ]
+    assert 'BIND (REPLACE(STR(?concept_versioned), "^.*/", "") AS ?concept)' in verdict.sparql
+
+
+@pytest.mark.parametrize("body, expected", [
+    # The record's card says ICD-10-GM; no concrete code, so no filter. The brace closes the line: inline.
+    ("?dx a sphn:BilledDiagnosis ; sphn:hasCode ?code . ?code a ?concept . } }",
+     '?dx a sphn:BilledDiagnosis ; sphn:hasCode ?code . ?code a ?concept_versioned . '
+     'BIND (REPLACE(STR(?concept_versioned), "^.*/", "") AS ?concept) } }'),
+    # An untyped record: the concrete ICD-10-GM code names the system and the parent to drop.
+    ('?code a icd-10-gm:A00 OPTION (inference "https://biomedit.ch/rdf/sphn-resource/global") . '
+     "?dx sphn:hasCode ?code . ?code rdf:type ?concept } }",
+     '?code a icd-10-gm:A00 OPTION (inference "https://biomedit.ch/rdf/sphn-resource/global") . '
+     '?dx sphn:hasCode ?code . ?code rdf:type ?concept_versioned BIND (REPLACE(STR(?concept_versioned), "^.*/", "") AS ?concept) '
+     'FILTER (?concept != "A00") } }'),
+])
+def test_rewrite_year_versioned_code_key_reads_the_system_from_the_card_or_the_code(schema, body, expected):
+    head = "SELECT ?concept (COUNT(DISTINCT ?g) AS ?patients) WHERE { GRAPH ?g { "
+    query = add_missing_prefixes(head + body + " GROUP BY ?concept ORDER BY DESC(?patients) LIMIT 10")
+    rewritten, repairs = rewrite_year_versioned_code_key(query, schema)
+    assert len(repairs) == 1
+    assert rewritten == query.replace(body, expected)
+    assert parse_sparql(rewritten).kind == "SelectQuery"
+
+
+@pytest.mark.parametrize("body", [
+    # A label lookup needs the class IRI (official-06's answer in query-20261017-214008).
+    "GRAPH ?g { ?proc a sphn:BilledProcedure ; sphn:hasCode ?code . ?code a ?concept . } "
+    "OPTIONAL { GRAPH <https://biomedit.ch/rdf/sphn-resource/global> { ?concept rdfs:label ?label } }",
+    "GRAPH ?g { ?proc a sphn:BilledProcedure ; sphn:hasCode ?code . ?code a ?concept . } VALUES ?concept { chop:00.01 chop:00.02 }",
+    "GRAPH ?g { ?proc a sphn:BilledProcedure ; sphn:hasCode ?code . ?code a ?concept . } FILTER (STRSTARTS(STR(?concept), STR(chop:)))",
+    "GRAPH ?g { ?proc a sphn:BilledProcedure ; sphn:hasCode ?code . ?code a ?concept . } BIND (STR(?concept) AS ?iri)",
+    "GRAPH ?g { ?proc a sphn:BilledProcedure ; sphn:hasCode ?code . OPTIONAL { ?code a ?concept } }",
+    "GRAPH ?g { { ?proc a sphn:BilledProcedure ; sphn:hasCode ?code . ?code a ?concept } UNION "
+    "{ ?dx a sphn:BilledDiagnosis ; sphn:hasCode ?code } }",
+    "GRAPH ?g { ?sex a sphn:AdministrativeSex ; sphn:hasCode ?code . ?code a ?concept . }",  # SNOMED CT
+    "GRAPH ?g { ?dx a sphn:Diagnosis ; sphn:hasCode ?code . ?code a ?concept . }",  # generic sphn:Code nodes
+    "GRAPH ?g { ?x sphn:hasCode ?code . ?code a ?concept . }",  # no class, no code: the system is unknown
+    "GRAPH ?g { ?proc a sphn:BilledProcedure ; sphn:hasCode ?code . ?code a ?concept . ?other a ?concept_versioned . }",
+])
+def test_rewrite_year_versioned_code_key_gives_up(schema, body):
+    query = add_missing_prefixes("SELECT ?concept (COUNT(DISTINCT ?g) AS ?patients) WHERE { %s } GROUP BY ?concept" % body)
+    assert parse_sparql(query).kind == "SelectQuery"
+    assert rewrite_year_versioned_code_key(query, schema) == (query, [])
+
+
+def test_rewrite_year_versioned_code_key_needs_a_group_key_and_cards(schema):
+    # The pattern every give-up case above changes in one place is rewritten as it stands.
+    base = "GRAPH ?g { ?proc a sphn:BilledProcedure ; sphn:hasCode ?code . ?code a ?concept . }"
+    query = add_missing_prefixes("SELECT ?concept (COUNT(DISTINCT ?g) AS ?patients) WHERE { %s } GROUP BY ?concept" % base)
+    assert len(rewrite_year_versioned_code_key(query, schema)[1]) == 1
+    counted = add_missing_prefixes(
+        "SELECT (COUNT(DISTINCT ?concept) AS ?codes) WHERE { GRAPH ?g { ?proc a sphn:BilledProcedure ; sphn:hasCode ?code . ?code a ?concept . } }"
+    )
+    assert rewrite_year_versioned_code_key(counted, schema) == (counted, [])
+    assert rewrite_year_versioned_code_key(OFFICIAL_06_ANSWER, SchemaCards({}, [])) == (OFFICIAL_06_ANSWER, [])
+    assert rewrite_year_versioned_code_key("SELECT ?x WHERE {", schema) == ("SELECT ?x WHERE {", [])
+
+
+def team_and_dev_references() -> list[tuple[str, str]]:
+    """The team examples and the dev reference queries; holdout lines are a blind exam, skipped unparsed."""
+    queries = []
+    for line in (DATA_DIR / "team_examples.jsonl").read_text(encoding="utf-8").splitlines():
+        if line.strip():
+            row = json.loads(line)
+            queries.append((row["id"], row["sparql"]))
+    for line in (DATA_DIR.parent / "eval" / "query_questions.jsonl").read_text(encoding="utf-8").splitlines():
+        if not line.strip() or re.search(r'"split"\s*:\s*"holdout"', line):
+            continue
+        row = json.loads(line)
+        if row.get("split") == "dev":
+            queries.append((row["id"], row["reference_sparql"]))
+    return queries
+
+
+@pytest.mark.parametrize("case_id,query", team_and_dev_references(), ids=[case[0] for case in team_and_dev_references()])
+def test_no_schema_rewrite_touches_the_team_examples_and_dev_references(schema, case_id, query):
+    text = add_missing_prefixes(fix_standard_prefixes(query.strip() + "\n"))
+    for rewrite in REWRITES:
+        assert rewrite(text, schema) == (text, []), (case_id, rewrite.__name__)
+
+
 def test_value_set_member_on_the_wrong_class(schema):
     q039 = (
         "SELECT ?outcome_concept (COUNT(DISTINCT ?g) AS ?patients) WHERE { GRAPH ?g { "
@@ -315,4 +456,4 @@ def test_checks_are_silent_on_the_official_examples_and_without_cards(schema):
 
 def test_module_lists_every_check_and_rewrite():
     assert CHECKS == [check_class_property, check_record_link_typed, check_typed_value_set, check_value_set_member, check_code_system]
-    assert REWRITES == [rewrite_typed_value_set]
+    assert REWRITES == [rewrite_typed_value_set, rewrite_year_versioned_code_key]
