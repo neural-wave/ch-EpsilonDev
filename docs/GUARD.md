@@ -66,10 +66,10 @@ Propagation:
 
 | Rule | Check in `rules.py` | Fails on |
 |---|---|---|
-| R4 | Query form must be `SelectQuery` | CONSTRUCT, ASK, DESCRIBE, any update |
-| R1 | No patient graph IRI (`http://example.org/graph/…`) or record IRI (`…/sphn-resource/…-sphn-…`) anywhere; no identifier literal in a pattern; no filter comparing an identifier with a constant | `GRAPH <…/mock_data-1_0042>`, `?s sphn:hasIdentifier "ID-1…"`, `FILTER(STR(?g) = "…")` |
+| R4 | Query form must be `SelectQuery`, with no federated `SERVICE` clause | CONSTRUCT, ASK, DESCRIBE, any update, or SERVICE access to another endpoint |
+| R1 | No patient graph IRI (`http://example.org/graph/…`) or record IRI (`…/sphn-resource/…-sphn-…`) anywhere, including `FROM` and `FROM NAMED`; no identifier literal in a pattern; no filter comparing an identifier with a constant | `GRAPH <…/mock_data-1_0042>`, `FROM NAMED <…/mock_data-1_0042>`, `?s sphn:hasIdentifier "ID-1…"`, `FILTER(STR(?g) = "…")` |
 | R3 | At least one patient pattern with a concrete property, or `rdf:type` with a concrete class | `?s ?p ?o` alone, `?s a ?class` alone |
-| R2 | The outermost SELECT is aggregated. No `SELECT *`. Every projected value is an aggregate or a `GROUP BY` key that is not instance-level or an exact timestamp | rows of values, `GROUP BY ?date`, `GROUP_CONCAT` of values, `SAMPLE` of a timestamp |
+| R2 | The outermost SELECT is aggregated. No `SELECT *`. Every projected value is an aggregate or a `GROUP BY` key that is not instance-level or an exact timestamp; `HAVING (COUNT(DISTINCT ?g) = 1)` is rejected | rows of values, `GROUP BY ?date`, `GROUP_CONCAT` of values, `SAMPLE` of a timestamp, one-patient groups |
 | R5 | No projected value is an identifier or a record IRI, even through `GROUP_CONCAT`, `SAMPLE`, `MIN`, `MAX` or `STR` | `GROUP_CONCAT(?pseudo_id)`, `MAX(?id)`, `GROUP BY ?g` with `?g` returned |
 
 **Exception:** queries that touch only the ontology graph skip R2 and R5.
@@ -114,7 +114,7 @@ These are our defaults until the organizers answer (README, section 14):
 | `GROUP BY YEAR(?date)` | Allowed | R2 |
 | `MIN`/`MAX` of dates or values | Allowed, even if it points at one patient | R5 only checks identifiers |
 | `SAMPLE` of a value | Allowed; of a timestamp, rejected | R2 |
-| Minimum group size | Not enforced: `GROUP BY` + `HAVING (COUNT(…) = 1)` passes | — |
+| Minimum group size | `HAVING (COUNT(DISTINCT ?g) = 1)` is rejected; larger thresholds are not enforced | R2 |
 | Ontology-only queries | Allowed | exception above |
 | `hasSubjectPseudoIdentifier` | Treated as an identifier (its name contains `Identifier`) | provenance |
 | `FILTER(STRSTARTS(STR(?g), "…"))` | Allowed for the bare prefix, rejected when the literal contains digits | R1 |
@@ -131,13 +131,12 @@ The parser library has quirks we hit and handled:
 ## 8. Backlog for module D (most useful first)
 
 1. **Look at the three possible false alarms in the corpus.** #07 especially; #01 and #08 point to judge rules that would have caught the invalid SPARQL.
-2. **Cut retries.** 32% of LLM requests use the retry. Add judge style rules: inference on code patterns, `COUNT(DISTINCT ?g)`, standard prefixes. Find which judge errors trigger most retries (`logs/requests.jsonl` on the run machine).
+2. **Cut retries.** 32% of LLM requests use the retry. The judge now flags missing inference on explicit ICD-10-GM/CHOP code patterns and non-distinct `COUNT(?g)` patient counts; missing standard prefixes are repaired automatically. Find which judge errors still trigger most retries (`logs/requests.jsonl` on the run machine).
 3. **Catch Virtuoso-only errors statically.** Two LLM queries passed our parser but failed in Virtuoso, for example with `NULL` or a `GRAPH` nested inside `GRAPH`. We may not ask the database at runtime.
 4. **More trap tests:**
    - identifiers smuggled through `CONCAT`, `SUBSTR` or `STR(?record)`;
-   - a subquery that projects `?g`, wrapped in an outer aggregate;
-   - `FROM NAMED` with a patient graph;
-   - `SERVICE` (federated) clauses: they should probably be forbidden;
-   - `HAVING (COUNT(DISTINCT ?g) = 1)`.
+   - a subquery that projects `?g`, wrapped in an outer aggregate (safe when only a count is returned; unsafe when concatenated or sampled);
+   - `SERVICE` (federated) clauses: rejected as R4;
+   - additional minimum-group-size policies, if the organizers require thresholds greater than one.
 5. **Encode the gray zones** once the organizers answer: minimum group size, `MIN`/`MAX`.
 6. **Later, with module B:** performance rewrites for the slow shapes (README, section 11).

@@ -359,6 +359,11 @@ scripts/runbox.sh eval --execute --branch guard/my-fix     # eval with the LLM +
 
 The full guide to the data, with examples, is [docs/DATA.md](docs/DATA.md).
 
+The terminology-index builder also reads the optional local file
+`assets/english_terminology_labels.jsonl`. Each line must contain
+`{"system": "ICD-10-GM"|"CHOP", "code": "...", "labels": ["..."]}`.
+This file and the generated index are restricted and must never be committed.
+
 ## 11. Evaluation and baseline numbers
 
 ```bash

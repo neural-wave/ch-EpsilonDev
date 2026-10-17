@@ -2,6 +2,7 @@ from conftest import DATA_DIR
 from nl2sparql.context import ContextBuilder, ExampleBank, SchemaCards, TerminologyIndex
 from nl2sparql.context.bm25 import tokenize
 from nl2sparql.models import CodeEntry
+from scripts.build_terminology_index import load_english_labels
 
 
 def test_tokenize_folds_accents_and_drops_stopwords():
@@ -48,6 +49,17 @@ def test_terminology_matches_codes_and_labels():
     ])
     assert [e.code for e in index.candidates("How many patients have cholera?")] == ["A00"]
     assert [e.code for e in index.candidates("Patients with E11 diagnoses")] == ["E11"]
+
+
+def test_load_english_terminology_labels(tmp_path):
+    path = tmp_path / "english_labels.jsonl"
+    path.write_text(
+        '{"system":"ICD-10-GM","code":"E11","labels":["Type 2 diabetes mellitus"]}\n',
+        encoding="utf-8",
+    )
+    assert load_english_labels(path) == {
+        ("ICD-10-GM", "E11"): {"Type 2 diabetes mellitus"}
+    }
 
 
 def test_context_builder_combines_everything():

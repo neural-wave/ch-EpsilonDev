@@ -115,3 +115,24 @@ def test_every_intent_prompt_asks_for_all_flags_and_json_keys(version):
     prompt = INTENT_PROMPTS[version]
     for key in (*FLAG_NAMES, "reason", "suggested_rephrase"):
         assert f'"{key}"' in prompt, f"intent prompt {version} does not name {key}"
+
+
+def test_judge_flags_missing_terminology_inference():
+    judge = Judge(SchemaCards.load(DATA_DIR / "schema_cards.json"))
+    result = judge.check(
+        "SELECT (COUNT(DISTINCT ?g) AS ?n) WHERE { "
+        "GRAPH ?g { ?dx a sphn:BilledDiagnosis ; sphn:hasCode ?code . "
+        "?code a icd-10-gm:E11 } }"
+    )
+    assert result.errors == [
+        "Code type patterns using icd-10-gm or chop must include OPTION (inference "
+        '"https://biomedit.ch/rdf/sphn-resource/global").'
+    ]
+
+
+def test_judge_flags_non_distinct_patient_graph_count():
+    judge = Judge(SchemaCards.load(DATA_DIR / "schema_cards.json"))
+    result = judge.check(
+        "SELECT (COUNT(?g) AS ?patients) WHERE { GRAPH ?g { ?dx a sphn:BilledDiagnosis } }"
+    )
+    assert result.errors == ["COUNT(?g) counts graph bindings, not patients; use COUNT(DISTINCT ?g)."]
