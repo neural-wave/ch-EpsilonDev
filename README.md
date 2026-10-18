@@ -8,7 +8,7 @@ The API returns the generated query, a compliance verdict and token usage **with
 
 ### 🎥 Project Demo
 
-[![Watch the Demo Video](https://img.shields.io/badge/▶_PLAY_DEMO_VIDEO-Click_to_Watch-red?style=for-the-badge&logo=youtube)](https://github.com/neural-wave/ch-EpsilonDev/raw/main/assets/sib-doc-demo-v9.mp4)
+[![Watch the Demo Video](https://img.shields.io/badge/▶_PLAY_DEMO_VIDEO-Click_to_Watch-red?style=for-the-badge&logo=youtube)](https://youtu.be/6jT3EJk6Cb4)
 
 [Get started](#installation-and-use) · [Architecture](#how-the-final-system-works) · [Evaluation](#evaluation-and-results) · [Documentation](docs/README.md)
 
