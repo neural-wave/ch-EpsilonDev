@@ -1,5 +1,6 @@
 """Protect the workflow's release gates without adding a YAML runtime dependency."""
 import re
+import os
 import subprocess
 from pathlib import Path
 
@@ -61,3 +62,19 @@ def test_actions_are_pinned_and_checkout_does_not_persist_credentials():
 def test_operations_scripts_parse_without_executing_services(script):
     path = Path(__file__).resolve().parents[1] / script
     subprocess.run(['bash', '-n', str(path)], check=True, capture_output=True, text=True)
+
+
+def test_publication_summary_renders_image_as_markdown_code_without_backticks(tmp_path):
+    lines = re.findall(r'^          printf .*$', job('publish'), re.M)
+    assert len(lines) == 2
+    script = '\n'.join(line.strip() for line in lines)
+    # Backticks in a single-quoted format trigger ShellCheck SC2016 on the CI runner.
+    assert '`' not in script
+    summary = tmp_path / 'summary.md'
+    image = 'ghcr.io/example/project'
+    sha = 'a' * 40
+    tags = f'{image}:main\n{image}:sha-{sha}'
+    env = dict(os.environ, IMAGE_NAME=image, GITHUB_SHA=sha, IMAGE_TAGS=tags,
+               GITHUB_STEP_SUMMARY=str(summary))
+    subprocess.run(['bash', '-c', script], env=env, check=True, capture_output=True, text=True)
+    assert summary.read_text() == f'## Published tested image\n\n    {image}:sha-{sha}\n\n{tags}\n'

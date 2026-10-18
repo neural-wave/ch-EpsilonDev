@@ -296,5 +296,5 @@ jobs:
               raise SystemExit('Published manifest does not match the tested platform set.')
           print('Published manifest contains both tested platforms.')
           PYTHON
-          printf '## Published tested image\n\n`%s:sha-%s`\n\n' "$IMAGE_NAME" "$GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
+          printf '## Published tested image\n\n    %s:sha-%s\n\n' "$IMAGE_NAME" "$GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
           printf '%s\n' "$IMAGE_TAGS" >> "$GITHUB_STEP_SUMMARY"
