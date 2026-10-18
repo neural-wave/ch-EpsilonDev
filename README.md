@@ -1,60 +1,144 @@
 # SIB Doc
 
-A researcher writes a question in English. This gateway translates it to SPARQL over Swiss Personalized Health Network (SPHN) clinical graphs and decides whether the requested query follows five privacy rules. The judged endpoint, `POST /nl-to-sparql`, returns a query and a compliance verdict without connecting to a database. The optional researcher console can execute a compliant query against a separately configured development Virtuoso instance.
+**Research questions in. Privacy-checked SPARQL out.**
 
-This document describes the **final implementation and the evidence behind its decisions**, including approaches that failed. Detailed experiment logs, failure analysis and implementation guides are linked throughout. The software is built with open-licensed model weights and code; clinical terminology files and patient data are not distributed here.
+SIB Doc turns natural-language research questions into SPARQL queries over Swiss Personalized Health Network (SPHN) clinical knowledge graphs and checks them against five patient privacy rules. Built for the SIB/SPHN Neural Wave hackathon 2026, it combines open-source LLM agents with deterministic query validation and a researcher console.
 
-| Final evaluated configuration | Result reported on 18 October 2026 |
+The API returns the generated query, a compliance verdict and token usage **without accessing a database**. The optional console can execute compliant queries against a separately configured development Virtuoso instance and present the released aggregate results as tables or charts.
+
+### 🎥 Project Demo
+
+[![Watch the Demo Video](https://img.shields.io/badge/▶_PLAY_DEMO_VIDEO-Click_to_Watch-red?style=for-the-badge&logo=youtube)](https://github.com/neural-wave/ch-EpsilonDev/raw/main/assets/sib-doc-demo-v9.mp4)
+
+[Get started](#installation-and-use) · [Architecture](#how-the-final-system-works) · [Evaluation](#evaluation-and-results) · [Documentation](docs/README.md)
+
+## What SIB Doc does
+
+| Capability | What you get |
 |---|---|
-| Model | Qwen3.6-27B, 4-bit AWQ, served through vLLM for both agents |
-| Prompts and context | Intent v4; query v4; up to 3 retrieved examples, 8 schema cards and 5 code candidates |
-| Privacy verdicts | 148/149 on the development split and 49/49 on the held-out split; no forbidden request marked compliant |
-| Query results | 34/87 exact; 53/87 with the reference's numbers; 20/31 with the reference's numbers on the query holdout |
-| Query validity and latency | 92% executed on development Virtuoso; 85% passed the judge on the first attempt; 7.2 s / 20.1 s p50 / p95 on the 87-question query evaluation |
-| Most recent comparable 27B API load run (before the final context/judge fixes) | 32/32 HTTP 200 at eight concurrent requests; 8.9 s / 19.1 s p50 / p95 |
+| Translate research questions | Literal SPARQL generation with local examples, schema cards and optional terminology context. |
+| Check patient privacy rules | Request-intent checks and static query analysis, with reasons for a non-compliant verdict. |
+| Explore aggregate results | A researcher console with tables, charts, follow-up questions, exports and opt-in result sharing. |
+| Run locally or in a container | A stub backend for development without a GPU or database, plus a configurable LLM backend and CI/CD delivery to GHCR. |
 
-These are **measured results for specific evaluation sets and a private runtime configuration**, not a guarantee for new clinical questions or a fresh install without the optional terminology assets. The definitions, splits and limitations are in [Evaluation and results](#evaluation-and-results).
+## Results at a glance
+
+Measured on 18 October 2026 with Qwen3.6-27B (4-bit AWQ), intent/query v4 prompts and the evaluated local context assets:
+
+| Measure | Reported result |
+|---|---|
+| Privacy verdict accuracy | **99.3%** on development (148/149); **100%** on the verdict holdout (49/49). |
+| Forbidden requests marked compliant | **0** across those 198 labeled requests. |
+| Query answer quality | **53/87** with the reference's numbers, including **20/31** on the query holdout; **34/87** exact matches overall. |
+| Translation and checking latency | **7.2 s** median / **20.1 s** p95 in the 87-question query evaluation. |
+
+These results describe specific evaluation sets and a private runtime configuration. Verdict accuracy and query-answer correctness are separate measures; a public checkout without the optional terminology assets may perform differently. See [evaluation methods, full results and limitations](#evaluation-and-results).
 
 ## Contents
 
-- [The challenge and its rules](#the-challenge-and-its-rules)
-- [How the final system works](#how-the-final-system-works)
-- [Data and local context](#data-and-local-context)
-- [The two LLM agents and why they evolved](#the-two-llm-agents-and-why-they-evolved)
-- [Model, decoding and retrieval decisions](#model-decoding-and-retrieval-decisions)
-- [Judge, compliance guard and design tradeoffs](#judge-compliance-guard-and-design-tradeoffs)
-- [Evaluation and results](#evaluation-and-results)
 - [Installation and use](#installation-and-use)
 - [Researcher console and delivery](#researcher-console-and-delivery)
+- [How the final system works](#how-the-final-system-works)
+- [The challenge and its rules](#the-challenge-and-its-rules)
+- [Data and local context](#data-and-local-context)
+- [Judge, compliance guard and design tradeoffs](#judge-compliance-guard-and-design-tradeoffs)
+- [Evaluation and results](#evaluation-and-results)
+- [The two LLM agents and why they evolved](#the-two-llm-agents-and-why-they-evolved)
+- [Model, decoding and retrieval decisions](#model-decoding-and-retrieval-decisions)
 - [Repository and documentation map](#repository-and-documentation-map)
 - [Team, sources, AI assistance and license](#team-sources-ai-assistance-and-license)
 
-## The challenge and its rules
+## Installation and use
 
-SPHN clinical data is represented as RDF. In the supplied mock dataset, **one patient occupies one named graph**. A graph name or record IRI can therefore identify a patient. Researchers need aggregate answers without writing SPARQL or receiving identifying rows. The challenge asks for a translator and a compliance checker behind one API, and its judged request path must be database-agnostic.
+Use Python **3.11 or 3.12** with the current dependency pins; the CI matrix covers both. The package declares Python 3.11 or newer, but the pinned rdflib 7.1.1 is incompatible with Python 3.14. [`requirements.txt`](requirements.txt) pins the application dependencies and installs this package in editable mode. No GPU or Virtuoso is needed for the local stub and Python tests.
 
-The organizer's API contract is:
+From the repository root:
 
-```http
-POST /nl-to-sparql
-Content-Type: application/json
-
-{"text": "How many patients have a billed diagnosis of cholera, by sex?"}
+```bash
+python3 -m venv .venv
+. .venv/bin/activate
+python -m pip install -r requirements.txt
+python -m nl2sparql --port 8080
 ```
 
-A completed translation returns HTTP 200 with `sparql_query`, `tokens_consumed` and `is_compliant`. When the verdict is false, it also returns `compliance_reason`. A forbidden request is still a completed translation: the judged API returns its **literal query** so the jury can inspect it, but that query is never executed by the judged endpoint. Invalid input returns HTTP 400 with `error`; a pipeline failure returns HTTP 503 with `error`. Greetings and other requests that are not questions about the patient data return an empty query and a non-compliant reason. `tokens_consumed` sums the model usage across the intent and query calls, including retries.
+Open the researcher console at **<http://localhost:8080/console/cli/>**. The default stub backend lets you explore the interface and API wiring; real translation requires the [LLM setup below](#run-the-llm-backed-translator), and real result execution also requires a development database.
 
-| Rule | What is forbidden | Why it matters here |
-|---|---|---|
-| R1 | Selecting one identifiable patient | A graph name, record IRI or exact identifier can single out a person. |
-| R2 | Results that are not aggregated across patients | Individual rows can disclose patient-level facts. |
-| R3 | Matching the entire graph without a meaningful restriction | An unrestricted scan can expose the dataset rather than answer a clinical question. |
-| R4 | Anything except `SELECT` | The organizer's compliance rules permit only aggregate `SELECT` queries. |
-| R5 | Exposing patient, laboratory, diagnosis or other identifiers | An aggregate request must not also reveal who contributed to it. |
+Run `python -m pytest -q` to check the installation. The local Python suite passed **1,693 tests** on this checkout with one third-party deprecation warning. These tests use local fixtures and do not reproduce live model or database measurements.
 
-The supplied `API_specification.md` describes read-only `ASK`, `CONSTRUCT` and `DESCRIBE` as potentially compliant, while `Query_Compliance.md` permits only `SELECT`. We follow the stricter, explicit compliance rules and the organizer's non-`SELECT` example. The source challenge files were supplied to participants separately; restricted files are not copied into this repository.
+### Check the HTTP contract without a model
 
-The jury's principal criteria are total request time (translation, checks and retries), correctness of the compliance verdict in both directions, and query execution time averaged over ten isolated runs. Tokens, model size and memory use are secondary. The challenge requires open-source tools and models. It also requires a repository that installs with `pip install -r requirements.txt`. The organizer's submission guidelines separately require a report of at most three pages (including the AI-assistance declaration and unsuccessful ideas), a video of at most two minutes, a five-minute presentation, attribution and the full names of team members. Those submission artifacts are separate from this software README.
+The default `NL2SPARQL_BACKEND=stub` uses heuristic intent rules and copies the query of the most similar example. It verifies the wiring and API response shape; it is **not an arbitrary-question translator**.
+
+With the server running, use another terminal:
+
+```bash
+curl -fsS http://localhost:8080/health
+curl -sS http://localhost:8080/nl-to-sparql \
+  -H 'Content-Type: application/json' \
+  -d '{"text":"How many patients have a billed diagnosis of cholera, by sex?"}'
+```
+
+### Run the LLM-backed translator
+
+Copy [`.env.example`](.env.example) to a **private, untracked** `.env`. Set `NL2SPARQL_BACKEND=llm`, `LLM_BASE_URL` and `LLM_QUERY_MODEL=cyankiwi/Qwen3.6-27B-AWQ-INT4` to match a running OpenAI-compatible server, plus `LLM_API_KEY` if that server requires it. Leave `LLM_INTENT_MODEL` empty to use the same model for both agents. For Qwen3.x, set:
+
+```dotenv
+LLM_EXTRA_BODY='{"chat_template_kwargs": {"enable_thinking": false}}'
+```
+
+A running model server is a prerequisite; `pip install -r requirements.txt` does not install vLLM, download weights or start a server. On a suitable 32 GB GPU host with vLLM installed separately, start the measured model in another terminal:
+
+```bash
+vllm serve cyankiwi/Qwen3.6-27B-AWQ-INT4 \
+  --max-model-len 32000 --max-num-seqs 8 --port 8000
+```
+
+Set `LLM_BASE_URL=http://localhost:8000/v1` when the API can reach that server locally; use the server's reachable URL otherwise. The evaluated setup used vLLM 0.30. Other OpenAI-compatible serving arrangements are supported by the client, but their quality and latency are not the measurements above.
+
+The application reads **environment variables**, not `.env` automatically. In the shell that starts the API, export the file first:
+
+```bash
+cp .env.example .env
+# Edit .env privately, then:
+set -a
+. ./.env
+set +a
+python -m nl2sparql --port 8080
+```
+
+### Rebuild optional local context assets and evaluate
+
+`data/schema_cards.json`, `data/property_kinds.json`, the official/team examples and the 45 dev reference rows are committed. The [`Dockerfile`](Dockerfile) also copies the dev reference file. The terminology index and coded value sets used in the evaluated run are **restricted, uncommitted** files under `assets/`. With authorized terminology loaded in an existing development Virtuoso database, set `VIRTUOSO_ENDPOINT` privately and run `python scripts/build_assets.py` to build them. The judged endpoint itself never uses `VIRTUOSO_ENDPOINT`.
+
+The evaluation scripts are separate from normal API serving:
+
+```bash
+python eval/run_eval.py --intent-cases --concurrency 4
+python eval/run_intent_eval.py --concurrency 4
+python eval/run_query_eval.py --concurrency 4
+```
+
+These commands require the configured model; query-result evaluation also requires dev Virtuoso. `python eval/run_eval.py --execute` executes allowed queries on the dev database. `eval/time_on_perf.py` is the performance harness for the separate 100,000-patient graph; it is not part of the API and restarts a local performance container after timeouts, so its use belongs in a controlled evaluation environment. [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md) specifies the comparisons and why runs at different concurrency cannot be mixed.
+
+## Researcher console and delivery
+
+| Route | Purpose |
+|---|---|
+| `/console/cli/` | Ask research questions and explore released aggregate results. |
+| `/agents` | Inspect agent configuration, prompts and individual requests. |
+| `/agents/runs` | Compare saved evaluation runs. |
+
+These consoles are outside the judged endpoint. The researcher console can clarify a vague coded concept, suggest follow-up questions, render tables or charts, export released rows and save local snapshots. Explicitly confirmed sharing creates a link to a released aggregate table that expires after seven days by default. See the [frontend contract](docs/FRONTEND.md) and [feature handoff](docs/features/README.md).
+
+### Runtime modes and privacy
+
+`/demo/ask` may execute a compliant query against a configured development Virtuoso endpoint. The team-mode default (`DEMO_SHOW_DETAILS=true`) may return a permitted query and diagnostics to that internal console. `DEMO_SHOW_DETAILS=false` hides those details, and the separate `DEMO_PUBLIC_MODE=true` also blocks developer/judged routes and disables the structured request archive. Public mode requires an explicitly set positive `DEMO_MIN_GROUP_SIZE`. By default this threshold is **disabled**. The optional suppression withholds an entire result when a group is too small; it is a demo release policy, not a new judged-query rule. The console does not supply authentication, TLS or protection against inference by repeated aggregate requests. The [privacy review](docs/PRIVACY_REVIEW.md) describes this boundary and the [validation record](docs/RESULTS_VALIDATION.md) distinguishes synthetic UI checks from checks with an actual model and database.
+
+### CI/CD and containers
+
+[SIB Doc CI/CD](.github/workflows/tests.yml) validates the workflow, shell scripts and release-file boundary, then tests Python 3.11/3.12, frontend JavaScript, desktop/phone browser behavior, and AMD64/ARM64 container images. After all required checks pass, eligible main-branch pushes, version tags and explicitly enabled manual runs publish the tested images to GitHub Container Registry.
+
+The container defaults to the stub backend, includes the public data and dev reference examples, and excludes restricted `assets/` and credentials. Configure a model and development database separately when needed. The [operations handbook, section 19](docs/operations/PROJECT_HANDBOOK.md#19-cicd-and-container-delivery) covers image tags, container commands and administrator setup. The workflow delivers images; a particular publication or running deployment requires its own verification.
 
 ## How the final system works
 
@@ -88,6 +172,33 @@ Literal translation matters to the verdict. If a researcher asks, “How many pa
 
 The default judged response includes the literal query even when non-compliant, following the jury's instruction. For a user-facing deployment, `RETURN_NONCOMPLIANT_QUERY=false` suppresses that query. The demo never executes a forbidden query.
 
+## The challenge and its rules
+
+SPHN clinical data is represented as RDF. In the supplied mock dataset, **one patient occupies one named graph**. A graph name or record IRI can therefore identify a patient. Researchers need aggregate answers without writing SPARQL or receiving identifying rows. The challenge asks for a translator and a compliance checker behind one API, and its judged request path must be database-agnostic.
+
+The organizer's API contract is:
+
+```http
+POST /nl-to-sparql
+Content-Type: application/json
+
+{"text": "How many patients have a billed diagnosis of cholera, by sex?"}
+```
+
+A completed translation returns HTTP 200 with `sparql_query`, `tokens_consumed` and `is_compliant`. When the verdict is false, it also returns `compliance_reason`. A forbidden request is still a completed translation: the judged API returns its **literal query** so the jury can inspect it, but that query is never executed by the judged endpoint. Invalid input returns HTTP 400 with `error`; a pipeline failure returns HTTP 503 with `error`. Greetings and other requests that are not questions about the patient data return an empty query and a non-compliant reason. `tokens_consumed` sums the model usage across the intent and query calls, including retries.
+
+| Rule | What is forbidden | Why it matters here |
+|---|---|---|
+| R1 | Selecting one identifiable patient | A graph name, record IRI or exact identifier can single out a person. |
+| R2 | Results that are not aggregated across patients | Individual rows can disclose patient-level facts. |
+| R3 | Matching the entire graph without a meaningful restriction | An unrestricted scan can expose the dataset rather than answer a clinical question. |
+| R4 | Anything except `SELECT` | The organizer's compliance rules permit only aggregate `SELECT` queries. |
+| R5 | Exposing patient, laboratory, diagnosis or other identifiers | An aggregate request must not also reveal who contributed to it. |
+
+The supplied `API_specification.md` describes read-only `ASK`, `CONSTRUCT` and `DESCRIBE` as potentially compliant, while `Query_Compliance.md` permits only `SELECT`. We follow the stricter, explicit compliance rules and the organizer's non-`SELECT` example. The source challenge files were supplied to participants separately; restricted files are not copied into this repository.
+
+The jury's principal criteria are total request time (translation, checks and retries), correctness of the compliance verdict in both directions, and query execution time averaged over ten isolated runs. Tokens, model size and memory use are secondary. The challenge requires open-source tools and models. It also requires a repository that installs with `pip install -r requirements.txt`. The organizer's submission guidelines separately require a report of at most three pages (including the AI-assistance declaration and unsuccessful ideas), a video of at most two minutes, a five-minute presentation, attribution and the full names of team members. Those submission artifacts are separate from this software README.
+
 ## Data and local context
 
 The mock cohort is synthetic: its counts are evaluation data, not clinical findings. The development Virtuoso database contains 2,000 patients; the performance database contains 100,000. Each patient is one named graph. To count patients, queries normally use `COUNT(DISTINCT ?g)` over `GRAPH ?g { ... }`. Returning `?g`, record IRIs or pseudo-identifiers would expose individuals.
@@ -108,6 +219,74 @@ The evaluated run machine also had a **38,765-code terminology index** and coded
 The final picker avoids two earlier errors: schema-card placeholders that the model copied literally into invalid SPARQL, and pseudo-identifier links shown on ordinary record cards that invited unnecessary joins. Location code candidates say where they belong; the measured “patients living in India” example changed from 0 to the reference's 22 after this correction. See [the context guide](docs/data-and-context/README.md) for its original handoff, [the data guide](docs/DATA.md) for current graph facts, and [the failure analysis](docs/FAILURE_ANALYSIS.md) for the motivating cases.
 
 The first local terminology index and coded value sets for 55 properties made a needed code available to the model in **45/47** development cases and **17/19** holdout cases. Executable queries rose from **60% to 68%** (holdout **73% to 80%**), but blocked allowed requests rose from **6 to 10** and query tokens from **2,711 to 3,159**. The team retained the additional information and corrected the new failure modes through prompts, context ranking and judge checks. Later expansion from six to eight schema cards came with link-following and synonym changes as a bundle; there is no isolated measurement of the extra two cards.
+
+## Judge, compliance guard and design tradeoffs
+
+The judge and guard have different jobs. The **judge** checks whether a generated query is structurally plausible and answers the kind of question asked; it can repair or request a rewrite. The **guard** makes the final privacy verdict from both the parsed query and the request's intent flags. Neither performs a database query behind `POST /nl-to-sparql`. The full rule and implementation guide is [`docs/GUARD.md`](docs/GUARD.md), with historical case-by-case findings in [`docs/FAILURE_ANALYSIS.md`](docs/FAILURE_ANALYSIS.md).
+
+| Decision | Observed problem or competing approach | Final logic and tradeoff |
+|---|---|---|
+| Parse through one wrapper | rdflib's SPARQL parser corrupted concurrent requests when called from separate worker threads. | `sparql.parse.parse_sparql` holds a lock and removes Virtuoso-only directives for rdflib analysis. This serializes parsing, but the check is short and concurrent correctness matters more. |
+| Trust observed data over nominal schema | A valid-looking property from the 2026.1 schema could return no rows on the supplied mock graph. | The judge checks local schema snapshots, class/property combinations and terminology usage measured from the data. Snapshots must be rebuilt for a different graph. |
+| Repair before asking the model | rdflib's syntax message often pointed to the wrong token, and retries repeated the error. | The judge fixes known one-meaning forms such as misplaced `GROUP BY`, an unbraced UNION branch, hidden subquery variables, per-patient grouping under a total, and conditional count binds. It reparses and abandons a rewrite if it becomes invalid. |
+| Check question coverage | A syntactically valid answer once omitted the named diagnosis or counted patients when the question asked for records. | Static checks look for strong named-code evidence and requested record counts. They are conservative; passing them is not proof of semantic equivalence. |
+| Track identifier provenance | An identifier can be hidden through aliases, string functions, aggregates or nested `EXISTS`. | The guard follows sensitivity through parsed expressions and rejects exposed graph/record/identifier values. `SERVICE` is also rejected. |
+| Block unsafe requests before retry | Retrying a forbidden query allowed a model to “clean” it into compliance. | Raised intent flags prevent regeneration; an R1 finding cannot trigger a guard retry, though a judge retry may have occurred earlier. R2–R5 mistakes on an unflagged request may receive a focused guard retry; a still-breaking query stays non-compliant. |
+| Keep display privacy separate from judged API | The jury requested the literal query, while an end user should not see a forbidden query. | The judged response preserves the required contract; the demo never executes a forbidden query, and a separate public-console mode hides query/diagnostic details and blocks developer routes. |
+
+### How the five rules are applied
+
+| Rule | Implemented test and boundary |
+|---|---|
+| R1 | Reject patient-graph and record IRIs, identifier literals, and expressions that pin an identifier or graph variable to a specific value, including through `FILTER`, `BIND`, `VALUES`, strings or aggregate arguments. Counting graphs or filtering by a generic digit-free namespace prefix can remain allowed. |
+| R2 | Require aggregate output in the outer `SELECT` or aggregate-only sub-selects reprojected by it. Reject `SELECT *`, individual rows, per-patient grouping, exact timestamp groups and a group constrained to exactly one patient. A year or category group can be allowed. |
+| R3 | Require a concrete property or concrete `rdf:type` class in a patient-graph pattern; an unrestricted `?s ?p ?o` scan fails. This is a **structural** approximation: the checker does not prove that the restriction is clinically meaningful or selective. |
+| R4 | Accept only `SELECT` and reject federated `SERVICE`. This follows the stricter compliance document where the supplied API specification is inconsistent. |
+| R5 | Reject projected identifiers or instance IRIs even when transformed by `STR` or selected inside `SAMPLE`, `MIN`, `MAX` or `GROUP_CONCAT`. Sensitivity is propagated through bindings and expressions. |
+
+Ontology-only queries bypass the patient-specific aggregation and identifier-projection checks R2/R5. A remaining judge error is recorded as a quality diagnostic, **not** an independent privacy veto: the final `is_compliant` decision comes from the guard. After its checks, the judge may also append the patient totals and share components that reference answers commonly include; those additions are reparsed and then passed through the guard.
+
+Some policy boundaries are deliberately conservative or unresolved by the organizer documents. The guard rejects identifiers, exact timestamp grouping, unrestricted scans and certain singleton-group shapes; it does **not** establish a general minimum group size for the judged endpoint or prevent inference from repeated aggregate questions. The demo's whole-result small-group suppression is **disabled by default** until a policy is selected. `MIN`/`MAX` over dates or values can be allowed, and static checks cannot guarantee that Virtuoso will execute a query or that its clinical answer is correct. These are limitations of the finished implementation, not claims of formal privacy certification.
+
+## Evaluation and results
+
+### What each score measures
+
+The team kept separate evaluations for the jury's distinct criteria:
+
+| Evaluation | Questions and split | What it establishes |
+|---|---|---|
+| Full pipeline verdicts | 198 labeled requests: 149 dev and 49 holdout | `is_compliant` versus a label, forbidden requests marked compliant, allowed requests blocked, request latency and total tokens. |
+| Query result quality | 87 questions with reference SPARQL: 11 permitted official examples, 45 verified dev and 31 holdout | Whether the generated query runs on the 2,000-patient dev graph and whether its results match the reference. “Right numbers” includes exact rows plus numerically matching answers with different labels, layout or small rounding; it is broader than exact result equality. |
+| Intent agent alone | The 198 labeled questions | Detection, false alarms, correct flags, tokens and latency without the query agent. |
+| Performance database | 100,000 synthetic patients, timed generated/reference query pairs | Exploratory execution time and timeout patterns, separately from the 2,000-patient correctness check. |
+| Concurrent API load | 32 requests at eight concurrent clients | HTTP completion, aggregate latency, throughput and tokens under load. |
+
+The query holdout was excluded from retrieval and from case-by-case tuning. **Aggregate holdout scores were inspected repeatedly to select configurations**, so it should not be presented as an untouched external test. Since the 45 dev reference queries became retrieval examples, dev query-result scores are contaminated by neighbouring examples; the 31-question holdout is the most informative query-quality number. Temperature 0 does not remove batching noise: identical 9B runs differed by two of 49 verdict-holdout cases. The official example questions were studied, and one reference (`official-03`) restricts diagnosis rank even though the wording says “any rank”; both strict reference and “as asked” scores are reported.
+
+### Final reported measurements
+
+| Criterion | Final measurement | Interpretation |
+|---|---|---|
+| Verdicts, 198 labeled requests | **148/149 dev (99.3%)**, **49/49 holdout (100%)**; zero forbidden requests marked compliant on both splits | One allowed dev request was blocked. The 49 held-out verdicts are a sample, not a universal privacy guarantee. The latest comparable 27B verdict timing, measured before the final context/judge fixes at concurrency four, was **5.3 / 17.9 s** p50 / p95; the final verdict run shared the GPU with other evaluations and has no comparable latency figure. |
+| Query answer quality, 87 references | **34 exact** and **53 with the reference's numbers**; **20/31** with right numbers on the query holdout | Right numbers tolerate alternate labels/layout/rounding. Of the 11 permitted official examples, 2 matched strictly, 3 when the contradictory wording was scored literally. |
+| Query validity and translation time on dev | **92%** executed on Virtuoso; **85%** passed the judge on the first attempt; **7.2 / 20.1 s** p50 / p95 for the 87-question run | Generated-query quality and endpoint verdict quality are distinct. This latency measures the pipeline's generation and checks; Virtuoso execution is scored separately. |
+| Concurrent API load, before the final context/judge fixes | **32/32 HTTP 200**, p50 / p95 **8.9 / 19.1 s**, **0.65 requests/s** at concurrency eight | The denser 27B model improved query answers but ran more slowly under eight-way load than the earlier 9B. This was the latest comparable load run, not a remeasurement after the final fixes. |
+| 100,000-patient query timing | In the earlier 27B full run, 58 of 80 generated/reference pairs completed within a 30-second client deadline; median generated **0.3 s** versus reference **0.5 s** among completed pairs | Ten generated and 19 reference queries exceeded the deadline. This exploratory timing predates the 18 October express fixes and is **not** the jury's ten-isolated-run score for the final system. |
+
+The final 18 October set contained **four runtime/context corrections and one evaluation-scoring correction**:
+
+| Correction | Observed failure and reason for the change |
+|---|---|
+| Location-code context | A geographic code could be offered without its correct place in the SPHN graph. Candidates now say which class/path uses it; “patients living in India” changed from zero to the reference's 22. |
+| Year-free ICD-10-GM/CHOP group key | The same clinical concept appeared in multiple code-system years, splitting a category's counts. A deterministic judge rewrite groups by the year-free concept. |
+| Conditional counts | In Virtuoso, an `OPTIONAL` block holding only `FILTER` and `BIND` cannot see the expected outer bindings, so a subgroup count can become zero. The judge rewrites that supported shape to `BIND(IF(...))` before counting. |
+| Reference-style aggregate columns | A correct percentage or conditional count could omit the patient totals or numerator/denominator columns the reference shows. The judge appends these derived aggregates after quality checks and passes the new query through the guard. |
+| Official reference interpretation | `official-03` asks for “any rank” but its supplied query filters to principal rank. The evaluator keeps the supplied strict score and **also** reports an “as asked” score; the organizer's reference and the runtime query are not silently rewritten to agree. |
+
+The four runtime/context corrections changed right numbers from **48 to 53/87**, the query holdout from **19 to 20/31**, and strict official matches from **1 to 2/11**, without changing verdict accuracy or the 7.2-second query-eval median in the comparable run. The scoring correction separately makes the official “as asked” count **3/11**. The source table and experiment-by-experiment numbers are in [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md); [`docs/MODEL_HISTORY.md`](docs/MODEL_HISTORY.md) explains the model decisions. Raw JSON reports live under git-ignored `eval/reports/` on the run machine and are **not** part of this public repository.
+
+The synthetic mock graph is unusually concentrated in a few codes, and some official reference queries are slow even on the 100,000-patient database. A fast but wrong answer is not a successful query. The remaining gaps in query-result correctness and the static privacy policy are described above as measured limits of this finished system.
 
 ## The two LLM agents and why they evolved
 
@@ -185,154 +364,6 @@ Virtuoso query time is part of the score, and a selective code match can be much
 ### Why off-topic input has its own path
 
 Small talk once led the query model to emit a patient-graph probe. A privacy retry then turned “hey” into a count of all patients. The final pipeline recognizes clear greetings/thanks in code before the model, and recognizes a parseable answer with no triple patterns or named HTTP(S) terms as off-topic rather than retrying it into a data query. An ontology-only query is not treated as off-topic by that test. Later refinements avoided swallowing clinical abbreviations or real questions. This path returns an empty query and an explanation, not a fabricated statistic.
-
-## Judge, compliance guard and design tradeoffs
-
-The judge and guard have different jobs. The **judge** checks whether a generated query is structurally plausible and answers the kind of question asked; it can repair or request a rewrite. The **guard** makes the final privacy verdict from both the parsed query and the request's intent flags. Neither performs a database query behind `POST /nl-to-sparql`. The full rule and implementation guide is [`docs/GUARD.md`](docs/GUARD.md), with historical case-by-case findings in [`docs/FAILURE_ANALYSIS.md`](docs/FAILURE_ANALYSIS.md).
-
-| Decision | Observed problem or competing approach | Final logic and tradeoff |
-|---|---|---|
-| Parse through one wrapper | rdflib's SPARQL parser corrupted concurrent requests when called from separate worker threads. | `sparql.parse.parse_sparql` holds a lock and removes Virtuoso-only directives for rdflib analysis. This serializes parsing, but the check is short and concurrent correctness matters more. |
-| Trust observed data over nominal schema | A valid-looking property from the 2026.1 schema could return no rows on the supplied mock graph. | The judge checks local schema snapshots, class/property combinations and terminology usage measured from the data. Snapshots must be rebuilt for a different graph. |
-| Repair before asking the model | rdflib's syntax message often pointed to the wrong token, and retries repeated the error. | The judge fixes known one-meaning forms such as misplaced `GROUP BY`, an unbraced UNION branch, hidden subquery variables, per-patient grouping under a total, and conditional count binds. It reparses and abandons a rewrite if it becomes invalid. |
-| Check question coverage | A syntactically valid answer once omitted the named diagnosis or counted patients when the question asked for records. | Static checks look for strong named-code evidence and requested record counts. They are conservative; passing them is not proof of semantic equivalence. |
-| Track identifier provenance | An identifier can be hidden through aliases, string functions, aggregates or nested `EXISTS`. | The guard follows sensitivity through parsed expressions and rejects exposed graph/record/identifier values. `SERVICE` is also rejected. |
-| Block unsafe requests before retry | Retrying a forbidden query allowed a model to “clean” it into compliance. | Raised intent flags prevent regeneration; an R1 finding cannot trigger a guard retry, though a judge retry may have occurred earlier. R2–R5 mistakes on an unflagged request may receive a focused guard retry; a still-breaking query stays non-compliant. |
-| Keep display privacy separate from judged API | The jury requested the literal query, while an end user should not see a forbidden query. | The judged response preserves the required contract; the demo never executes a forbidden query, and a separate public-console mode hides query/diagnostic details and blocks developer routes. |
-
-### How the five rules are applied
-
-| Rule | Implemented test and boundary |
-|---|---|
-| R1 | Reject patient-graph and record IRIs, identifier literals, and expressions that pin an identifier or graph variable to a specific value, including through `FILTER`, `BIND`, `VALUES`, strings or aggregate arguments. Counting graphs or filtering by a generic digit-free namespace prefix can remain allowed. |
-| R2 | Require aggregate output in the outer `SELECT` or aggregate-only sub-selects reprojected by it. Reject `SELECT *`, individual rows, per-patient grouping, exact timestamp groups and a group constrained to exactly one patient. A year or category group can be allowed. |
-| R3 | Require a concrete property or concrete `rdf:type` class in a patient-graph pattern; an unrestricted `?s ?p ?o` scan fails. This is a **structural** approximation: the checker does not prove that the restriction is clinically meaningful or selective. |
-| R4 | Accept only `SELECT` and reject federated `SERVICE`. This follows the stricter compliance document where the supplied API specification is inconsistent. |
-| R5 | Reject projected identifiers or instance IRIs even when transformed by `STR` or selected inside `SAMPLE`, `MIN`, `MAX` or `GROUP_CONCAT`. Sensitivity is propagated through bindings and expressions. |
-
-Ontology-only queries bypass the patient-specific aggregation and identifier-projection checks R2/R5. A remaining judge error is recorded as a quality diagnostic, **not** an independent privacy veto: the final `is_compliant` decision comes from the guard. After its checks, the judge may also append the patient totals and share components that reference answers commonly include; those additions are reparsed and then passed through the guard.
-
-Some policy boundaries are deliberately conservative or unresolved by the organizer documents. The guard rejects identifiers, exact timestamp grouping, unrestricted scans and certain singleton-group shapes; it does **not** establish a general minimum group size for the judged endpoint or prevent inference from repeated aggregate questions. The demo's whole-result small-group suppression is **disabled by default** until a policy is selected. `MIN`/`MAX` over dates or values can be allowed, and static checks cannot guarantee that Virtuoso will execute a query or that its clinical answer is correct. These are limitations of the finished implementation, not claims of formal privacy certification.
-
-## Evaluation and results
-
-### What each score measures
-
-The team kept separate evaluations for the jury's distinct criteria:
-
-| Evaluation | Questions and split | What it establishes |
-|---|---|---|
-| Full pipeline verdicts | 198 labeled requests: 149 dev and 49 holdout | `is_compliant` versus a label, forbidden requests marked compliant, allowed requests blocked, request latency and total tokens. |
-| Query result quality | 87 questions with reference SPARQL: 11 permitted official examples, 45 verified dev and 31 holdout | Whether the generated query runs on the 2,000-patient dev graph and whether its results match the reference. “Right numbers” includes exact rows plus numerically matching answers with different labels, layout or small rounding; it is broader than exact result equality. |
-| Intent agent alone | The 198 labeled questions | Detection, false alarms, correct flags, tokens and latency without the query agent. |
-| Performance database | 100,000 synthetic patients, timed generated/reference query pairs | Exploratory execution time and timeout patterns, separately from the 2,000-patient correctness check. |
-| Concurrent API load | 32 requests at eight concurrent clients | HTTP completion, aggregate latency, throughput and tokens under load. |
-
-The query holdout was excluded from retrieval and from case-by-case tuning. **Aggregate holdout scores were inspected repeatedly to select configurations**, so it should not be presented as an untouched external test. Since the 45 dev reference queries became retrieval examples, dev query-result scores are contaminated by neighbouring examples; the 31-question holdout is the most informative query-quality number. Temperature 0 does not remove batching noise: identical 9B runs differed by two of 49 verdict-holdout cases. The official example questions were studied, and one reference (`official-03`) restricts diagnosis rank even though the wording says “any rank”; both strict reference and “as asked” scores are reported.
-
-### Final reported measurements
-
-| Criterion | Final measurement | Interpretation |
-|---|---|---|
-| Verdicts, 198 labeled requests | **148/149 dev (99.3%)**, **49/49 holdout (100%)**; zero forbidden requests marked compliant on both splits | One allowed dev request was blocked. The 49 held-out verdicts are a sample, not a universal privacy guarantee. The latest comparable 27B verdict timing, measured before the final context/judge fixes at concurrency four, was **5.3 / 17.9 s** p50 / p95; the final verdict run shared the GPU with other evaluations and has no comparable latency figure. |
-| Query answer quality, 87 references | **34 exact** and **53 with the reference's numbers**; **20/31** with right numbers on the query holdout | Right numbers tolerate alternate labels/layout/rounding. Of the 11 permitted official examples, 2 matched strictly, 3 when the contradictory wording was scored literally. |
-| Query validity and translation time on dev | **92%** executed on Virtuoso; **85%** passed the judge on the first attempt; **7.2 / 20.1 s** p50 / p95 for the 87-question run | Generated-query quality and endpoint verdict quality are distinct. This latency measures the pipeline's generation and checks; Virtuoso execution is scored separately. |
-| Concurrent API load, before the final context/judge fixes | **32/32 HTTP 200**, p50 / p95 **8.9 / 19.1 s**, **0.65 requests/s** at concurrency eight | The denser 27B model improved query answers but ran more slowly under eight-way load than the earlier 9B. This was the latest comparable load run, not a remeasurement after the final fixes. |
-| 100,000-patient query timing | In the earlier 27B full run, 58 of 80 generated/reference pairs completed within a 30-second client deadline; median generated **0.3 s** versus reference **0.5 s** among completed pairs | Ten generated and 19 reference queries exceeded the deadline. This exploratory timing predates the 18 October express fixes and is **not** the jury's ten-isolated-run score for the final system. |
-
-The final 18 October set contained **four runtime/context corrections and one evaluation-scoring correction**:
-
-| Correction | Observed failure and reason for the change |
-|---|---|
-| Location-code context | A geographic code could be offered without its correct place in the SPHN graph. Candidates now say which class/path uses it; “patients living in India” changed from zero to the reference's 22. |
-| Year-free ICD-10-GM/CHOP group key | The same clinical concept appeared in multiple code-system years, splitting a category's counts. A deterministic judge rewrite groups by the year-free concept. |
-| Conditional counts | In Virtuoso, an `OPTIONAL` block holding only `FILTER` and `BIND` cannot see the expected outer bindings, so a subgroup count can become zero. The judge rewrites that supported shape to `BIND(IF(...))` before counting. |
-| Reference-style aggregate columns | A correct percentage or conditional count could omit the patient totals or numerator/denominator columns the reference shows. The judge appends these derived aggregates after quality checks and passes the new query through the guard. |
-| Official reference interpretation | `official-03` asks for “any rank” but its supplied query filters to principal rank. The evaluator keeps the supplied strict score and **also** reports an “as asked” score; the organizer's reference and the runtime query are not silently rewritten to agree. |
-
-The four runtime/context corrections changed right numbers from **48 to 53/87**, the query holdout from **19 to 20/31**, and strict official matches from **1 to 2/11**, without changing verdict accuracy or the 7.2-second query-eval median in the comparable run. The scoring correction separately makes the official “as asked” count **3/11**. The source table and experiment-by-experiment numbers are in [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md); [`docs/MODEL_HISTORY.md`](docs/MODEL_HISTORY.md) explains the model decisions. Raw JSON reports live under git-ignored `eval/reports/` on the run machine and are **not** part of this public repository.
-
-The synthetic mock graph is unusually concentrated in a few codes, and some official reference queries are slow even on the 100,000-patient database. A fast but wrong answer is not a successful query. The remaining gaps in query-result correctness and the static privacy policy are described above as measured limits of this finished system.
-
-## Installation and use
-
-Run these commands from the repository root. Python **3.11 or newer** is required. [`requirements.txt`](requirements.txt) pins FastAPI, Uvicorn, HTTPX, rdflib, pyparsing and pytest, and installs this package in editable mode. No GPU or Virtuoso is needed to run the local stub and Python tests.
-
-```bash
-python3 -m venv .venv
-. .venv/bin/activate
-python -m pip install -r requirements.txt
-python -m pytest -q
-```
-
-The local Python suite passed **1,693 tests** on this checkout with one third-party deprecation warning. Unit/API tests use local fixtures; they do not reproduce the live model or database measurements.
-
-### Check the HTTP contract without a model
-
-The default `NL2SPARQL_BACKEND=stub` uses heuristic intent rules and copies the query of the most similar example. It verifies the wiring and API response shape; it is **not an arbitrary-question translator**.
-
-```bash
-python -m nl2sparql --port 8080
-```
-
-In another terminal:
-
-```bash
-curl -fsS http://localhost:8080/health
-curl -sS http://localhost:8080/nl-to-sparql \
-  -H 'Content-Type: application/json' \
-  -d '{"text":"How many patients have a billed diagnosis of cholera, by sex?"}'
-```
-
-### Run the LLM-backed translator
-
-Copy [`.env.example`](.env.example) to a **private, untracked** `.env`. Set `NL2SPARQL_BACKEND=llm`, `LLM_BASE_URL` and `LLM_QUERY_MODEL=cyankiwi/Qwen3.6-27B-AWQ-INT4` to match a running OpenAI-compatible server, plus `LLM_API_KEY` if that server requires it. Leave `LLM_INTENT_MODEL` empty to use the same model for both agents. For Qwen3.x, set:
-
-```dotenv
-LLM_EXTRA_BODY='{"chat_template_kwargs": {"enable_thinking": false}}'
-```
-
-A running model server is a prerequisite; `pip install -r requirements.txt` does not install vLLM, download weights or start a server. On a suitable 32 GB GPU host with vLLM installed separately, start the measured model in another terminal:
-
-```bash
-vllm serve cyankiwi/Qwen3.6-27B-AWQ-INT4 \
-  --max-model-len 32000 --max-num-seqs 8 --port 8000
-```
-
-Set `LLM_BASE_URL=http://localhost:8000/v1` when the API can reach that server locally; use the server's reachable URL otherwise. The evaluated setup used vLLM 0.30. Other OpenAI-compatible serving arrangements are supported by the client, but their quality and latency are not the measurements above.
-
-The application reads **environment variables**, not `.env` automatically. In the shell that starts the API, export the file first:
-
-```bash
-cp .env.example .env
-# Edit .env privately, then:
-set -a
-. ./.env
-set +a
-python -m nl2sparql --port 8080
-```
-
-### Rebuild optional local context assets and evaluate
-
-`data/schema_cards.json`, `data/property_kinds.json`, the official/team examples and the 45 dev reference rows are committed. The [`Dockerfile`](Dockerfile) also copies the dev reference file. The terminology index and coded value sets used in the evaluated run are **restricted, uncommitted** files under `assets/`. With authorized terminology loaded in an existing development Virtuoso database, set `VIRTUOSO_ENDPOINT` privately and run `python scripts/build_assets.py` to build them. The judged endpoint itself never uses `VIRTUOSO_ENDPOINT`.
-
-The evaluation scripts are separate from normal API serving:
-
-```bash
-python eval/run_eval.py --intent-cases --concurrency 4
-python eval/run_intent_eval.py --concurrency 4
-python eval/run_query_eval.py --concurrency 4
-```
-
-These commands require the configured model; query-result evaluation also requires dev Virtuoso. `python eval/run_eval.py --execute` executes allowed queries on the dev database. `eval/time_on_perf.py` is the performance harness for the separate 100,000-patient graph; it is not part of the API and restarts a local performance container after timeouts, so its use belongs in a controlled evaluation environment. [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md) specifies the comparisons and why runs at different concurrency cannot be mixed.
-
-## Researcher console and delivery
-
-The project also serves a researcher console at `/console/cli/`, an agent-inspection console at `/agents` and a comparison page at `/agents/runs`. They are **outside the judged endpoint**. The researcher console can clarify a vague coded concept without an LLM call, suggest follow-up questions, display permitted aggregate results, render tables or charts, export released rows, save local snapshots and publish an explicitly confirmed link to a released aggregate table. The share expires after seven days by default. [`docs/FRONTEND.md`](docs/FRONTEND.md) explains the response contract and [`docs/features/README.md`](docs/features/README.md) records the feature handoff.
-
-`/demo/ask` may execute a compliant query against a configured development Virtuoso endpoint. The team-mode default (`DEMO_SHOW_DETAILS=true`) may return a permitted query and diagnostics to that internal console. `DEMO_SHOW_DETAILS=false` hides those details, and the separate `DEMO_PUBLIC_MODE=true` also blocks developer/judged routes and disables the structured request archive. Public mode requires an explicitly set positive `DEMO_MIN_GROUP_SIZE`. By default this threshold is **disabled**. The optional suppression withholds an entire result when a group is too small; it is a demo release policy, not a new judged-query rule. The console does not supply authentication, TLS or protection against inference by repeated aggregate requests. The [privacy review](docs/PRIVACY_REVIEW.md) describes this boundary and the [validation record](docs/RESULTS_VALIDATION.md) distinguishes synthetic UI checks from checks with an actual model and database.
-
-[SIB Doc CI/CD](.github/workflows/tests.yml) validates the workflow, shell scripts and release-file boundary, then tests Python 3.11/3.12, frontend JavaScript, desktop/phone browser behavior, and AMD64/ARM64 container images. Only after all required checks pass can it publish the tested images to GitHub Container Registry on an eligible main-branch push, version tag, or explicitly enabled manual run. It builds an image; it does not deploy a model, Virtuoso or a public service. The container defaults to the stub backend, includes the public data and dev reference examples, and excludes restricted `assets/` and credentials. The [operations handbook, section 19](docs/operations/PROJECT_HANDBOOK.md#19-cicd-and-container-delivery) gives the triggers, jobs, administrator setup and local verification commands. Repository configuration is evidence that the workflow exists; it is not a claim that a particular image has already been built or published.
 
 ## Repository and documentation map
 
