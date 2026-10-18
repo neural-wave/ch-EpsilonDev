@@ -10,6 +10,29 @@ from scripts.ci.check_release_files import restricted
 from scripts.ci import smoke_container
 
 
+@pytest.mark.parametrize('path, body, expected_timeout', [
+    ('/health', None, 5),
+    ('/console/cli/', None, 5),
+    ('/nl-to-sparql', {'text': 'smoke request'}, 90),
+])
+def test_container_http_timeout_allows_translation_under_emulation(monkeypatch, path, body, expected_timeout):
+    class Response:
+        status = 200
+        headers = {}
+
+        def read(self):
+            return b'{}'
+
+    @contextmanager
+    def urlopen(req, timeout):
+        assert req.full_url == 'http://localhost:8080' + path
+        assert timeout == expected_timeout
+        yield Response()
+
+    monkeypatch.setattr(smoke_container, 'urlopen', urlopen)
+    assert smoke_container.request('http://localhost:8080', path, body) == (200, {}, b'{}')
+
+
 @pytest.mark.parametrize('path', [
     '.env', '.env.production', 'nested/.env.local', 'assets/terminology_index.jsonl',
     'patients/example.csv', 'ontologies/schema.ttl', 'logs/shared_results.sqlite3',

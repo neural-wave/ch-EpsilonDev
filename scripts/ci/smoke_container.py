@@ -14,7 +14,10 @@ def request(base, path, body=None):
     payload = None if body is None else json.dumps(body).encode()
     req = Request(base + path, data=payload, headers={'Content-Type': 'application/json'})
     try:
-        with urlopen(req, timeout=5) as response:
+        # Translation can include cold parser/context initialization under QEMU.
+        # Allow the API's 75-second request deadline to return a verdict or error.
+        timeout = 90 if path == '/nl-to-sparql' else 5
+        with urlopen(req, timeout=timeout) as response:
             return response.status, response.headers, response.read()
     except HTTPError as error:
         return error.code, error.headers, error.read()
