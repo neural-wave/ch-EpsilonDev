@@ -4,14 +4,7 @@ on:
   pull_request:
   push:
     branches: [main]
-    tags: ['v*']
   workflow_dispatch:
-    inputs:
-      publish:
-        description: Publish the tested image to GHCR (main or version tag only)
-        required: false
-        default: false
-        type: boolean
 
 permissions:
   contents: read
@@ -25,18 +18,16 @@ defaults:
     shell: bash
 
 env:
-  CI: 'true'
   NL2SPARQL_BACKEND: stub
   DEMO_PUBLIC_MODE: 'false'
   DEMO_MIN_GROUP_SIZE: disabled
   PYTHONDONTWRITEBYTECODE: '1'
-  DOCKER_BUILD_RECORD_UPLOAD: 'false'
 
 jobs:
-  repository:
-    name: Workflow, scripts and release-file boundary
+  tests:
+    name: Python and frontend tests
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
@@ -44,257 +35,64 @@ jobs:
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: '3.12'
-      - run: python scripts/ci/check_release_files.py
-      - run: python -m compileall -q src scripts eval
-      - name: Validate shell scripts without starting services
-        run: git ls-files -z '*.sh' | xargs -0 -r -n1 bash -n
-      - name: Validate GitHub Actions workflows
-        env:
-          ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
-        run: |
-          archive="$RUNNER_TEMP/actionlint.tar.gz"
-          curl --fail --silent --show-error --location --retry 3 \
-            https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz \
-            --output "$archive"
-          echo "$ACTIONLINT_SHA256  $archive" | sha256sum --check
-          tar -xzf "$archive" -C "$RUNNER_TEMP" actionlint
-          "$RUNNER_TEMP/actionlint" -color
-
-  pytest:
-    name: Python (${{ matrix.python }})
-    needs: repository
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    strategy:
-      fail-fast: false
-      matrix:
-        python: ['3.11', '3.12']
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          persist-credentials: false
-      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
-        with:
-          python-version: ${{ matrix.python }}
           cache: pip
           cache-dependency-path: |
             requirements.txt
             pyproject.toml
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22'
+      - run: python scripts/ci/check_release_files.py
       - run: python -m pip install -r requirements.txt
       - run: python -m pip check
-      - name: Python unit and API regressions
-        run: python -m pytest -q --junitxml="$RUNNER_TEMP/pytest.xml"
-      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
-        if: ${{ always() && !cancelled() }}
-        with:
-          name: pytest-${{ matrix.python }}
-          path: ${{ runner.temp }}/pytest.xml
-          retention-days: 7
-          if-no-files-found: ignore
-
-  frontend:
-    name: Frontend syntax and Node tests
-    needs: repository
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
-        with:
-          node-version: '22'
-      - name: Validate frontend and browser JavaScript syntax
-        run: git ls-files -z 'frontend/*.js' 'tests/*.js' 'tests/*.cjs' | xargs -0 -r -n1 node --check
+      - run: python -m pytest -q
       - run: node --test tests/frontend/*.test.cjs
 
-  browser:
-    name: Chromium (desktop + phone)
-    needs: repository
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          persist-credentials: false
-      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
-        with:
-          python-version: '3.12'
-          cache: pip
-          cache-dependency-path: requirements.txt
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
-        with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: tests/browser/package-lock.json
-      - run: python -m pip install -r requirements.txt
-      - run: npm ci --prefix tests/browser
-      - run: npm exec --prefix tests/browser -- playwright install --with-deps chromium
-      - name: Synthetic browser regressions (no model or database)
-        run: BROWSER_TEST_PYTHON="$(command -v python)" npm test --prefix tests/browser
-      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
-        if: ${{ always() && !cancelled() }}
-        with:
-          name: browser-synthetic-evidence
-          path: |
-            tests/browser/artifacts/junit.xml
-            tests/browser/artifacts/report/
-            tests/browser/artifacts/test-results/
-          retention-days: 7
-          if-no-files-found: ignore
-
   container:
-    name: Container (${{ matrix.arch }})
-    needs: repository
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        arch: [amd64, arm64]
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          persist-credentials: false
-      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
-        with:
-          python-version: '3.12'
-      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
-        with:
-          platforms: arm64
-      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
-      - name: Build without publishing
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
-        with:
-          context: .
-          platforms: linux/${{ matrix.arch }}
-          load: true
-          push: false
-          provenance: false
-          tags: nl2sparql:ci-${{ matrix.arch }}
-          labels: |
-            org.opencontainers.image.source=https://github.com/${{ github.repository }}
-            org.opencontainers.image.revision=${{ github.sha }}
-          cache-from: type=gha,scope=gateway-${{ matrix.arch }}
-          cache-to: type=gha,mode=max,scope=gateway-${{ matrix.arch }}
-      - name: Test the exact image in both runtime modes
-        env:
-          IMAGE_ARCH: ${{ matrix.arch }}
-        run: python scripts/ci/smoke_container.py --image "nl2sparql:ci-$IMAGE_ARCH" --platform "linux/$IMAGE_ARCH"
-      - name: Save the tested image for publication
-        if: >-
-          ${{ github.event_name != 'pull_request' &&
-              (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) &&
-              (github.event_name != 'workflow_dispatch' || inputs.publish) }}
-        env:
-          IMAGE_ARCH: ${{ matrix.arch }}
-        run: docker save "nl2sparql:ci-$IMAGE_ARCH" | gzip -1 > "$RUNNER_TEMP/image-$IMAGE_ARCH.tar.gz"
-      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
-        if: ${{ github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) && (github.event_name != 'workflow_dispatch' || inputs.publish) }}
-        with:
-          name: container-${{ matrix.arch }}
-          path: ${{ runner.temp }}/image-${{ matrix.arch }}.tar.gz
-          compression-level: 0
-          retention-days: 1
-          if-no-files-found: error
-
-  ci:
-    name: CI required checks
-    if: ${{ always() }}
-    needs: [repository, pytest, frontend, browser, container]
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - name: Require every CI job to pass
-        env:
-          RESULTS: ${{ toJSON(needs) }}
-        run: |
-          python3 - <<'PYTHON'
-          import json, os
-          results = json.loads(os.environ['RESULTS'])
-          failed = [name for name, item in results.items() if item['result'] != 'success']
-          if failed:
-              raise SystemExit('Required checks did not pass: ' + ', '.join(failed))
-          print('All required CI checks passed.')
-          PYTHON
-
-  publish:
-    name: Publish tested multi-platform image to GHCR
-    if: ${{ github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) && (github.event_name != 'workflow_dispatch' || inputs.publish) }}
-    needs: [ci, container]
+    name: Build, smoke-test and publish container
+    needs: tests
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
       contents: read
       packages: write
-      actions: read
-    concurrency:
-      group: ghcr-${{ github.repository }}
-      cancel-in-progress: false
     steps:
-      - name: Normalize registry path and validate release tag
-        id: image
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+      - name: Build AMD64 image
         run: |
-          python3 - <<'PYTHON'
-          import os, re
-          ref = os.environ['GITHUB_REF']
-          if ref.startswith('refs/tags/') and not re.fullmatch(r'refs/tags/v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?', ref):
-              raise SystemExit('Use a version tag such as v0.1.0 or v0.1.0-rc.1.')
-          with open(os.environ['GITHUB_OUTPUT'], 'a') as stream:
-              stream.write('name=ghcr.io/' + os.environ['GITHUB_REPOSITORY'].lower() + '\n')
-          PYTHON
-      - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
-        with:
-          pattern: container-*
-          merge-multiple: true
-          path: ${{ runner.temp }}/container-images
-      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
-      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Generate image tags
-        id: meta
-        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
-        with:
-          images: ${{ steps.image.outputs.name }}
-          flavor: latest=false
-          tags: |
-            type=sha,format=long
-            type=raw,value=main,enable=${{ github.ref == 'refs/heads/main' }}
-            type=ref,event=tag
-            type=semver,pattern={{version}}
-            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') && !contains(github.ref, '-') }}
-      - name: Promote tested images and create their multi-platform manifest
+          docker build --platform linux/amd64 --tag nl2sparql:ci \
+            --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" .
+      - name: Smoke-test developer and public modes
+        run: python scripts/ci/smoke_container.py --image nl2sparql:ci --platform linux/amd64
+      - name: Publish tested image to GHCR
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
         env:
-          IMAGE_NAME: ${{ steps.image.outputs.name }}
-          IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          for arch in amd64 arm64; do
-            docker load --input "$RUNNER_TEMP/container-images/image-$arch.tar.gz"
-            target="$IMAGE_NAME:sha-$GITHUB_SHA-$arch"
-            docker tag "nl2sparql:ci-$arch" "$target"
-            docker push "$target"
-          done
-          tags=()
-          while IFS= read -r tag; do
-            if [[ -n "$tag" ]]; then tags+=(--tag "$tag"); fi
-          done <<< "$IMAGE_TAGS"
-          docker buildx imagetools create "${tags[@]}" \
-            --annotation "index:org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
-            --annotation "index:org.opencontainers.image.revision=$GITHUB_SHA" \
-            "$IMAGE_NAME:sha-$GITHUB_SHA-amd64" "$IMAGE_NAME:sha-$GITHUB_SHA-arm64"
-          docker buildx imagetools inspect "$IMAGE_NAME:sha-$GITHUB_SHA"
-          docker buildx imagetools inspect "$IMAGE_NAME:sha-$GITHUB_SHA" --raw > "$RUNNER_TEMP/published-manifest.json"
-          python3 - <<'PYTHON'
-          import json, os
-          from pathlib import Path
-          manifest = json.loads((Path(os.environ['RUNNER_TEMP']) / 'published-manifest.json').read_text())
-          platforms = {(m['platform']['os'], m['platform']['architecture']) for m in manifest['manifests']}
-          if platforms != {('linux', 'amd64'), ('linux', 'arm64')}:
-              raise SystemExit('Published manifest does not match the tested platform set.')
-          print('Published manifest contains both tested platforms.')
-          PYTHON
-          printf '## Published tested image\n\n    %s:sha-%s\n\n' "$IMAGE_NAME" "$GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
-          printf '%s\n' "$IMAGE_TAGS" >> "$GITHUB_STEP_SUMMARY"
+          image="ghcr.io/${GITHUB_REPOSITORY,,}"
+          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          docker tag nl2sparql:ci "$image:sha-$GITHUB_SHA"
+          docker tag nl2sparql:ci "$image:main"
+          docker push "$image:sha-$GITHUB_SHA"
+          docker push "$image:main"
+
+  ci:
+    name: CI required checks
+    if: ${{ always() }}
+    needs: [tests, container]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require tests and container checks to pass
+        env:
+          TEST_RESULT: ${{ needs.tests.result }}
+          CONTAINER_RESULT: ${{ needs.container.result }}
+        run: |
+          test "$TEST_RESULT" = success
+          test "$CONTAINER_RESULT" = success

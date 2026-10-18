@@ -50,7 +50,7 @@ These results describe specific evaluation sets and a private runtime configurat
 
 ## Installation and use
 
-Use Python **3.11 or 3.12** with the current dependency pins; the CI matrix covers both. The package declares Python 3.11 or newer, but the pinned rdflib 7.1.1 is incompatible with Python 3.14. [`requirements.txt`](requirements.txt) pins the application dependencies and installs this package in editable mode. No GPU or Virtuoso is needed for the local stub and Python tests.
+Use Python **3.11 or 3.12** with the current dependency pins; CI uses Python 3.12. The package declares Python 3.11 or newer, but the pinned rdflib 7.1.1 is incompatible with Python 3.14. [`requirements.txt`](requirements.txt) pins the application dependencies and installs this package in editable mode. No GPU or Virtuoso is needed for the local stub and Python tests.
 
 From the repository root:
 
@@ -136,7 +136,7 @@ These consoles are outside the judged endpoint. The researcher console can clari
 
 ### CI/CD and containers
 
-[SIB Doc CI/CD](.github/workflows/tests.yml) validates the workflow, shell scripts and release-file boundary, then tests Python 3.11/3.12, frontend JavaScript, desktop/phone browser behavior, and AMD64/ARM64 container images. After all required checks pass, eligible main-branch pushes, version tags and explicitly enabled manual runs publish the tested images to GitHub Container Registry.
+[SIB Doc CI/CD](.github/workflows/tests.yml) checks the release-file boundary, runs Python 3.12 and frontend Node tests, then builds and smoke-tests one native AMD64 container. Successful pushes to `main` publish that exact image to GitHub Container Registry as `main` and `sha-<full commit SHA>`. Pull requests and manual runs test without publishing. The stable **CI required checks** job reports the overall result. Browser tests remain available locally; ARM64 emulation and multi-platform publication are excluded from this simplified workflow.
 
 The container defaults to the stub backend, includes the public data and dev reference examples, and excludes restricted `assets/` and credentials. Configure a model and development database separately when needed. The [operations handbook, section 19](docs/operations/PROJECT_HANDBOOK.md#19-cicd-and-container-delivery) covers image tags, container commands and administrator setup. The workflow delivers images; a particular publication or running deployment requires its own verification.
 

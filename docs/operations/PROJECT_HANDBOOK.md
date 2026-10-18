@@ -6,7 +6,7 @@ A researcher asks a question in English. We translate it into a SPARQL query ove
 
 > **Santiago: demo/results handoff (17 October 2026).** See [what Adrika implemented and what remains to configure and verify](../../docs/features/README.md), including reproducibility, privacy, comparisons, exports, sharing, exact run commands, and test evidence. Live model/dev-database checks are still pending.
 
-> **Automation:** [Project CI/CD](../../.github/workflows/tests.yml) validates backend, frontend, and multi-platform containers, then publishes tested images to GitHub Container Registry. See [setup, permissions, image tags, and local commands](#19-cicd-and-container-delivery). Registry delivery does not deploy a server or verify real clinical results.
+> **Automation:** [Project CI/CD](../../.github/workflows/tests.yml) validates backend, frontend, and an AMD64 container, then publishes tested images to GitHub Container Registry. See [setup, permissions, image tags, and local commands](#19-cicd-and-container-delivery). Registry delivery does not deploy a server or verify real clinical results.
 
 This handbook is a copy of the root README as of 17 October, kept for its CI/CD section (19) and the links that point here. The [project README](../../README.md) is the team's master document and the one kept up to date. Historical measurements, environment descriptions, and backlogs below retain their original context; they are not a fresh verification of the current checkout.
 
@@ -659,215 +659,46 @@ By **Sunday 18 October, 11:00**:
 
 ## 19. CI/CD and container delivery
 
-The [SIB Doc CI/CD workflow](../../.github/workflows/tests.yml) replaces the previous Python-only test
-workflow. Delivery is to **GitHub Container Registry (GHCR) only**, as selected by the team.
-It does not deploy to Santiago's laptop, start Virtuoso or a model, create a tunnel, administer
-the GPU, or run real-data evaluations. The deployable application is the container image;
-building a Python wheel alone does not include the repository's frontend/data layout.
+The [SIB Doc CI/CD workflow](../../.github/workflows/tests.yml) uses three jobs:
 
-### Triggers and checks
+1. **Python and frontend tests** checks the public release-file boundary, installs dependencies
+   with Python 3.12, runs `pip check`, the Python suite, and the frontend Node tests with Node 22.
+2. **Build, smoke-test and publish container** runs after the tests. It builds one native
+   `linux/amd64` image and checks developer/public modes using stub agents, without a GPU or
+   database. Successful pushes to `main` publish that exact image to GHCR.
+3. **CI required checks** always runs and fails if either preceding job failed or was skipped.
+   Keep this check required in branch protection.
 
-| Event | Validation | Registry publication |
-|---|---|---|
-| Pull request, including a fork | All CI jobs | Never; no registry login or package-write credentials |
-| Push to `main` | All CI jobs | After all gates pass |
-| Push a version tag such as `v0.1.0` or `v0.1.0-rc.1` | All CI jobs | After all gates pass; malformed version tags fail publication |
-| Actions → SIB Doc CI/CD → Run workflow | All CI jobs | Off by default; select **publish** on `main` or a version tag to enable |
+Pull requests, pushes to `main`, and manual runs trigger validation. Only pushes to `main`
+trigger publication. Manual runs are check-only. Version tags do not trigger this workflow.
+Browser tests remain available locally; the workflow does not install Playwright or emulate ARM64.
 
-The jobs are:
+### Registry setup and tags
 
-1. **Workflow, scripts and release-file boundary**: reject tracked credentials/private/generated
-   paths by filename, compile Python sources, check shell syntax without running infrastructure,
-   and validate Actions syntax/expressions with actionlint 1.7.12. The downloaded Linux binary
-   is checked against its pinned SHA-256 before execution. The two approved frontend logos and `.env.example` are allowed.
-   This is a filename boundary, not a complete secrets/content or licensing audit.
-2. **Python (3.11 / 3.12)**: install `requirements.txt`, check dependencies, and run all unit/API
-   tests. JUnit reports are retained for seven days.
-3. **Frontend syntax and Node tests**: check frontend and browser JavaScript syntax and run the
-   Node unit tests independently of Python installation and browser downloads.
-4. **Chromium (desktop + phone)**: install the locked Playwright dependency and run desktop
-   and 390×844 phone browser projects against the stub API.
-   Light/dark charts, privacy gating, query-free provenance, history, exports, and comparisons use
-   synthetic fixtures. JUnit, HTML reports, screenshots, and traces are retained for seven days.
-5. **Container (AMD64 / ARM64)**: build each architecture with [Dockerfile](../../Dockerfile), then
-   smoke-test the exact image with stand-in agents in both developer and public-console modes.
-   Checks include the non-root user, health, console scripts/logos, fixed judged API contract,
-   forbidden-request behavior, public-mode endpoint blocking, and private-file exclusions.
-   No `/demo/ask` database execution is used. ARM64 is tested under QEMU on the hosted runner.
-6. **CI required checks**: a stable aggregate gate fails if any required job fails, is cancelled,
-   or is skipped. Use this check for branch protection/rulesets.
-7. **Publish tested multi-platform image to GHCR**: download the already-tested image archives,
-   authenticate, push their platform manifests, and create the combined image tags. It never
-   rebuilds the application during publication. Intermediate tested-image archives expire after
-   one day; PR/check-only runs do not upload them.
+Allow GitHub Actions to publish packages for this repository. The container job uses the built-in
+`GITHUB_TOKEN` with `packages: write`; no personal access token is required. If an existing GHCR
+package denies publishing, grant this repository Actions access in the package settings.
 
-```mermaid
-flowchart LR
-    R[Workflow, scripts and release boundary] --> P[Python 3.11 / 3.12]
-    R --> F[Frontend syntax and Node tests]
-    R --> B[Chromium desktop / phone]
-    R --> C[Build and smoke-test AMD64 / ARM64]
-    R --> G[CI required checks]
-    P --> G
-    F --> G
-    B --> G
-    C --> G
-    G --> D[Eligible release: publish tested images to GHCR]
-```
-
-GitHub-hosted Linux runners need internet access to install public dependencies and images;
-they do not need `.env`, patient data, restricted assets, a model, Virtuoso, GPU credentials, or SSH.
-Actions are pinned to verified commit hashes and checkout does not persist credentials. Token
-permissions default to `contents: read`; only the publishing job receives `packages: write`.
-There is no `pull_request_target` workflow executing contributor code with release credentials.
-
-The Python matrix matches the currently pinned rdflib 7.1.1 dependency: Python 3.14 must not be
-added until that dependency is upgraded and verified. Live LLM accuracy, database execution and
-performance evaluations remain separate run-machine checks; CI validates their source and offline
-regressions without contacting those services.
-
-### Santiago / repository administrator setup
-
-- Enable GitHub Actions for the repository and permit the pinned GitHub/Docker actions under the
-  organization's Actions policy. No manual personal-access token is required for workflow pushes;
-  the publishing job uses its automatically supplied `GITHUB_TOKEN`.
-- Permit creation/writing of the repository's GHCR package. If that package already exists, grant
-  this repository access under the package's Actions settings; organization policy can restrict
-  package creation regardless of workflow permissions.
-- Protect `main` and require **CI required checks** after its first run. Replace any older required
-  Python-only check name. Require review of workflow/container changes and protect release tags.
-- Review GHCR package visibility deliberately. The workflow does not change package visibility;
-  existing public packages remain public. Verify package settings before publishing.
-- Commit the complete implementation, workflow, Dockerfile, `.dockerignore`, and helper scripts
-  before expecting Actions to test them. This documentation update does not commit, push, tag,
-  publish, change repository settings, or trigger a GitHub run automatically.
-- First use **Run workflow** with **publish unchecked** to inspect the complete CI result. A later
-  reviewed push to `main`, version tag, or explicitly enabled manual run publishes the image.
-
-This follows [GitHub's GHCR publishing/token guidance](https://docs.github.com/en/actions/tutorials/publish-packages/publish-docker-images)
-and [Playwright's CI setup](https://playwright.dev/docs/ci-intro). Registry/organization restrictions
-must still be configured by the repository owner.
-
-### Image names, tags, and reproducibility
-
-Images use the lowercase repository path, so a repository named `Owner/Repo` publishes to
-`ghcr.io/owner/repo`. The workflow derives this automatically; no account name is hard-coded.
+Images use the lowercase repository name: `ghcr.io/<owner>/<repository>`.
 
 | Tag | Meaning |
 |---|---|
-| `sha-<full commit SHA>` | Multi-platform image for the tested checkout |
-| `main` | Most recently published passing `main` run |
-| `v0.1.0` and `0.1.0` | Version-tag image; prereleases keep their prerelease suffix |
-| `latest` | Updated only by stable version-tag publication, not by `main` or prereleases |
-| `sha-<full SHA>-amd64` / `sha-<full SHA>-arm64` | Platform images used to assemble the tested multi-platform manifest |
+| `main` | Latest successfully tested push to main |
+| `sha-<full commit SHA>` | Image for a specific tested commit |
 
-The job log prints the manifest digest and the summary links the image tags. For an exact repeat,
-record and pull the immutable `@sha256:...` digest. Tags can move or be republished. Application
-requirements are pinned, but transitive dependencies and the `python:3.12-slim` base tag may change
-between builds; the workflow does not claim byte-for-byte reproducible builds or emit signed
-attestations. Publication is gated on smoke tests of the exact images being promoted.
+Registry publication does not deploy a running server. The image defaults to the stub backend;
+configure a model separately for real translation. Restricted assets and credentials are excluded
+by the Docker build allowlist and the release-file check.
 
-### Run the delivered image
-
-After a successful publication, substitute the actual lowercase repository path:
+### Local checks
 
 ```bash
-docker pull ghcr.io/<owner>/<repo>:main
-docker run --rm --publish 127.0.0.1:8080:8080 ghcr.io/<owner>/<repo>:main
-```
-
-Authenticate with a suitably scoped read credential first if the package is private; never put it
-in this repository or a command committed to git. By default the image uses **stub agents**, so the
-judged API and console can start without a model. Stub mode is wiring/demo support, not a reliable
-translator for new questions. `/demo/ask` cannot produce real results without a reachable database.
-
-For authorized real-data operation, supply the private runtime environment rather than baking it
-into the image:
-
-```bash
-docker run --rm --name nl2sparql \
-  --env-file .env \
-  --publish 127.0.0.1:8080:8080 \
-  --mount type=volume,source=nl2sparql-logs,target=/app/logs \
-  ghcr.io/<owner>/<repo>:main
-```
-
-Set `NL2SPARQL_BACKEND=llm`, the actual model settings, and `VIRTUOSO_ENDPOINT` in that private file.
-**`localhost` inside a container means the container, not Santiago's laptop.** Configure reachable
-private service addresses/container networking; do not assume the host's tunnel/ports are visible
-inside Docker. No service is started or tunnel created by the image. Restricted `assets/` are absent;
-if authorized, mount separately built assets read-only at `/app/assets`, readable by UID 10001.
-The default log/share directory is `/app/logs`; protect its volume and retention policy. Runtime
-question logs may contain sensitive information in developer mode.
-
-For an end-user deployment, use a separate process with **`DEMO_PUBLIC_MODE=true`** and an
-organizer-approved positive `DEMO_MIN_GROUP_SIZE`; public mode refuses startup without that
-threshold, blocks `/nl-to-sparql` and `/agents`, and disables structured request archives. Do not
-use that mode on the jury's API process. The container runs as UID/GID **10001** and exposes port
-8080. Its health check verifies HTTP startup only, not model/database connectivity or clinical
-accuracy. Configure authentication, TLS, network access, and private storage outside this workflow.
-See [the privacy review](../../docs/PRIVACY_REVIEW.md) and [Santiago's handoff](../../docs/features/README.md).
-
-There is no automatic server deployment or rollback. Operators may choose a previously recorded
-image digest and restart their approved deployment manually. GHCR publication alone is not a
-claim that the application is deployed or fully verified against real data.
-
-### Run the same checks locally
-
-From the repository root with the chosen Python environment active:
-
-```bash
-python scripts/ci/check_release_files.py
-python -m pip install -r requirements.txt
 python -m pytest -q
 node --test tests/frontend/*.test.cjs
-npm ci --prefix tests/browser
-npm exec --prefix tests/browser -- playwright install chromium
-BROWSER_TEST_PYTHON="$(command -v python)" npm test --prefix tests/browser
+docker build --platform linux/amd64 --tag nl2sparql:ci .
+python scripts/ci/smoke_container.py --image nl2sparql:ci --platform linux/amd64
 ```
 
-With Docker already running, test one local architecture:
-
-```bash
-docker build --tag nl2sparql:local .
-python scripts/ci/smoke_container.py --image nl2sparql:local --platform linux/arm64
-```
-
-Use `linux/amd64` instead on an AMD64 host. Cross-architecture testing needs an explicitly
-configured Buildx/QEMU builder; the GitHub workflow sets one up on its hosted runner. Neither local
-command starts Docker, Virtuoso, a model, or a GPU service on your behalf.
-
-[.dockerignore](../../.dockerignore) denies the build context by default and admits only runtime source,
-frontend code/logos, packaging metadata, and the four explicitly selected public context snapshots.
-The Dockerfile also copies explicit inputs; `.env`, `.git`, local environments, logs, reports,
-terminologies, patients, and browser artifacts are excluded. Do not add broad `COPY . .` instructions
-or upload the entire workspace as a CI artifact.
-
-Real-data checks stay on the authorized run machine, outside CI:
-
-```bash
-PYTHONPATH=src python eval/validate_demo_results.py --execute \
-  --api-url http://127.0.0.1:8080 --browser
-PYTHONPATH=src python eval/run_eval.py --execute
-```
-
-Record actual model/data configuration, verdict accuracy, forbidden-marked-compliant count,
-latency/tokens, and reference-count equality against the matching README section 11 baseline.
-Pending live checks remain pending until supported by real-service evidence in
-[RESULTS_VALIDATION.md](../../docs/RESULTS_VALIDATION.md).
-
-
-### Verification status of this automation change
-
-Local checks passed on 18 October 2026: **1,693 Python tests**, **16 Node tests**,
-**90 desktop/phone browser tests**, `actionlint` **1.7.12**, dependency compatibility checks,
-tracked-file boundary checks, Python compilation, and shell/JavaScript syntax checks. The Python
-suite includes release-gate and shell-parsing regressions. The helper tests exercise application
-checks with simulated Docker transport; they do not execute an image. Local verification used
-Python 3.11 and Node 24; Python 3.12 and Node 22 are configured for Actions.
-
-**Pending:** actual AMD64/ARM64 Docker builds/smoke checks and the first GHCR publication. Docker
-is installed on this workstation but its daemon is stopped; it was not started because it may host
-existing real-data services. The new workflow has not been pushed or run on GitHub here, and no
-image has been published. Start with a check-only manual run after committing the reviewed files,
-then resolve any runner/organization/package-policy issues before enabling publication.
+Docker must be running for the last two commands. An ARM Mac needs Docker's AMD64 emulation;
+GitHub's Ubuntu runner builds and tests AMD64 natively. Local checks do not verify GitHub token
+permissions or GHCR publication; those require an Actions run.

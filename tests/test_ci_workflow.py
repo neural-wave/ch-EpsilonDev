@@ -1,6 +1,5 @@
 """Protect the workflow's release gates without adding a YAML runtime dependency."""
 import re
-import os
 import subprocess
 from pathlib import Path
 
@@ -16,37 +15,31 @@ def job(name):
     return match.group(1)
 
 
-def test_required_gate_includes_every_validation_job():
-    checks = {'repository', 'pytest', 'frontend', 'browser', 'container'}
-    needs = re.search(r'^    needs: \[(.*?)\]', job('ci'), re.M)
-    assert needs
-    assert set(needs.group(1).replace(' ', '').split(',')) == checks
+def test_required_gate_includes_tests_and_container():
+    assert 'needs: [tests, container]' in job('ci')
     assert "if: ${{ always() }}" in job('ci')
-    assert "item['result'] != 'success'" in job('ci')
+    assert 'test "$TEST_RESULT" = success' in job('ci')
+    assert 'test "$CONTAINER_RESULT" = success' in job('ci')
 
 
-def test_python_matrix_uses_setup_python_before_dependency_installation():
-    steps = job('pytest').split('      - ')
-    checkout = next(step for step in steps if step.startswith('uses: actions/checkout@'))
-    setup = next(step for step in steps if step.startswith('uses: actions/setup-python@'))
-    install = next(step for step in steps if step.startswith('run: python -m pip install'))
-    assert 'python-version:' not in checkout
-    assert 'python-version: ${{ matrix.python }}' in setup
-    assert steps.index(checkout) < steps.index(setup) < steps.index(install)
+def test_dependencies_are_installed_after_python_setup():
+    steps = job('tests')
+    assert steps.index('actions/setup-python@') < steps.index('python -m pip install')
+    assert "python-version: '3.12'" in steps
+    assert 'python -m pytest -q' in steps
+    assert 'node --test tests/frontend/*.test.cjs' in steps
+    assert 'python scripts/ci/check_release_files.py' in steps
 
 
-def test_publication_promotes_tested_images_only_after_all_checks():
-    publish = job('publish')
-    assert 'needs: [ci, container]' in publish
-    assert "github.event_name != 'pull_request'" in publish
-    assert "github.ref == 'refs/heads/main'" in publish
-    assert "startsWith(github.ref, 'refs/tags/v')" in publish
-    assert "github.event_name != 'workflow_dispatch' || inputs.publish" in publish
-    assert 'docker load --input' in publish
-    assert 'docker/build-push-action@' not in publish
-    assert 'packages: write' not in WORKFLOW.split('  publish:\n')[0]
-    assert 'push: false' in job('container')
-    assert job('container').index('smoke_container.py') < job('container').index('docker save')
+def test_publication_uses_the_smoke_tested_image_on_main_pushes_only():
+    container = job('container')
+    assert 'needs: tests' in container
+    assert "if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}" in container
+    assert container.index('docker build ') < container.index('smoke_container.py') < container.index('docker push ')
+    assert 'docker tag nl2sparql:ci' in container
+    assert '--platform linux/amd64' in container
+    assert 'setup-qemu' not in WORKFLOW
+    assert 'packages: write' not in job('tests')
 
 
 def test_actions_are_pinned_and_checkout_does_not_persist_credentials():
@@ -62,19 +55,3 @@ def test_actions_are_pinned_and_checkout_does_not_persist_credentials():
 def test_operations_scripts_parse_without_executing_services(script):
     path = Path(__file__).resolve().parents[1] / script
     subprocess.run(['bash', '-n', str(path)], check=True, capture_output=True, text=True)
-
-
-def test_publication_summary_renders_image_as_markdown_code_without_backticks(tmp_path):
-    lines = re.findall(r'^          printf .*$', job('publish'), re.M)
-    assert len(lines) == 2
-    script = '\n'.join(line.strip() for line in lines)
-    # Backticks in a single-quoted format trigger ShellCheck SC2016 on the CI runner.
-    assert '`' not in script
-    summary = tmp_path / 'summary.md'
-    image = 'ghcr.io/example/project'
-    sha = 'a' * 40
-    tags = f'{image}:main\n{image}:sha-{sha}'
-    env = dict(os.environ, IMAGE_NAME=image, GITHUB_SHA=sha, IMAGE_TAGS=tags,
-               GITHUB_STEP_SUMMARY=str(summary))
-    subprocess.run(['bash', '-c', script], env=env, check=True, capture_output=True, text=True)
-    assert summary.read_text() == f'## Published tested image\n\n    {image}:sha-{sha}\n\n{tags}\n'
