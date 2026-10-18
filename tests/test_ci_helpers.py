@@ -1,5 +1,6 @@
 """Release boundaries and offline application checks used by the container workflow."""
 from contextlib import contextmanager
+import subprocess
 
 import pytest
 from fastapi.testclient import TestClient
@@ -26,6 +27,11 @@ def test_release_boundary_rejects_private_or_generated_paths(path):
 ])
 def test_release_boundary_allows_public_source_and_approved_logos(path):
     assert not restricted(path)
+
+
+def test_release_boundary_allows_all_currently_tracked_files():
+    tracked_paths = subprocess.check_output(['git', 'ls-files', '-z'], text=True).split('\0')
+    assert not [path for path in tracked_paths if path and restricted(path)]
 
 
 def test_container_application_checks_work_without_model_database_or_assets(monkeypatch, tmp_path):
